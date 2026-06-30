@@ -245,19 +245,8 @@ export const menuController = {
 
   updateAvatarDisplay(avatarDisplay, badge) {
     if (!avatarDisplay) return;
-    const cleanBadge = badge || '👤';
-    if (cleanBadge === '🇧🇷') {
-      avatarDisplay.innerHTML = `<span class="flag-icon br"></span>`;
-    } else if (cleanBadge === '🇦🇷') {
-      avatarDisplay.innerHTML = `<span class="flag-icon ar"></span>`;
-    } else if (cleanBadge === '🇺🇸') {
-      avatarDisplay.innerHTML = `<span class="flag-icon us"></span>`;
-    } else if (cleanBadge === '🇵🇹') {
-      avatarDisplay.innerHTML = `<span class="flag-icon pt"></span>`;
-    } else {
-      avatarDisplay.innerHTML = '';
-      avatarDisplay.textContent = cleanBadge;
-    }
+    avatarDisplay.innerHTML = '';
+    avatarDisplay.textContent = badge || '👤';
   }
 };
 export default menuController;

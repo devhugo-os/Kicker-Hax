@@ -101,52 +101,13 @@ export class ClientPlayer {
 
     // 5) Render Badge / Emoji
     if (this.badge) {
-      if (this.badge === '🇧🇷') {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(this.x, this.y, 10, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = '#009b3a'; ctx.fillRect(this.x - 10, this.y - 10, 20, 20); // Verde
-        ctx.fillStyle = '#fedf00'; // Losango Amarelo
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y - 7);
-        ctx.lineTo(this.x + 9, this.y);
-        ctx.lineTo(this.x, this.y + 7);
-        ctx.lineTo(this.x - 9, this.y);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#002776'; ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI * 2); ctx.fill(); // Azul
-        ctx.restore();
-      } else if (this.badge === '🇦🇷') {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(this.x, this.y, 10, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = '#74acdf'; ctx.fillRect(this.x - 10, this.y - 10, 20, 20); // Azul claro
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(this.x - 10, this.y - 3, 20, 6); // Faixa branca
-        ctx.fillStyle = '#f6b40e'; ctx.beginPath(); ctx.arc(this.x, this.y, 2.5, 0, Math.PI * 2); ctx.fill(); // Sol de Mayo
-        ctx.restore();
-      } else if (this.badge === '🇺🇸') {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(this.x, this.y, 10, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(this.x - 10, this.y - 10, 20, 20);
-        ctx.fillStyle = '#b22234'; // Listras vermelhas
-        for (let i = -10; i < 10; i += 4) {
-          ctx.fillRect(this.x - 10, this.y + i, 20, 2);
-        }
-        ctx.fillStyle = '#3c3b6e'; ctx.fillRect(this.x - 10, this.y - 10, 10, 10); // Canton azul
-        ctx.restore();
-      } else if (this.badge === '🇵🇹') {
-        ctx.save();
-        ctx.beginPath(); ctx.arc(this.x, this.y, 10, 0, Math.PI * 2); ctx.clip();
-        ctx.fillStyle = '#006600'; ctx.fillRect(this.x - 10, this.y - 10, 8, 20); // Verde
-        ctx.fillStyle = '#ff0000'; ctx.fillRect(this.x - 2, this.y - 10, 12, 20); // Vermelho
-        ctx.fillStyle = '#ffff00'; ctx.beginPath(); ctx.arc(this.x - 2, this.y, 3, 0, Math.PI * 2); ctx.fill(); // Escudo
-        ctx.restore();
-      } else {
-        ctx.fillStyle = '#0b1020';
-        const graphemes = segmentGraphemes(this.badge);
-        const fontSize = (graphemes.length >= 2 && !isEmojiCluster(graphemes[0])) ? 14 : 16;
-        ctx.font = `700 ${fontSize}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(this.badge, this.x, this.y);
-      }
+      ctx.fillStyle = '#0b1020';
+      const graphemes = segmentGraphemes(this.badge);
+      const fontSize = (graphemes.length >= 2 && !isEmojiCluster(graphemes[0])) ? 14 : 16;
+      ctx.font = `700 ${fontSize}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.badge, this.x, this.y);
     }
 
     // 6) Draw Dribble Invulnerability Rings (green)

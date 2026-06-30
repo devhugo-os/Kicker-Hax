@@ -7,7 +7,7 @@
   "scripts": {
     "server": "node server/server.js",
     "client:dev": "vite client --port 3000 --host",
-    "client:build": "vite build client",
+    "client:build": "vite build",
     "dev": "concurrently \"npm run server\" \"npm run client:dev\"",
     "start": "node server/server.js"
   },
