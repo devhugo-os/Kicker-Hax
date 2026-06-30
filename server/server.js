@@ -17,8 +17,23 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: '*',
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST'],
+    credentials: false
+  },
+  // Allow both transports for maximum compatibility
+  transports: ['polling', 'websocket'],
+  allowUpgrades: true
+});
+
+// Explicit CORS headers for all HTTP requests (needed for Socket.IO polling from GitHub Pages)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
   }
+  next();
 });
 
 // Serve compiled static files

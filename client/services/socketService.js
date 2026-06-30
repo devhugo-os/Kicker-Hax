@@ -21,13 +21,20 @@ export const socketService = {
     socket = io(connectUrl, {
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      transports: ['websocket', 'polling']
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      // Use polling first to wake up Render cold-start containers, then upgrade
+      transports: ['polling', 'websocket'],
+      upgrade: true,
+      withCredentials: false
     });
 
     socket.on('connect', () => {
       console.log(`[Socket.IO] Conectado: ${socket.id}`);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn(`[Socket.IO] Erro de conexão: ${err.message}`);
     });
 
     socket.on('disconnect', () => {

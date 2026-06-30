@@ -639,6 +639,7 @@ export const gameController = {
 
       const tickLocalGame = () => {
         if (router.currentScreenId !== 'match-screen') return;
+        try {
         frameSfx = [];
 
         const w = this.canvas.width;
@@ -1055,8 +1056,12 @@ export const gameController = {
           const bannerSecs = Math.max(0, Math.ceil(MatchSim.countdownTimer / 60));
           this.drawCenterBanner(`Começa em ${bannerSecs}...`, 'Prepare-se!');
         } else if (MatchSim.status === 'freeze') {
-          const label = this.lastGoal.ownGoal ? `GOL CONTRA de ${this.lastGoal.scorerName}` : `GOL DE ${this.lastGoal.scorerName}!`;
+          const label = (this.lastGoal && this.lastGoal.ownGoal) ? `GOL CONTRA de ${this.lastGoal.scorerName}` : `GOL DE ${(this.lastGoal && this.lastGoal.scorerName) || '???'}!`;
           this.drawCenterBanner(label, 'Revisando jogada...');
+        }
+
+        } catch (tickErr) {
+          console.error('[Kicker Solo] Tick error:', tickErr);
         }
 
         // Loop next frame
@@ -1129,6 +1134,9 @@ export const gameController = {
   localMatchEnd(score) {
     cancelAnimationFrame(this.localPhysicsTick);
     this.stopLocalReplayRecording();
+    
+    // Stop background crowd noise to prevent audio leak to menu
+    soundFx.stopCrowd();
     
     showToast('Fim de jogo!', 'info');
     
@@ -1453,6 +1461,7 @@ export const gameController = {
   stopMatchView() {
     cancelAnimationFrame(this.localPhysicsTick);
     this.stopLocalReplayRecording();
+    soundFx.stopCrowd();
     socketService.clearListeners();
     document.getElementById('replay-overlay')?.classList.add('hidden');
     window.removeEventListener('resize', () => this.resizeCanvasContainer());
