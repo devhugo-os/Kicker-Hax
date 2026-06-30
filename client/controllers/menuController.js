@@ -73,7 +73,7 @@ export const menuController = {
     const avatarDisplay = document.getElementById('profile-avatar-display');
     if (badgeSelect && avatarDisplay) {
       badgeSelect.addEventListener('change', (e) => {
-        avatarDisplay.textContent = e.target.value || '👤';
+        this.updateAvatarDisplay(avatarDisplay, e.target.value);
       });
     }
 
@@ -118,15 +118,17 @@ export const menuController = {
     this.profileData = await firebaseService.getUserProfile(this.currentUser.uid);
 
     // Bind edit fields
-    const dispInput = document.getElementById('profile-displayname-input');
+    const usernameInput = document.getElementById('profile-username-input');
     const badgeSelect = document.getElementById('profile-badge-select');
     const bioInput = document.getElementById('profile-bio-input');
     const avatarDisplay = document.getElementById('profile-avatar-display');
 
-    if (dispInput) dispInput.value = this.profileData.displayName || '';
+    if (usernameInput) usernameInput.value = this.profileData.username || '';
     if (badgeSelect) badgeSelect.value = this.profileData.badge || '👤';
     if (bioInput) bioInput.value = this.profileData.bio || '';
-    if (avatarDisplay) avatarDisplay.textContent = this.profileData.badge || '👤';
+    if (avatarDisplay) {
+      this.updateAvatarDisplay(avatarDisplay, this.profileData.badge);
+    }
 
     // Load statistics
     const stats = await firebaseService.getUserStats(this.currentUser.uid);
@@ -190,36 +192,71 @@ export const menuController = {
 
   async saveProfileEdits() {
     if (!this.currentUser) return;
-    const dispInput = document.getElementById('profile-displayname-input');
+    const usernameInput = document.getElementById('profile-username-input');
     const badgeSelect = document.getElementById('profile-badge-select');
     const bioInput = document.getElementById('profile-bio-input');
 
-    const displayName = dispInput ? dispInput.value.trim() : '';
+    const username = usernameInput ? usernameInput.value.trim().toLowerCase() : '';
     const badge = badgeSelect ? badgeSelect.value : '👤';
     const bio = bioInput ? bioInput.value.trim() : '';
 
-    if (displayName.length < 3) {
-      return showToast('Nome de exibição precisa de no mínimo 3 caracteres.', 'error');
+    if (username.length < 3 || username.length > 12) {
+      return showToast('O nome de usuário precisa ter entre 3 e 12 caracteres.', 'error');
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      return showToast('O nome de usuário só pode conter letras, números e sublinhado (_). Sem espaços!', 'error');
     }
 
     try {
       showToast('Verificando disponibilidade do nome...', 'info');
-      const isUnique = await firebaseService.isDisplayNameUnique(displayName, this.currentUser.uid);
+      const isUnique = await firebaseService.isUsernameUnique(username, this.currentUser.uid);
       if (!isUnique) {
-        return showToast('Este nome de exibição já está em uso por outro jogador.', 'error');
+        return showToast('Este nome de usuário já está em uso por outro jogador.', 'error');
       }
 
       showToast('Salvando dados...', 'info');
       await firebaseService.updateUserProfile(this.currentUser.uid, {
-        displayName,
+        username,
+        displayName: username,
         badge,
-        bio
+        bio,
+        isNewUser: false
       });
+      
+      this.profileData.username = username;
+      this.profileData.displayName = username;
+      this.profileData.badge = badge;
+      this.profileData.bio = bio;
+      this.profileData.isNewUser = false;
+
+      // Restore back button
+      const backBtn = document.getElementById('profile-btn-back');
+      if (backBtn) backBtn.style.display = '';
+
       showToast('Perfil atualizado com sucesso!', 'success');
       await this.refreshQuickProfile();
       router.show('menu-screen');
     } catch (e) {
       showToast('Erro ao atualizar perfil.', 'error');
+    }
+  },
+
+  updateAvatarDisplay(avatarDisplay, badge) {
+    if (!avatarDisplay) return;
+    const cleanBadge = badge || '👤';
+    if (cleanBadge === '🇧🇷') {
+      avatarDisplay.innerHTML = `<span class="flag-icon br"></span>`;
+    } else if (cleanBadge === '🇦🇷') {
+      avatarDisplay.innerHTML = `<span class="flag-icon ar"></span>`;
+    } else if (cleanBadge === '🇺🇸') {
+      avatarDisplay.innerHTML = `<span class="flag-icon us"></span>`;
+    } else if (cleanBadge === '🇵🇹') {
+      avatarDisplay.innerHTML = `<span class="flag-icon pt"></span>`;
+    } else {
+      avatarDisplay.innerHTML = '';
+      avatarDisplay.textContent = cleanBadge;
     }
   }
 };

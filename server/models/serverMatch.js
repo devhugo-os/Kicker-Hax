@@ -566,6 +566,36 @@ export class ServerMatch {
     this.io.to(this.roomCode).emit('gameState', snap);
   }
 
+  changeFieldSize(size) {
+    this.fieldSize = size;
+    if (this.fieldSize === 'small') {
+      this.w = 896; this.h = 560;
+    } else if (this.fieldSize === 'large') {
+      this.w = 1280; this.h = 768;
+    } else {
+      this.w = 1024; this.h = 640;
+    }
+    // Re-create physics boundaries
+    this.physics = new ServerPhysics(this.w, this.h);
+    // Center the ball
+    this.ball.x = this.w / 2;
+    this.ball.y = this.h / 2;
+    this.ball.vx = 0;
+    this.ball.vy = 0;
+  }
+
+  resetMatch() {
+    this.score = { red: 0, blue: 0 };
+    this.matchTime = this.duration * 60;
+    this.status = 'countdown';
+    this.countdownTimer = 150;
+    // Center the ball
+    this.ball.x = this.w / 2;
+    this.ball.y = this.h / 2;
+    this.ball.vx = 0;
+    this.ball.vy = 0;
+  }
+
   stop() {
     clearInterval(this.tickInterval);
   }

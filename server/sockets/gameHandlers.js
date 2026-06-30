@@ -24,4 +24,37 @@ export function registerGameHandlers(io, socket) {
       room.match.countdownTimer = 0; // instantly end replay cooldown
     }
   });
+
+  socket.on('hostChangeFieldSize', ({ size }) => {
+    const conn = db.getConnection(socket.id);
+    if (!conn) return;
+
+    const room = db.getRoom(conn.roomCode);
+    if (!room) return;
+
+    if (room.hostId !== socket.id) return;
+
+    room.fieldSize = size;
+    if (room.match) {
+      room.match.changeFieldSize(size);
+    }
+    
+    io.to(room.code).emit('fieldSizeUpdated', { size });
+  });
+
+  socket.on('hostResetMatch', () => {
+    const conn = db.getConnection(socket.id);
+    if (!conn) return;
+
+    const room = db.getRoom(conn.roomCode);
+    if (!room) return;
+
+    if (room.hostId !== socket.id) return;
+
+    if (room.match) {
+      room.match.resetMatch();
+    }
+
+    io.to(room.code).emit('matchReset');
+  });
 }

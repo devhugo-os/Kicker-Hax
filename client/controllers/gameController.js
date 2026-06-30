@@ -275,7 +275,7 @@ export const gameController = {
 
         const profile = {
           uid: this.currentUser.uid,
-          username: menuController.profileData.displayName || menuController.profileData.username,
+          username: menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️'
         };
 
@@ -297,7 +297,7 @@ export const gameController = {
 
         const profile = {
           uid: this.currentUser.uid,
-          username: menuController.profileData.displayName || menuController.profileData.username,
+          username: menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️'
         };
 
@@ -449,7 +449,10 @@ export const gameController = {
     this.ball = new ClientBall();
     this.players = [];
 
-    // Bind Escape/Enter keys in match to open transparent chat or pause
+    // Initialize Pause Menu Event Handlers once
+    this.setupPauseMenu();
+
+    // Bind Escape/Enter/P keys in match to open transparent chat or pause
     window.addEventListener('keydown', (e) => {
       if (router.currentScreenId !== 'match-screen') return;
       
@@ -462,6 +465,8 @@ export const gameController = {
             input.focus();
           }
         }
+      } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        this.togglePauseMenu();
       }
     });
 
@@ -507,8 +512,14 @@ export const gameController = {
   // OFFLINE SOLO MATCH LOOP
   // ==========================================================================
   startLocalSoloMatch() {
+    // Reset local stats tracking variables
+    this.p1Tackles = 0; this.p1Dribbles = 0;
+    this.p2Tackles = 0; this.p2Dribbles = 0;
+    this.p1TackleLock = false; this.p1DribbleLock = false;
+    this.p2TackleLock = false; this.p2DribbleLock = false;
+
     // Spawn local players
-    const displayName = menuController.profileData.displayName || menuController.profileData.username;
+    const username = menuController.profileData.username;
     const badge = menuController.profileData.badge || '🇧🇷';
     
     // Retrieve selected field size and replay settings
@@ -529,7 +540,7 @@ export const gameController = {
 
     this.resizeCanvasContainer();
 
-    const p1Lobby = { id: 'p1', uid: this.currentUser.uid, username: displayName, badge, team: 'blue', cpu: false };
+    const p1Lobby = { id: 'p1', uid: this.currentUser.uid, username, badge, team: 'blue', cpu: false };
     const cpuLobby = { id: 'cpu', uid: '', username: 'CPU Bot', badge: '⚙️', team: 'red', cpu: true, difficulty: this.difficulty };
 
     // Simulate Match logic locally on the client!
@@ -594,16 +605,18 @@ export const gameController = {
         if (router.currentScreenId !== 'match-screen') return;
         frameSfx = [];
 
-        const gTop = (this.canvas.height - C.GOAL_W_INIT) / 2;
-        const gBot = (this.canvas.height + C.GOAL_W_INIT) / 2;
+        const w = this.canvas.width;
+        const h = this.canvas.height;
+        const gTop = (h - C.GOAL_W_INIT) / 2;
+        const gBot = (h + C.GOAL_W_INIT) / 2;
         const leftPostX = C.BORDER - C.POST_T;
-        const rightPostX = this.canvas.width - C.BORDER + C.POST_T;
+        const rightPostX = w - C.BORDER + C.POST_T;
         const leftNetBack = leftPostX - C.GOAL_DEPTH;
         const rightNetBack = rightPostX + C.GOAL_DEPTH;
         const cornerR = 10;
 
         // Continuous simulation even when screen loses focus
-        if (true) {
+        if (!this.isPaused) {
           if (MatchSim.status === 'countdown') {
             MatchSim.countdownTimer--;
             if (MatchSim.countdownTimer <= 0) {
@@ -866,7 +879,7 @@ export const gameController = {
                 if (side === 'blue') MatchSim.score.blue++; else MatchSim.score.red++;
                 
                 // Set last goal detail
-                const scorerName = localBallSim.lastTouch === 'p1' ? displayName : 'CPU Bot';
+                const scorerName = localBallSim.lastTouch === 'p1' ? username : 'CPU Bot';
                 const ownGoal = (side === 'blue' && localBallSim.lastTouch === 'cpu') || (side === 'red' && localBallSim.lastTouch === 'p1');
                 this.lastGoal = { side, scorerName, ownGoal };
 
@@ -951,6 +964,53 @@ export const gameController = {
         if (leftStam) leftStam.style.height = `${redPlayer.stamina * 100}%`;
         if (leftPow) leftPow.style.height = `${redPlayer.kickCharge * 100}%`;
 
+        // Update real-time speed display
+        const p1Speed = Math.hypot(bluePlayer.vx, bluePlayer.vy) * 10;
+        const cpuSpeed = Math.hypot(redPlayer.vx, redPlayer.vy) * 10;
+        
+        const rightSpeedEl = document.getElementById('right-stat-speed');
+        if (rightSpeedEl) rightSpeedEl.textContent = p1Speed.toFixed(1);
+        const leftSpeedEl = document.getElementById('left-stat-speed');
+        if (leftSpeedEl) leftSpeedEl.textContent = cpuSpeed.toFixed(1);
+
+        // Track Tackles and Dribbles counts from state cooldown activations
+        if (bluePlayer.tackle_cd > 0 && !this.p1TackleLock) {
+          this.p1Tackles = (this.p1Tackles || 0) + 1;
+          this.p1TackleLock = true;
+        } else if (bluePlayer.tackle_cd === 0) {
+          this.p1TackleLock = false;
+        }
+        if (bluePlayer.dribble_cd > 0 && !this.p1DribbleLock) {
+          this.p1Dribbles = (this.p1Dribbles || 0) + 1;
+          this.p1DribbleLock = true;
+        } else if (bluePlayer.dribble_cd === 0) {
+          this.p1DribbleLock = false;
+        }
+
+        if (redPlayer.tackle_cd > 0 && !this.p2TackleLock) {
+          this.p2Tackles = (this.p2Tackles || 0) + 1;
+          this.p2TackleLock = true;
+        } else if (redPlayer.tackle_cd === 0) {
+          this.p2TackleLock = false;
+        }
+        if (redPlayer.dribble_cd > 0 && !this.p2DribbleLock) {
+          this.p2Dribbles = (this.p2Dribbles || 0) + 1;
+          this.p2DribbleLock = true;
+        } else if (redPlayer.dribble_cd === 0) {
+          this.p2DribbleLock = false;
+        }
+
+        // Render counts on HUD
+        const rightTacklesEl = document.getElementById('right-stat-tackles');
+        const rightDribblesEl = document.getElementById('right-stat-dribbles');
+        const leftTacklesEl = document.getElementById('left-stat-tackles');
+        const leftDribblesEl = document.getElementById('left-stat-dribbles');
+
+        if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
+        if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
+        if (leftTacklesEl) leftTacklesEl.textContent = this.p2Tackles || 0;
+        if (leftDribblesEl) leftDribblesEl.textContent = this.p2Dribbles || 0;
+
         // Render Countdown Banners
         if (MatchSim.status === 'countdown') {
           const bannerSecs = Math.max(0, Math.ceil(MatchSim.countdownTimer / 60));
@@ -997,7 +1057,7 @@ export const gameController = {
           dir: p.dir,
           team: p.team,
           has: (localBallSim.owner === p.id),
-          name: p.id === 'p1' ? displayName : 'CPU Bot',
+          name: p.id === 'p1' ? username : 'CPU Bot',
           badge: p.id === 'p1' ? badge : '⚙️',
           inv: p.invuln || 0,
           stun: p.stun || 0,
@@ -1056,7 +1116,7 @@ export const gameController = {
       // Display Post-match Screen
       document.getElementById('post-score-red').textContent = score.red;
       document.getElementById('post-score-blue').textContent = score.blue;
-      document.getElementById('post-mvp').textContent = score.blue >= score.red ? (menuController.profileData.displayName) : 'CPU Bot';
+       document.getElementById('post-mvp').textContent = score.blue >= score.red ? menuController.profileData.username : 'CPU Bot';
       document.getElementById('post-xp-gained').textContent = `+${xpGained} XP`;
       document.getElementById('post-total-goals').textContent = score.red + score.blue;
       router.show('post-game-screen');
@@ -1070,6 +1130,18 @@ export const gameController = {
   // ONLINE MULTIPLAYER MATCH LOOP
   // ==========================================================================
   startOnlineMatch() {
+    // Reset stats tracking variables for online match
+    this.p1Tackles = 0; this.p1Dribbles = 0;
+    this.p2Tackles = 0; this.p2Dribbles = 0;
+    this.p1TackleLock = false; this.p1DribbleLock = false;
+    this.p2TackleLock = false; this.p2DribbleLock = false;
+
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.off('fieldSizeUpdated');
+      socket.off('matchReset');
+    }
+
     this.status = 'countdown';
     this.countdown = 150;
 
@@ -1107,6 +1179,25 @@ export const gameController = {
       // Clear disconnected players
       const serverIds = state.players.map(x => x.id);
       this.players = this.players.filter(p => serverIds.includes(p.id));
+    });
+
+    socketService.getSocket().on('fieldSizeUpdated', ({ size }) => {
+      this.fieldSize = size;
+      if (size === 'small') {
+        this.canvas.width = 896; this.canvas.height = 560;
+      } else if (size === 'large') {
+        this.canvas.width = 1280; this.canvas.height = 768;
+      } else {
+        this.canvas.width = 1024; this.canvas.height = 640;
+      }
+      this.resizeCanvasContainer();
+      showToast('O Host alterou o tamanho do campo!', 'info');
+    });
+
+    socketService.getSocket().on('matchReset', () => {
+      showToast('A partida foi reiniciada pelo Host!', 'info');
+      this.p1Tackles = 0; this.p1Dribbles = 0;
+      this.p2Tackles = 0; this.p2Dribbles = 0;
     });
 
     socketService.onPlayReplay(({ replayFrames, goalInfo }) => {
@@ -1230,9 +1321,10 @@ export const gameController = {
       if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       if (scoreEl) scoreEl.textContent = `${this.score.red} : ${this.score.blue}`;
 
-      // Refresh sidebars (stamina / power of self player)
+      // Refresh sidebars (stamina / power / speed / tackles / dribbles)
       const myId = socketService.getSocket().id;
       const me = this.players.find(p => p.id === myId);
+      const opp = this.players.find(p => p.id !== myId && p.team !== 'spectator');
       
       if (me) {
         const myStam = document.getElementById('right-stam-fill');
@@ -1243,6 +1335,63 @@ export const gameController = {
         let localCharge = 0;
         if (input.shoot) localCharge = 1; // display simple kick glow
         if (myPow) myPow.style.height = `${localCharge * 100}%`;
+
+        // Telemetry speed
+        const mySpeed = Math.hypot(me.vx, me.vy) * 10;
+        const rightSpeedEl = document.getElementById('right-stat-speed');
+        if (rightSpeedEl) rightSpeedEl.textContent = mySpeed.toFixed(1);
+
+        // Tackle count
+        if (me.tackle_cd > 0 && !this.p1TackleLock) {
+          this.p1Tackles = (this.p1Tackles || 0) + 1;
+          this.p1TackleLock = true;
+        } else if (me.tackle_cd === 0) {
+          this.p1TackleLock = false;
+        }
+        // Dribble count
+        if (me.dribble_cd > 0 && !this.p1DribbleLock) {
+          this.p1Dribbles = (this.p1Dribbles || 0) + 1;
+          this.p1DribbleLock = true;
+        } else if (me.dribble_cd === 0) {
+          this.p1DribbleLock = false;
+        }
+
+        const rightTacklesEl = document.getElementById('right-stat-tackles');
+        const rightDribblesEl = document.getElementById('right-stat-dribbles');
+        if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
+        if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
+      }
+
+      if (opp) {
+        const oppStam = document.getElementById('left-stam-fill');
+        const oppPow = document.getElementById('left-pow-fill');
+        if (oppStam) oppStam.style.height = `${opp.stamina * 100}%`;
+        if (oppPow) oppPow.style.height = `${(opp.kickCharge || 0) * 100}%`;
+
+        // Telemetry speed
+        const oppSpeed = Math.hypot(opp.vx, opp.vy) * 10;
+        const leftSpeedEl = document.getElementById('left-stat-speed');
+        if (leftSpeedEl) leftSpeedEl.textContent = oppSpeed.toFixed(1);
+
+        // Tackle count
+        if (opp.tackle_cd > 0 && !this.p2TackleLock) {
+          this.p2Tackles = (this.p2Tackles || 0) + 1;
+          this.p2TackleLock = true;
+        } else if (opp.tackle_cd === 0) {
+          this.p2TackleLock = false;
+        }
+        // Dribble count
+        if (opp.dribble_cd > 0 && !this.p2DribbleLock) {
+          this.p2Dribbles = (this.p2Dribbles || 0) + 1;
+          this.p2DribbleLock = true;
+        } else if (opp.dribble_cd === 0) {
+          this.p2DribbleLock = false;
+        }
+
+        const leftTacklesEl = document.getElementById('left-stat-tackles');
+        const leftDribblesEl = document.getElementById('left-stat-dribbles');
+        if (leftTacklesEl) leftTacklesEl.textContent = this.p2Tackles || 0;
+        if (leftDribblesEl) leftDribblesEl.textContent = this.p2Dribbles || 0;
       }
 
       // Render countdown banner
@@ -1375,8 +1524,8 @@ export const gameController = {
     const captionEl = document.getElementById('replay-caption');
     if (captionEl) captionEl.style.display = 'none';
     
-    // Stop persistent sounds
-    soundFx.stopCrowd();
+    // Resume persistent stadium audio
+    soundFx.ensureAudio();
   },
 
   // ==========================================================================
@@ -1690,7 +1839,7 @@ export const gameController = {
   joinRoomWithCode(code, password) {
     const profile = {
       uid: this.currentUser.uid,
-      username: menuController.profileData.displayName || menuController.profileData.username,
+      username: menuController.profileData.username,
       badge: menuController.profileData.badge || '🏳️'
     };
     socketService.joinRoom(code, password, profile);
@@ -1863,6 +2012,94 @@ export const gameController = {
       });
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Erro ao carregar dados do banco.</td></tr>`;
+    }
+  },
+
+  togglePauseMenu() {
+    const modal = document.getElementById('pause-modal');
+    if (!modal) return;
+
+    if (modal.classList.contains('hidden')) {
+      modal.classList.remove('hidden');
+      if (this.mode === 'solo') {
+        this.isPaused = true;
+      }
+      
+      const hostCtrl = document.getElementById('host-controls');
+      if (hostCtrl) {
+        const isHost = this.mode === 'solo' || (this.mode === 'online' && this.isHost);
+        hostCtrl.style.display = isHost ? 'block' : 'none';
+      }
+    } else {
+      modal.classList.add('hidden');
+      if (this.mode === 'solo') {
+        this.isPaused = false;
+      }
+    }
+  },
+
+  setupPauseMenu() {
+    const resumeBtn = document.getElementById('pause-btn-resume');
+    if (resumeBtn) {
+      resumeBtn.onclick = () => {
+        this.togglePauseMenu();
+      };
+    }
+
+    const exitBtn = document.getElementById('pause-btn-exit-match');
+    if (exitBtn) {
+      exitBtn.onclick = () => {
+        this.togglePauseMenu();
+        const exitMatchBtn = document.getElementById('match-btn-exit');
+        if (exitMatchBtn) exitMatchBtn.click();
+      };
+    }
+
+    const applyBtn = document.getElementById('pause-btn-apply-settings');
+    const sizeSelect = document.getElementById('pause-field-size');
+    if (applyBtn && sizeSelect) {
+      applyBtn.onclick = () => {
+        const size = sizeSelect.value;
+        if (this.mode === 'solo') {
+          if (size === 'small') {
+            this.canvas.width = 896; this.canvas.height = 560;
+          } else if (size === 'large') {
+            this.canvas.width = 1280; this.canvas.height = 768;
+          } else {
+            this.canvas.width = 1024; this.canvas.height = 640;
+          }
+          this.resizeCanvasContainer();
+          showToast('Tamanho do campo alterado!', 'success');
+        } else if (this.mode === 'online') {
+          socketService.getSocket().emit('hostChangeFieldSize', { size });
+        }
+        this.togglePauseMenu();
+      };
+    }
+
+    const resetBtn = document.getElementById('pause-btn-reset-match');
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        if (this.mode === 'solo') {
+          this.score = { red: 0, blue: 0 };
+          this.p1Tackles = 0; this.p1Dribbles = 0;
+          this.p2Tackles = 0; this.p2Dribbles = 0;
+          
+          if (this.localMatchSim) {
+            this.localMatchSim.score = { red: 0, blue: 0 };
+            this.localMatchSim.status = 'countdown';
+            this.localMatchSim.countdownTimer = 150;
+            this.localBallSim.x = this.canvas.width / 2;
+            this.localBallSim.y = this.canvas.height / 2;
+            this.localBallSim.vx = 0;
+            this.localBallSim.vy = 0;
+          }
+          showToast('Partida reiniciada!', 'success');
+        } else if (this.mode === 'online') {
+          socketService.getSocket().emit('hostResetMatch');
+        }
+        this.togglePauseMenu();
+      };
     }
   }
 };

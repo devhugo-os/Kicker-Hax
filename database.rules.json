@@ -1,0 +1,12 @@
+{
+  "rules": {
+    "globalChat": {
+      ".read": "auth != null",
+      ".indexOn": ["timestamp"],
+      "$messageId": {
+        ".write": "auth != null && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists() && (data.child('uid').val() == auth.uid || data.child('timestamp').val() < (now - 7200000))))",
+        ".validate": "newData.hasChildren(['uid', 'username', 'badge', 'text', 'timestamp']) && newData.child('uid').val() == auth.uid && newData.child('text').isString() && newData.child('text').val().length <= 150"
+      }
+    }
+  }
+}

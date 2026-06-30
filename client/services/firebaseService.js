@@ -21,7 +21,7 @@ import {
   getDocs,
   runTransaction
 } from 'firebase/firestore';
-import { getDatabase, ref, push, onChildAdded, serverTimestamp } from 'firebase/database';
+import { getDatabase, ref, push, onChildAdded, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCaTQa6JoMj2MBgDgdponVBY_NAeQO8_us",
@@ -54,17 +54,18 @@ export const firebaseService = {
     if (!profileSnap.exists()) {
       // First login, register default profile and stats
       const randomTag = Math.floor(Math.random() * 9000) + 1000;
-      const safeName = (user.displayName || 'Jogador').replace(/\s+/g, '').toLowerCase();
-      const generatedUsername = `${safeName}${randomTag}`;
+      const safeName = (user.displayName || 'Jogador').replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const generatedUsername = `${safeName}${randomTag}`.substring(0, 12);
 
       const userProfile = {
         uid: user.uid,
         username: generatedUsername,
-        displayName: user.displayName || 'Novo Jogador',
-        badge: '🌐', // Default badge
+        displayName: generatedUsername,
+        badge: '👤', // Default badge
         bio: '',
         level: 1,
         xp: 0,
+        isNewUser: true, // Mark as new user to force username pick
         dateCreated: new Date().toISOString(),
         lastLogin: new Date().toISOString(),
         settings: {
@@ -200,7 +201,7 @@ export const firebaseService = {
         const statsData = await this.getUserStats(userData.uid) || {};
         ranking.push({
           username: userData.username,
-          displayName: userData.displayName,
+          displayName: userData.username,
           badge: userData.badge,
           level: userData.level,
           wins: statsData.wins || 0,
@@ -222,7 +223,7 @@ export const firebaseService = {
         if (userData) {
           ranking.push({
             username: userData.username,
-            displayName: userData.displayName,
+            displayName: userData.username,
             badge: userData.badge,
             level: userData.level,
             wins: statsData.wins || 0,
@@ -235,8 +236,8 @@ export const firebaseService = {
     }
   },
 
-  async isDisplayNameUnique(displayName, uid) {
-    const q = query(collection(db, 'users'), where('displayName', '==', displayName));
+  async isUsernameUnique(username, uid) {
+    const q = query(collection(db, 'users'), where('username', '==', username.toLowerCase()));
     const querySnapshot = await getDocs(q);
     let unique = true;
     querySnapshot.forEach((docSnap) => {
@@ -250,12 +251,33 @@ export const firebaseService = {
   // ==========================================================================
   // REALTIME DATABASE (GLOBAL CHAT)
   // ==========================================================================
+  async pruneOldChatMessages() {
+    try {
+      const chatRef = ref(rtdb, 'globalChat');
+      const twoHoursAgo = Date.now() - 7200000;
+      const oldQuery = rtdbQuery(chatRef, orderByChild('timestamp'), endAt(twoHoursAgo));
+      const snapshot = await get(oldQuery);
+      if (snapshot.exists()) {
+        const updates = {};
+        snapshot.forEach(child => {
+          updates[child.key] = null;
+        });
+        await update(chatRef, updates);
+      }
+    } catch (e) {
+      console.warn("Pruning skipped or unauthorized:", e);
+    }
+  },
+
   async sendGlobalChatMessage(profile, text) {
+    // Run cleanup in background before sending
+    this.pruneOldChatMessages().catch(err => console.warn(err));
+
     const chatRef = ref(rtdb, 'globalChat');
     await push(chatRef, {
       uid: profile.uid,
-      username: profile.displayName || profile.username,
-      badge: profile.badge || '🌐',
+      username: profile.username, // Only username goes to RTDB chat
+      badge: profile.badge || '👤',
       text: text,
       timestamp: serverTimestamp()
     });

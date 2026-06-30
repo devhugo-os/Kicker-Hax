@@ -6,6 +6,7 @@ import { menuController } from './controllers/menuController.js';
 import { settingsController } from './controllers/settingsController.js';
 import { gameController } from './controllers/gameController.js';
 import { chatController } from './controllers/chatController.js';
+import { showToast } from './utils/toast.js';
 
 // Setup full SPA lifecycle
 function initApp() {
@@ -51,8 +52,17 @@ function initApp() {
       await gameController.init(user);
       settingsController.init();
 
-      // Clear splash, redirect to menu
-      router.show('menu-screen');
+      // Force pick username flow for new users
+      if (menuController.profileData && menuController.profileData.isNewUser) {
+        showToast('Escolha seu apelido de jogador antes de começar!', 'info');
+        const backBtn = document.getElementById('profile-btn-back');
+        if (backBtn) backBtn.style.display = 'none';
+        router.show('profile-screen');
+      } else {
+        const backBtn = document.getElementById('profile-btn-back');
+        if (backBtn) backBtn.style.display = '';
+        router.show('menu-screen');
+      }
     } else {
       // Clear data states if log out
       menuController.currentUser = null;

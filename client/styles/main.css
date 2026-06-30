@@ -373,3 +373,45 @@ textarea {
   0%, 100% { box-shadow: 0 0 10px var(--color-red-glow); }
   50% { box-shadow: 0 0 22px rgba(239, 68, 68, 0.8); }
 }
+
+/* Flag Icons Vector Emblems */
+.flag-icon {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  vertical-align: middle;
+}
+.flag-icon.br {
+  background: radial-gradient(circle, #002776 25%, #fedf00 26%, #fedf00 45%, #009b3a 46%);
+}
+.flag-icon.ar {
+  background: linear-gradient(180deg, #74acdf 30%, #ffffff 31%, #ffffff 69%, #74acdf 70%);
+  position: relative;
+}
+.flag-icon.ar::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 6px; height: 6px;
+  background: #f6b40e;
+  border-radius: 50%;
+}
+.flag-icon.us {
+  background: linear-gradient(180deg, #b22234 50%, #ffffff 50%);
+  background-size: 100% 4px;
+  position: relative;
+  overflow: hidden;
+}
+.flag-icon.us::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 12px; height: 12px;
+  background: #3c3b6e;
+}
+.flag-icon.pt {
+  background: linear-gradient(90deg, #006600 40%, #ff0000 40%);
+}

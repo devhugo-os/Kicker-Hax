@@ -121,8 +121,8 @@
             </div>
 
             <div class="input-group">
-              <label for="profile-displayname-input">Nome de Exibição</label>
-              <input type="text" id="profile-displayname-input" maxlength="12" />
+              <label for="profile-username-input">Nome de Usuário (Apenas letras, números e sublinhado)</label>
+              <input type="text" id="profile-username-input" maxlength="12" placeholder="Escolha seu apelido" />
             </div>
 
             <div class="input-group">
@@ -557,9 +557,16 @@
         <div class="match-stage" id="match-stage">
           <!-- Lateral Esquerda P2 -->
           <aside class="match-side side-left">
-            <div class="side-title">P2 / CPU</div>
-            <div class="side-vbar"><div class="side-vlabel">ST</div><i id="left-stam-fill"></i></div>
-            <div class="side-vbar"><div class="side-vlabel">PW</div><i id="left-pow-fill"></i></div>
+            <div class="side-title">CPU / P2</div>
+            <div class="side-bars-container">
+              <div class="side-vbar"><div class="side-vlabel">ST</div><i id="left-stam-fill"></i></div>
+              <div class="side-vbar"><div class="side-vlabel">PW</div><i id="left-pow-fill"></i></div>
+            </div>
+            <div class="side-stats-pill">
+              <div>⚡ Vel: <span id="left-stat-speed">0.0</span></div>
+              <div>🛡️ Desarmes: <span id="left-stat-tackles">0</span></div>
+              <div>⚽ Dribles: <span id="left-stat-dribbles">0</span></div>
+            </div>
           </aside>
 
           <!-- Canvas -->
@@ -567,9 +574,16 @@
 
           <!-- Lateral Direita P1 -->
           <aside class="match-side side-right">
-            <div class="side-title">P1</div>
-            <div class="side-vbar"><div class="side-vlabel">ST</div><i id="right-stam-fill"></i></div>
-            <div class="side-vbar"><div class="side-vlabel">PW</div><i id="right-pow-fill"></i></div>
+            <div class="side-title">Você (P1)</div>
+            <div class="side-bars-container">
+              <div class="side-vbar"><div class="side-vlabel">ST</div><i id="right-stam-fill"></i></div>
+              <div class="side-vbar"><div class="side-vlabel">PW</div><i id="right-pow-fill"></i></div>
+            </div>
+            <div class="side-stats-pill">
+              <div>⚡ Vel: <span id="right-stat-speed">0.0</span></div>
+              <div>🛡️ Desarmes: <span id="right-stat-tackles">0</span></div>
+              <div>⚽ Dribles: <span id="right-stat-dribbles">0</span></div>
+            </div>
           </aside>
         </div>
       </div>
@@ -595,6 +609,34 @@
       <!-- Ping Overlay -->
       <div id="ping-indicator" class="ping-badge">Ping: 0ms</div>
       <div class="paused-badge hidden" id="focus-lost-badge">⏸️ Pausado (fora da aba)</div>
+      
+      <!-- Custom Pause / Admin Menu Overlay -->
+      <div class="paused-badge hidden" id="pause-modal" style="display: flex; flex-direction: column; gap: 12px; min-width: 260px; text-align: center; border-radius: 16px; padding: 20px;">
+        <h3 style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 800; color: #fff;">⏸️ Jogo Pausado</h3>
+        
+        <button class="btn btn-success btn-block" id="pause-btn-resume" style="width: 100%;">Retomar Jogo</button>
+        
+        <!-- Host Controls (visible only for Host or Solo) -->
+        <div id="host-controls" style="padding: 12px; border-radius: 12px; font-size: 12px; margin-top: 6px; text-align: left; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08);">
+          <h4 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 800; color: var(--color-warning); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px;">⚙️ Controles do Host</h4>
+          
+          <div class="input-group" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 10px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase;">Tamanho do Campo</label>
+            <select id="pause-field-size" class="btn-sm" style="width: 100%; padding: 6px; background: #111b2e; color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; font-family: 'Outfit', sans-serif; font-weight: 600;">
+              <option value="small">Pequeno (896x560)</option>
+              <option value="medium">Médio (1024x640)</option>
+              <option value="large">Grande (1280x768)</option>
+            </select>
+          </div>
+          
+          <div class="flex-row gap-2" style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-success" id="pause-btn-apply-settings" style="flex: 1; font-size: 11px; padding: 6px;">Aplicar</button>
+            <button class="btn btn-sm btn-warning" id="pause-btn-reset-match" style="flex: 1; font-size: 11px; padding: 6px;">Reiniciar</button>
+          </div>
+        </div>
+
+        <button class="btn btn-danger btn-block" id="pause-btn-exit-match" style="width: 100%; margin-top: 4px;">Sair ao Menu</button>
+      </div>
     </div>
 
     <!-- 17. PÓS-JOGO SCREEN -->
