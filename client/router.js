@@ -45,6 +45,15 @@ class Router {
     
     this.currentScreenId = screenId;
 
+    const globalChat = document.getElementById('global-chat-container');
+    if (globalChat) {
+      if (screenId === 'menu-screen' || screenId === 'multiplayer-screen') {
+        globalChat.classList.remove('hidden');
+      } else {
+        globalChat.classList.add('hidden');
+      }
+    }
+
     // Call enter lifecycle handler
     if (nextRoute && nextRoute.onEnter) {
       try {

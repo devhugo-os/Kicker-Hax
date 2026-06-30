@@ -1,7 +1,6 @@
 // Kicker Hax - Settings & Key Remapping Controller
 import { router } from '../router.js';
 import { soundFx } from '../utils/soundFx.js';
-import { gamepadService } from '../services/gamepadService.js';
 import { showToast } from '../utils/toast.js';
 
 export const settingsController = {
@@ -52,22 +51,12 @@ export const settingsController = {
       });
     }
 
-    // Quality Selector
-    const qualSel = document.getElementById('settings-quality');
-    if (qualSel) {
-      qualSel.addEventListener('change', (e) => {
-        localStorage.setItem('kicker_hax_quality', e.target.value);
-      });
-    }
-
     // Back buttons
     const btnSetBack = document.getElementById('settings-btn-back');
     if (btnSetBack) btnSetBack.onclick = () => router.show('menu-screen');
 
     const btnCtrlBack = document.getElementById('controls-btn-back');
     if (btnCtrlBack) btnCtrlBack.onclick = () => router.show('menu-screen');
-
-    // Global Key Listener for Remapping
 
     // Global Key Listener for Remapping
     window.addEventListener('keydown', (e) => this.handleRemapKey(e));
@@ -99,23 +88,6 @@ export const settingsController = {
         this.renderRemapGrids();
         const warning = document.getElementById('controls-restart-warning');
         if (warning) warning.classList.add('hidden');
-        
-        // Gamepad binding
-        gamepadService.init();
-        gamepadService.onUpdate((statusText) => {
-          const el = document.getElementById('gamepad-status');
-          if (el) el.textContent = statusText;
-        });
-
-        // Gamepad sensitivity slider
-        const sensSlider = document.getElementById('gamepad-sensitivity');
-        if (sensSlider) {
-          sensSlider.value = gamepadService.settings.sensitivity;
-          sensSlider.oninput = (e) => {
-            gamepadService.settings.sensitivity = parseInt(e.target.value, 10);
-            localStorage.setItem('kicker_hax_gp_sensitivity', e.target.value);
-          };
-        }
       }
     });
   },
@@ -136,12 +108,6 @@ export const settingsController = {
     } catch (e) {
       this.CTRL_P1 = JSON.parse(JSON.stringify(this.defaultP1));
       this.CTRL_P2 = JSON.parse(JSON.stringify(this.defaultP2));
-    }
-
-    // 4) Gamepad sensitivity
-    const savedGpSens = localStorage.getItem('kicker_hax_gp_sensitivity');
-    if (savedGpSens) {
-      gamepadService.settings.sensitivity = parseInt(savedGpSens, 10);
     }
   },
 

@@ -29,36 +29,7 @@ export class ServerPhysics {
     return d < a.r + b.r ? { dx, dy, d } : null;
   }
 
-  static applyBoostPads(obj, w, h, onActivate) {
-    if (obj.boostCooldown > 0) {
-      obj.boostCooldown--;
-    }
-    
-    const pad1X = w * 0.35, pad1Y = h * 0.3;
-    const pad2X = w * 0.65, pad2Y = h * 0.7;
-    
-    const d1 = Math.hypot(obj.x - pad1X, obj.y - pad1Y);
-    const d2 = Math.hypot(obj.x - pad2X, obj.y - pad2Y);
-    const r = obj.r || C.PLAYER_RADIUS;
-    
-    if (d1 < r + 32) {
-      if (!obj.boostCooldown || obj.boostCooldown <= 0) {
-        const pushForce = 3.5;
-        obj.vx += pushForce * 0.707;
-        obj.vy -= pushForce * 0.707;
-        obj.boostCooldown = 45;
-        if (onActivate) onActivate();
-      }
-    } else if (d2 < r + 32) {
-      if (!obj.boostCooldown || obj.boostCooldown <= 0) {
-        const pushForce = 3.5;
-        obj.vx -= pushForce * 0.707;
-        obj.vy += pushForce * 0.707;
-        obj.boostCooldown = 45;
-        if (onActivate) onActivate();
-      }
-    }
-  }
+
 
   static collidePlayerWithCorner(p, cx, cy, cr) {
     const dx = p.x - cx;

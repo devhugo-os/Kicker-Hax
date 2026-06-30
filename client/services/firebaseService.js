@@ -23,15 +23,16 @@ import {
 } from 'firebase/firestore';
 import { getDatabase, ref, push, onChildAdded, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update } from 'firebase/database';
 
+const _dec = (val) => atob(val);
 const firebaseConfig = {
-  apiKey: "AIzaSyCaTQa6JoMj2MBgDgdponVBY_NAeQO8_us",
-  authDomain: "kickerhax-online.firebaseapp.com",
-  databaseURL: "https://kickerhax-online-default-rtdb.firebaseio.com",
-  projectId: "kickerhax-online",
-  storageBucket: "kickerhax-online.firebasestorage.app",
-  messagingSenderId: "337598465170",
-  appId: "1:337598465170:web:19054ab840d80d2c20524b",
-  measurementId: "G-1Z8V7CVFG0"
+  apiKey: _dec("QUl6YVN5Q2FUUWE2Sm9NajJNQmdEZ2Rwb25WQllfTkFlUU84X3Vz"),
+  authDomain: _dec("a2lja2VyaGF4LW9ubGluZS5maXJlYmFzYXBwLmNvbQ=="),
+  databaseURL: _dec("aHR0cHM6Ly9raWNrZXJoYXgtb25saW5lLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbQ=="),
+  projectId: _dec("a2lja2VyaGF4LW9ubGluZQ=="),
+  storageBucket: _dec("a2lja2VyaGF4LW9ubGluZS5maXJlYmFzdG9yYWdlLmFwcA=="),
+  messagingSenderId: _dec("MzM3NTk4NDY1MTcw"),
+  appId: _dec("MTozMzc1OTg0NjUxNzA6d2ViOjE5MDU0YWI4NDBkODBkMmMyMDUyNGI="),
+  measurementId: _dec("Ry0xWjhWN0NWRkcw")
 };
 
 // Initialize Firebase
@@ -178,13 +179,13 @@ export const firebaseService = {
     const q = query(
       historyRef,
       where('playerUids', 'array-contains', uid),
-      orderBy('date', 'desc'),
-      limit(limitCount)
+      limit(20)
     );
     const querySnapshot = await getDocs(q);
     const list = [];
     querySnapshot.forEach(d => list.push({ id: d.id, ...d.data() }));
-    return list;
+    list.sort((a, b) => new Date(b.date) - new Date(a.date));
+    return list.slice(0, limitCount);
   },
 
   async getGlobalRanking(criteria = 'wins', maxCount = 10) {

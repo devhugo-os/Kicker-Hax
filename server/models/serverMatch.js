@@ -122,30 +122,50 @@ export class ServerMatch {
   }
 
   kickoff() {
-    for (const p of this.players) {
-      const isRed = p.team === C.Team.RED;
-      p.x = isRed ? C.BORDER + 120 : this.w - C.BORDER - 120;
-      p.y = this.h * 0.5;
-      p.vx = 0;
-      p.vy = 0;
-      p.kickCharge = 0;
-      p.stamina = 1.0;
-      p.staminaLock = 0;
-      p.stun = 0;
-      p.tackle_cd = 0;
-      p.dribble_cd = 0;
-      p.dash_time = 0;
-      p.invuln = 0;
-      p.power_cd = 0;
-      p.tackleFreeze = 0;
-      p.tackleSuccess = false;
-      p.tackleEval = 0;
-      p.shootHalo = 0;
-      p.aiShootLock = 0;
-      p.aiFeintLock = 0;
-    }
-    this.ball.x = this.w / 2;
-    this.ball.y = this.h / 2;
+    const redPlayers = this.players.filter(p => p.team === C.Team.RED);
+    const bluePlayers = this.players.filter(p => p.team === C.Team.BLUE);
+
+    const assignPositions = (teamPlayers, isRed) => {
+      const positions = [
+        { dx: 120, dy: 0.5 },  // Player 1: Goalkeeper/Defender
+        { dx: 250, dy: 0.5 },  // Player 2: Striker
+        { dx: 180, dy: 0.3 },  // Player 3: Midfielder 1
+        { dx: 180, dy: 0.7 }   // Player 4: Midfielder 2
+      ];
+
+      teamPlayers.forEach((p, index) => {
+        const layout = positions[index % positions.length];
+        const jitterX = (Math.random() - 0.5) * 20;
+        const jitterY = (Math.random() - 0.5) * 20;
+
+        p.x = isRed ? (C.BORDER + layout.dx + jitterX) : (this.w - C.BORDER - layout.dx + jitterX);
+        p.y = this.h * layout.dy + jitterY;
+        p.vx = 0;
+        p.vy = 0;
+        p.kickCharge = 0;
+        p.stamina = 1.0;
+        p.staminaLock = 0;
+        p.stun = 0;
+        p.tackle_cd = 0;
+        p.dribble_cd = 0;
+        p.dash_time = 0;
+        p.invuln = 0;
+        p.power_cd = 0;
+        p.tackleFreeze = 0;
+        p.tackleSuccess = false;
+        p.tackleEval = 0;
+        p.shootHalo = 0;
+        p.aiShootLock = 0;
+        p.aiFeintLock = 0;
+      });
+    };
+
+    assignPositions(redPlayers, true);
+    assignPositions(bluePlayers, false);
+
+    // Reset ball kickoff
+    this.ball.x = this.w * 0.5;
+    this.ball.y = this.h * 0.5;
     this.ball.vx = 0;
     this.ball.vy = 0;
     this.ball.owner = null;
@@ -263,8 +283,17 @@ export class ServerMatch {
       targetY = ServerPhysics.clamp(p.y, gTop + 20, gBot - 20);
     } else if (this.ball.owner && this.players.find(x => x.id === this.ball.owner).team !== p.team) {
       const owner = this.players.find(x => x.id === this.ball.owner);
-      targetX = owner.x;
-      targetY = owner.y;
+      const d = Math.hypot(owner.x - p.x, owner.y - p.y);
+      if (d > 200) {
+        // Defensive positional marking: stay between the ball owner and our goal
+        const defGoalX = p.team === C.Team.RED ? C.BORDER : this.w - C.BORDER;
+        targetX = defGoalX + (owner.x - defGoalX) * 0.7;
+        targetY = (this.h * 0.5) + (owner.y - this.h * 0.5) * 0.7;
+      } else {
+        // Close combat: go straight for the ball owner to tackle
+        targetX = owner.x;
+        targetY = owner.y;
+      }
     }
 
     // Calculate vectors
@@ -507,7 +536,6 @@ export class ServerMatch {
 
         // Run movements and boundaries
         ServerPhysics.updatePlayerPhysics(p, input, this.ball, (sfx) => this.soundEffects.push(sfx));
-        ServerPhysics.applyBoostPads(p, this.w, this.h, () => this.soundEffects.push('dribble'));
         ServerPhysics.applyLimits(p, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, this.w, this.h);
       }
 
@@ -520,8 +548,7 @@ export class ServerMatch {
         }
       });
 
-      // Apply Boost Pads to ball
-      ServerPhysics.applyBoostPads(this.ball, this.w, this.h, () => this.soundEffects.push('power'));
+      // Update ball physics
 
       ServerPhysics.updateBallPhysics(
         this.ball, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, this.players,

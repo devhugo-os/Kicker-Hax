@@ -2,7 +2,6 @@
 import { router } from '../router.js';
 import { firebaseService } from '../services/firebaseService.js';
 import { socketService } from '../services/socketService.js';
-import { gamepadService } from '../services/gamepadService.js';
 import { settingsController } from './settingsController.js';
 import { menuController } from './menuController.js';
 import { soundFx } from '../utils/soundFx.js';
@@ -423,6 +422,13 @@ export const gameController = {
     window.addEventListener('resize', () => this.resizeCanvasContainer());
 
     // Reset local counters
+    this.p1PossessionFrames = 0;
+    this.cpuPossessionFrames = 0;
+    this.totalPossessionFrames = 0;
+    this.p1Shots = 0;
+    this.p1Tackles = 0;
+    this.p1Dribbles = 0;
+    this.shotCooldown = 0;
     this.goalsScored = 0;
     this.assistsGained = 0;
     this.savesDone = 0;
@@ -543,6 +549,18 @@ export const gameController = {
     const p1Lobby = { id: 'p1', uid: this.currentUser.uid, username, badge, team: 'blue', cpu: false };
     const cpuLobby = { id: 'cpu', uid: '', username: 'CPU Bot', badge: '⚙️', team: 'red', cpu: true, difficulty: this.difficulty };
 
+    // Reset match statistics
+    this.p1PossessionFrames = 0;
+    this.cpuPossessionFrames = 0;
+    this.totalPossessionFrames = 0;
+    this.p1Shots = 0;
+    this.p1Tackles = 0;
+    this.p1Dribbles = 0;
+    this.shotCooldown = 0;
+    this.goalsScored = 0;
+    this.assistsGained = 0;
+    this.savesDone = 0;
+
     // Simulate Match logic locally on the client!
     this.status = 'countdown';
     this.countdown = 150;
@@ -660,30 +678,23 @@ export const gameController = {
               this.localMatchEnd(MatchSim.score);
             }
 
-            // 1) Read P1 keyboard / Gamepad Inputs
+            // 1) Read P1 keyboard Inputs
             let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
-            const gamepadInputs = gamepadService.getInputs(1);
-
-            if (gamepadInputs) {
-              inputP1 = gamepadInputs;
+            const keysCtrl = settingsController.CTRL_P1;
+            if (this.keys.get(keysCtrl.up)) inputP1.y -= 1;
+            if (this.keys.get(keysCtrl.down)) inputP1.y += 1;
+            if (this.keys.get(keysCtrl.left)) inputP1.x -= 1;
+            if (this.keys.get(keysCtrl.right)) inputP1.x += 1;
+            
+            if (keysCtrl.sprint.startsWith('Shift')) {
+              inputP1.sprint = this.codes.get(keysCtrl.sprint);
             } else {
-              // Read mapped keys
-              const keysCtrl = settingsController.CTRL_P1;
-              if (this.keys.get(keysCtrl.up)) inputP1.y -= 1;
-              if (this.keys.get(keysCtrl.down)) inputP1.y += 1;
-              if (this.keys.get(keysCtrl.left)) inputP1.x -= 1;
-              if (this.keys.get(keysCtrl.right)) inputP1.x += 1;
-              
-              if (keysCtrl.sprint.startsWith('Shift')) {
-                inputP1.sprint = this.codes.get(keysCtrl.sprint);
-              } else {
-                inputP1.sprint = this.keys.get(keysCtrl.sprint);
-              }
-              inputP1.shoot = this.keys.get(keysCtrl.shoot);
-              inputP1.dribble = this.keys.get(keysCtrl.dribble);
-              inputP1.tackle = this.keys.get(keysCtrl.tackle);
-              inputP1.power = this.keys.get(keysCtrl.power);
+              inputP1.sprint = this.keys.get(keysCtrl.sprint);
             }
+            inputP1.shoot = this.keys.get(keysCtrl.shoot);
+            inputP1.dribble = this.keys.get(keysCtrl.dribble);
+            inputP1.tackle = this.keys.get(keysCtrl.tackle);
+            inputP1.power = this.keys.get(keysCtrl.power);
 
             // 2) AI bot decision making
             let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
@@ -720,6 +731,17 @@ export const gameController = {
                   }
                 } else {
                   targetY = Physics.clamp(redPlayer.y, gTop + 20, gBot - 20);
+                }
+              } else if (localBallSim.owner === 'p1') {
+                const d = Math.hypot(bluePlayer.x - redPlayer.x, bluePlayer.y - redPlayer.y);
+                if (d > 200) {
+                  // Defensive marking: block angle between player and our goal (left goal)
+                  const defGoalX = C.BORDER;
+                  targetX = defGoalX + (bluePlayer.x - defGoalX) * 0.7;
+                  targetY = (h * 0.5) + (bluePlayer.y - h * 0.5) * 0.7;
+                } else {
+                  targetX = bluePlayer.x;
+                  targetY = bluePlayer.y;
                 }
               } else if (ballInOurHalf && distBall > 260 && this.difficulty !== 'easy') {
                 // Goalie defensive stance
@@ -854,10 +876,6 @@ export const gameController = {
             Physics.updatePlayerPhysics(bluePlayer, inputP1, localBallSim, (sfx) => frameSfx.push(sfx));
             Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
 
-            // Apply Boost Pads local physics
-            Physics.applyBoostPads(bluePlayer, w, h, () => frameSfx.push('dribble'));
-            Physics.applyBoostPads(redPlayer, w, h, () => frameSfx.push('dribble'));
-
             Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
             Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
 
@@ -867,9 +885,6 @@ export const gameController = {
                 if (pl.tackleEval > 0 && localBallSim.owner === pl.id) pl.tackleSuccess = true;
               }
             });
-
-            // Apply Boost Pads to ball
-            Physics.applyBoostPads(localBallSim, w, h, () => frameSfx.push('power'));
 
             Physics.updateBallPhysics(
               localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, localPlayers,
@@ -964,14 +979,33 @@ export const gameController = {
         if (leftStam) leftStam.style.height = `${redPlayer.stamina * 100}%`;
         if (leftPow) leftPow.style.height = `${redPlayer.kickCharge * 100}%`;
 
-        // Update real-time speed display
-        const p1Speed = Math.hypot(bluePlayer.vx, bluePlayer.vy) * 10;
-        const cpuSpeed = Math.hypot(redPlayer.vx, redPlayer.vy) * 10;
-        
-        const rightSpeedEl = document.getElementById('right-stat-speed');
-        if (rightSpeedEl) rightSpeedEl.textContent = p1Speed.toFixed(1);
-        const leftSpeedEl = document.getElementById('left-stat-speed');
-        if (leftSpeedEl) leftSpeedEl.textContent = cpuSpeed.toFixed(1);
+        // Track possession in real-time
+        if (localBallSim.owner === 'p1') {
+          this.p1PossessionFrames = (this.p1PossessionFrames || 0) + 1;
+        } else if (localBallSim.owner === 'cpu') {
+          this.cpuPossessionFrames = (this.cpuPossessionFrames || 0) + 1;
+        } else {
+          if (localBallSim.lastTouch === 'p1') {
+            this.p1PossessionFrames = (this.p1PossessionFrames || 0) + 1;
+          } else if (localBallSim.lastTouch === 'cpu') {
+            this.cpuPossessionFrames = (this.cpuPossessionFrames || 0) + 1;
+          }
+        }
+        this.totalPossessionFrames = (this.totalPossessionFrames || 0) + 1;
+        const p1Poss = Math.round(((this.p1PossessionFrames || 0) / (this.totalPossessionFrames || 1)) * 100);
+
+        // Track Shots on Goal
+        if (this.shotCooldown > 0) {
+          this.shotCooldown--;
+        }
+        const p1NearBall = Math.hypot(bluePlayer.x - localBallSim.x, bluePlayer.y - localBallSim.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 12;
+        if (p1NearBall && (inputP1.shoot || inputP1.power) && !this.shotCooldown) {
+          const ang = Math.atan2(localBallSim.y - bluePlayer.y, localBallSim.x - bluePlayer.x);
+          if (Math.cos(ang) > 0.2) {
+            this.p1Shots = (this.p1Shots || 0) + 1;
+            this.shotCooldown = 30;
+          }
+        }
 
         // Track Tackles and Dribbles counts from state cooldown activations
         if (bluePlayer.tackle_cd > 0 && !this.p1TackleLock) {
@@ -987,29 +1021,16 @@ export const gameController = {
           this.p1DribbleLock = false;
         }
 
-        if (redPlayer.tackle_cd > 0 && !this.p2TackleLock) {
-          this.p2Tackles = (this.p2Tackles || 0) + 1;
-          this.p2TackleLock = true;
-        } else if (redPlayer.tackle_cd === 0) {
-          this.p2TackleLock = false;
-        }
-        if (redPlayer.dribble_cd > 0 && !this.p2DribbleLock) {
-          this.p2Dribbles = (this.p2Dribbles || 0) + 1;
-          this.p2DribbleLock = true;
-        } else if (redPlayer.dribble_cd === 0) {
-          this.p2DribbleLock = false;
-        }
-
-        // Render counts on HUD
+        // Render counts on HUD (Você / P1 only)
+        const rightPossEl = document.getElementById('right-stat-possession');
+        const rightShotsEl = document.getElementById('right-stat-shots');
         const rightTacklesEl = document.getElementById('right-stat-tackles');
         const rightDribblesEl = document.getElementById('right-stat-dribbles');
-        const leftTacklesEl = document.getElementById('left-stat-tackles');
-        const leftDribblesEl = document.getElementById('left-stat-dribbles');
 
+        if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
+        if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
         if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
         if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
-        if (leftTacklesEl) leftTacklesEl.textContent = this.p2Tackles || 0;
-        if (leftDribblesEl) leftDribblesEl.textContent = this.p2Dribbles || 0;
 
         // Render Countdown Banners
         if (MatchSim.status === 'countdown') {
@@ -1027,16 +1048,20 @@ export const gameController = {
       };
 
       const resetFieldPositions = () => {
-        bluePlayer.x = this.canvas.width - C.BORDER - 120;
-        bluePlayer.y = this.canvas.height * 0.5;
+        const jitterX1 = (Math.random() - 0.5) * 20;
+        const jitterY1 = (Math.random() - 0.5) * 20;
+        bluePlayer.x = this.canvas.width - C.BORDER - 120 + jitterX1;
+        bluePlayer.y = this.canvas.height * 0.5 + jitterY1;
         bluePlayer.vx = bluePlayer.vy = 0;
         bluePlayer.kickCharge = 0;
         bluePlayer.stamina = 1.0;
         bluePlayer.staminaLock = 0;
         bluePlayer.stun = 0;
 
-        redPlayer.x = C.BORDER + 120;
-        redPlayer.y = this.canvas.height * 0.5;
+        const jitterX2 = (Math.random() - 0.5) * 20;
+        const jitterY2 = (Math.random() - 0.5) * 20;
+        redPlayer.x = C.BORDER + 120 + jitterX2;
+        redPlayer.y = this.canvas.height * 0.5 + jitterY2;
         redPlayer.vx = redPlayer.vy = 0;
         redPlayer.kickCharge = 0;
         redPlayer.stamina = 1.0;
@@ -1268,27 +1293,21 @@ export const gameController = {
 
       // 1) Read local input and emit via WebSocket
       let input = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
-      const gp = gamepadService.getInputs(1);
+      const keysCtrl = settingsController.CTRL_P1;
+      if (this.keys.get(keysCtrl.up)) input.y -= 1;
+      if (this.keys.get(keysCtrl.down)) input.y += 1;
+      if (this.keys.get(keysCtrl.left)) input.x -= 1;
+      if (this.keys.get(keysCtrl.right)) input.x += 1;
       
-      if (gp) {
-        input = gp;
+      if (keysCtrl.sprint.startsWith('Shift')) {
+        input.sprint = this.codes.get(keysCtrl.sprint);
       } else {
-        const keysCtrl = settingsController.CTRL_P1;
-        if (this.keys.get(keysCtrl.up)) input.y -= 1;
-        if (this.keys.get(keysCtrl.down)) input.y += 1;
-        if (this.keys.get(keysCtrl.left)) input.x -= 1;
-        if (this.keys.get(keysCtrl.right)) input.x += 1;
-        
-        if (keysCtrl.sprint.startsWith('Shift')) {
-          input. sprint = this.codes.get(keysCtrl.sprint);
-        } else {
-          input.sprint = this.keys.get(keysCtrl.sprint);
-        }
-        input.shoot = this.keys.get(keysCtrl.shoot);
-        input.dribble = this.keys.get(keysCtrl.dribble);
-        input.tackle = this.keys.get(keysCtrl.tackle);
-        input.power = this.keys.get(keysCtrl.power);
+        input.sprint = this.keys.get(keysCtrl.sprint);
       }
+      input.shoot = this.keys.get(keysCtrl.shoot);
+      input.dribble = this.keys.get(keysCtrl.dribble);
+      input.tackle = this.keys.get(keysCtrl.tackle);
+      input.power = this.keys.get(keysCtrl.power);
 
       // Emit inputs to server
       socketService.sendGameInput(input);
@@ -1336,10 +1355,36 @@ export const gameController = {
         if (input.shoot) localCharge = 1; // display simple kick glow
         if (myPow) myPow.style.height = `${localCharge * 100}%`;
 
-        // Telemetry speed
-        const mySpeed = Math.hypot(me.vx, me.vy) * 10;
-        const rightSpeedEl = document.getElementById('right-stat-speed');
-        if (rightSpeedEl) rightSpeedEl.textContent = mySpeed.toFixed(1);
+        // Track possession in real-time
+        if (opp) {
+          if (this.ball.owner === me.id) {
+            this.p1PossessionFrames = (this.p1PossessionFrames || 0) + 1;
+          } else if (this.ball.owner === opp.id) {
+            this.cpuPossessionFrames = (this.cpuPossessionFrames || 0) + 1;
+          } else {
+            if (this.ball.lastTouch === me.id) {
+              this.p1PossessionFrames = (this.p1PossessionFrames || 0) + 1;
+            } else if (this.ball.lastTouch === opp.id) {
+              this.cpuPossessionFrames = (this.cpuPossessionFrames || 0) + 1;
+            }
+          }
+          this.totalPossessionFrames = (this.totalPossessionFrames || 0) + 1;
+        }
+        const p1Poss = Math.round(((this.p1PossessionFrames || 0) / (this.totalPossessionFrames || 1)) * 100);
+
+        // Track Shots on Goal
+        if (this.shotCooldown > 0) {
+          this.shotCooldown--;
+        }
+        const p1NearBall = Math.hypot(me.x - this.ball.x, me.y - this.ball.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 12;
+        if (p1NearBall && input.shoot && !this.shotCooldown) {
+          const ang = Math.atan2(this.ball.y - me.y, this.ball.x - me.x);
+          const isAttackingRight = me.team === C.Team.BLUE;
+          if ((isAttackingRight && Math.cos(ang) > 0.2) || (!isAttackingRight && Math.cos(ang) < -0.2)) {
+            this.p1Shots = (this.p1Shots || 0) + 1;
+            this.shotCooldown = 30;
+          }
+        }
 
         // Tackle count
         if (me.tackle_cd > 0 && !this.p1TackleLock) {
@@ -1356,8 +1401,12 @@ export const gameController = {
           this.p1DribbleLock = false;
         }
 
+        const rightPossEl = document.getElementById('right-stat-possession');
+        const rightShotsEl = document.getElementById('right-stat-shots');
         const rightTacklesEl = document.getElementById('right-stat-tackles');
         const rightDribblesEl = document.getElementById('right-stat-dribbles');
+        if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
+        if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
         if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
         if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
       }
@@ -1367,31 +1416,6 @@ export const gameController = {
         const oppPow = document.getElementById('left-pow-fill');
         if (oppStam) oppStam.style.height = `${opp.stamina * 100}%`;
         if (oppPow) oppPow.style.height = `${(opp.kickCharge || 0) * 100}%`;
-
-        // Telemetry speed
-        const oppSpeed = Math.hypot(opp.vx, opp.vy) * 10;
-        const leftSpeedEl = document.getElementById('left-stat-speed');
-        if (leftSpeedEl) leftSpeedEl.textContent = oppSpeed.toFixed(1);
-
-        // Tackle count
-        if (opp.tackle_cd > 0 && !this.p2TackleLock) {
-          this.p2Tackles = (this.p2Tackles || 0) + 1;
-          this.p2TackleLock = true;
-        } else if (opp.tackle_cd === 0) {
-          this.p2TackleLock = false;
-        }
-        // Dribble count
-        if (opp.dribble_cd > 0 && !this.p2DribbleLock) {
-          this.p2Dribbles = (this.p2Dribbles || 0) + 1;
-          this.p2DribbleLock = true;
-        } else if (opp.dribble_cd === 0) {
-          this.p2DribbleLock = false;
-        }
-
-        const leftTacklesEl = document.getElementById('left-stat-tackles');
-        const leftDribblesEl = document.getElementById('left-stat-dribbles');
-        if (leftTacklesEl) leftTacklesEl.textContent = this.p2Tackles || 0;
-        if (leftDribblesEl) leftDribblesEl.textContent = this.p2Dribbles || 0;
       }
 
       // Render countdown banner
@@ -1655,10 +1679,6 @@ export const gameController = {
     cx.beginPath();
     cx.arc(C.BORDER + 100, h / 2, 3, 0, Math.PI * 2);
     cx.fill();
-    // Penalty arc
-    cx.beginPath();
-    cx.arc(C.BORDER + 100, h / 2, 45, -Math.PI * 0.28, Math.PI * 0.28);
-    cx.stroke();
 
     // Right Team area
     cx.strokeRect(w - C.BORDER - 140, (h - 260) / 2, 140, 260); // Grande area
@@ -1667,10 +1687,6 @@ export const gameController = {
     cx.beginPath();
     cx.arc(w - C.BORDER - 100, h / 2, 3, 0, Math.PI * 2);
     cx.fill();
-    // Penalty arc
-    cx.beginPath();
-    cx.arc(w - C.BORDER - 100, h / 2, 45, Math.PI * 0.72, Math.PI * 1.28);
-    cx.stroke();
 
     // Corner flag arcs
     const cornerArcR = 12;
@@ -1709,18 +1725,7 @@ export const gameController = {
     drawFlag(w - C.BORDER, C.BORDER, Math.PI * 0.5);
     drawFlag(w - C.BORDER, h - C.BORDER, Math.PI);
 
-    // 6) Draw Boost Pads (Speed Pads)
-    const pad1X = w * 0.35, pad1Y = h * 0.3;
-    const pad2X = w * 0.65, pad2Y = h * 0.7;
 
-    const pad1Active = this.players.some(p => Math.hypot(p.x - pad1X, p.y - pad1Y) < p.r + 32) || 
-                       Math.hypot(this.ball.x - pad1X, this.ball.y - pad1Y) < this.ball.r + 32;
-
-    const pad2Active = this.players.some(p => Math.hypot(p.x - pad2X, p.y - pad2Y) < p.r + 32) || 
-                       Math.hypot(this.ball.x - pad2X, this.ball.y - pad2Y) < this.ball.r + 32;
-
-    this.drawSpeedPad(cx, pad1X, pad1Y, pad1Active);
-    this.drawSpeedPad(cx, pad2X, pad2Y, pad2Active);
 
     // 7) Goals concrete background bases
     cx.fillStyle = '#0f172a';

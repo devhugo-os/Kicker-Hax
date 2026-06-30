@@ -183,14 +183,7 @@
             <span class="subtext" id="volume-val-display">80%</span>
           </div>
           
-          <div class="input-group">
-            <label for="settings-quality">Efeitos Gráficos</label>
-            <select id="settings-quality">
-              <option value="high">Altos (Partículas e Sombras)</option>
-              <option value="medium">Médios (Apenas Sombras)</option>
-              <option value="low">Baixos (Maximização de FPS)</option>
-            </select>
-          </div>
+
         </div>
       </div>
     </div>
@@ -223,15 +216,7 @@
           </div>
         </div>
 
-        <!-- Suporte Gamepad -->
-        <div class="gamepad-section card-blur-dark">
-          <h3>🎮 Integração com Gamepad</h3>
-          <p id="gamepad-status" class="subtext">Nenhum controle detectado. Pressione qualquer botão no controle para ativar.</p>
-          <div class="input-group">
-            <label for="gamepad-sensitivity">Sensibilidade do Analógico</label>
-            <input type="range" id="gamepad-sensitivity" min="1" max="10" value="5" />
-          </div>
-        </div>
+
       </div>
     </div>
 
@@ -246,7 +231,7 @@
           <div class="credits-role">Desenvolvedor Principal</div>
           <div class="credits-name">Hugo</div>
           <div class="credits-role">Engine de Física & Multiplayer</div>
-          <div class="credits-name">Antigravity AI (Google DeepMind)</div>
+          <div class="credits-name">Socket.IO & Web Canvas</div>
           <div class="credits-role">Trilha Sonora & Sintetizadores</div>
           <div class="credits-name">Web Audio API</div>
         </div>
@@ -556,11 +541,6 @@
               <div class="side-vbar"><div class="side-vlabel">ST</div><i id="left-stam-fill"></i></div>
               <div class="side-vbar"><div class="side-vlabel">PW</div><i id="left-pow-fill"></i></div>
             </div>
-            <div class="side-stats-pill">
-              <div>⚡ Vel: <span id="left-stat-speed">0.0</span></div>
-              <div>🛡️ Desarmes: <span id="left-stat-tackles">0</span></div>
-              <div>⚽ Dribles: <span id="left-stat-dribbles">0</span></div>
-            </div>
           </aside>
 
           <!-- Canvas -->
@@ -574,9 +554,10 @@
               <div class="side-vbar"><div class="side-vlabel">PW</div><i id="right-pow-fill"></i></div>
             </div>
             <div class="side-stats-pill">
-              <div>⚡ Vel: <span id="right-stat-speed">0.0</span></div>
+              <div>📊 Posse: <span id="right-stat-possession">50%</span></div>
+              <div>🎯 Chutes: <span id="right-stat-shots">0</span></div>
               <div>🛡️ Desarmes: <span id="right-stat-tackles">0</span></div>
-              <div>⚽ Dribles: <span id="right-stat-dribbles">0</span></div>
+              <div>⚡ Dribles: <span id="right-stat-dribbles">0</span></div>
             </div>
           </aside>
         </div>

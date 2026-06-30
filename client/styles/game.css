@@ -81,8 +81,10 @@
   background: rgba(15, 23, 42, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
-  padding: 12px 8px;
+  padding: 12px 10px;
   backdrop-filter: blur(10px);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .side-title {

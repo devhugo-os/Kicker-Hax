@@ -52,7 +52,7 @@ export function registerRoomHandlers(io, socket) {
     socket.emit('roomCreated', code);
     
     // Broadcast public rooms update to lobby clients
-    io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
     io.to(code).emit('lobbyUpdate', room.getLobbyInfo());
   });
 
@@ -87,7 +87,7 @@ export function registerRoomHandlers(io, socket) {
     io.to(room.code).emit('chatMessage', joinMsg);
 
     // Refresh public rooms list counts
-    io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
   });
 
   socket.on('changeTeam', (team) => {
@@ -203,7 +203,7 @@ export function registerRoomHandlers(io, socket) {
 
     room.updateSettings(settings);
     io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
-    io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
   });
 
   socket.on('startGame', () => {
@@ -236,13 +236,13 @@ export function registerRoomHandlers(io, socket) {
         room.match = null;
         io.to(room.code).emit('matchEnded', score);
         io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
-        io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+        io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
       },
       room.fieldSize
     );
 
     io.to(room.code).emit('matchStarted');
-    io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
   });
 
   socket.on('leaveRoom', () => {
@@ -278,6 +278,6 @@ function handleDisconnect(io, socket) {
     }
 
     // Refresh public rooms list
-    io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
   }
 }

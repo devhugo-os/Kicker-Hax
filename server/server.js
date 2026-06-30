@@ -42,7 +42,7 @@ io.on('connection', (socket) => {
   registerGameHandlers(io, socket);
 
   // Send initial room listings
-  socket.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
+  socket.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
 });
 
 const PORT = process.env.PORT || 8080;

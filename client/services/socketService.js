@@ -8,8 +8,15 @@ export const socketService = {
   connect(url = window.location.origin) {
     if (socket) return socket;
     
-    // In dev mode, we connect to local Express on port 8080 using the current hostname
-    const connectUrl = (url.includes(':3000') || url.includes(':5173')) ? `http://${window.location.hostname}:8080` : url;
+    // If not local, default to our production remote Socket server
+    let connectUrl = url;
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (!isLocal) {
+      connectUrl = 'https://kicker-hax-server.onrender.com';
+    } else if (url.includes(':3000') || url.includes(':5173')) {
+      connectUrl = `http://${window.location.hostname}:8080`;
+    }
     
     socket = io(connectUrl, {
       autoConnect: true,

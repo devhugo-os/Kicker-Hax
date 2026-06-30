@@ -19,6 +19,9 @@ export const menuController = {
     const btnProfile = document.getElementById('menu-btn-profile');
     if (btnProfile) btnProfile.onclick = () => router.show('profile-screen');
 
+    const quickProfile = document.getElementById('menu-quick-profile');
+    if (quickProfile) quickProfile.onclick = () => router.show('profile-screen');
+
     const btnRanking = document.getElementById('menu-btn-ranking');
     if (btnRanking) btnRanking.onclick = () => router.show('ranking-screen');
 
