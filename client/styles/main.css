@@ -151,6 +151,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 .global-chat-input-area input {
   flex: 1;
+  padding: 8px;
+  font-size: 13px;
+}
 button, .btn {
   position: relative;
   overflow: hidden;
