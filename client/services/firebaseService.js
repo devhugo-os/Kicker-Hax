@@ -26,7 +26,7 @@ import { getDatabase, ref, push, onChildAdded, serverTimestamp, query as rtdbQue
 const _dec = (val) => atob(val);
 const firebaseConfig = {
   apiKey: _dec("QUl6YVN5Q2FUUWE2Sm9NajJNQmdEZ2Rwb25WQllfTkFlUU84X3Vz"),
-  authDomain: _dec("a2lja2VyaGF4LW9ubGluZS5maXJlYmFzYXBwLmNvbQ=="),
+  authDomain: _dec("a2lja2VyaGF4LW9ubGluZS5maXJlYmFzZWFwcC5jb20="),
   databaseURL: _dec("aHR0cHM6Ly9raWNrZXJoYXgtb25saW5lLWRlZmF1bHQtcnRkYi5maXJlYmFzZWlvLmNvbQ=="),
   projectId: _dec("a2lja2VyaGF4LW9ubGluZQ=="),
   storageBucket: _dec("a2lja2VyaGF4LW9ubGluZS5maXJlYmFzdG9yYWdlLmFwcA=="),
