@@ -313,6 +313,9 @@ export const gameController = {
     if (btnMatchExit) {
       btnMatchExit.onclick = () => {
         if (confirm('Deseja realmente sair da partida?')) {
+          if (this.localPhysicsTick) cancelAnimationFrame(this.localPhysicsTick);
+          if (soundFx.stopCrowd) soundFx.stopCrowd();
+          
           if (this.mode === 'multiplayer') {
             socketService.leaveRoom();
             router.show('multiplayer-screen');
@@ -1308,12 +1311,12 @@ export const gameController = {
     const gBot = (h + C.GOAL_W_INIT) / 2;
 
     // Dark cyber space background
-    cx.fillStyle = '#060a13';
+    cx.fillStyle = '#0f172a';
     cx.fillRect(0, 0, w, h);
 
     // Glowing grid lines
     cx.save();
-    cx.strokeStyle = 'rgba(59, 130, 246, 0.15)'; // Blue neon grid
+    cx.strokeStyle = 'rgba(59, 130, 246, 0.4)'; // Blue neon grid
     cx.lineWidth = 1;
     const gridSpacing = 40;
     

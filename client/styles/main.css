@@ -151,12 +151,23 @@ h1, h2, h3, h4, h5, h6 {
 }
 .global-chat-input-area input {
   flex: 1;
-  padding: 8px;
-  font-size: 13px;
-}
 button, .btn {
   position: relative;
   overflow: hidden;
+}
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  transform: scale(0);
+  animation: ripple-anim 0.5s linear;
+  pointer-events: none;
+}
+@keyframes ripple-anim {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
 }
 .global-chat-input-area .btn {
   padding: 8px 12px;

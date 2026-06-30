@@ -8,8 +8,8 @@ export const socketService = {
   connect(url = window.location.origin) {
     if (socket) return socket;
     
-    // In dev mode, we connect to local Express on port 8080
-    const connectUrl = url.includes(':3000') ? 'http://localhost:8080' : url;
+    // In dev mode, we connect to local Express on port 8080 using the current hostname
+    const connectUrl = (url.includes(':3000') || url.includes(':5173')) ? `http://${window.location.hostname}:8080` : url;
     
     socket = io(connectUrl, {
       autoConnect: true,
