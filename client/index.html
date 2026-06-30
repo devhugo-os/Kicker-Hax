@@ -182,7 +182,10 @@
             <input type="range" id="settings-volume" min="0" max="100" value="80" />
             <span class="subtext" id="volume-val-display">80%</span>
           </div>
-          
+          <div class="input-group check-group">
+            <input type="checkbox" id="settings-replay" checked />
+            <label for="settings-replay">Habilitar Replays de Gols</label>
+          </div>
 
         </div>
       </div>
@@ -203,14 +206,8 @@
         <!-- Layout de Jogadores -->
         <div class="controls-grid">
           <div class="controls-column">
-            <h3>🎮 Jogador 1 (Azul)</h3>
+            <h3>🎮 Controles do Usuário</h3>
             <div class="map-grid" id="grid-controls-p1">
-              <!-- JS Injected Controls -->
-            </div>
-          </div>
-          <div class="controls-column">
-            <h3>🎮 Jogador 2 (Vermelho / Local)</h3>
-            <div class="map-grid" id="grid-controls-p2">
               <!-- JS Injected Controls -->
             </div>
           </div>
@@ -308,11 +305,6 @@
             </select>
           </div>
 
-          <div class="input-group check-group">
-            <input type="checkbox" id="solo-replay-toggle" checked />
-            <label for="solo-replay-toggle">Habilitar Replays de Gols</label>
-          </div>
-
           <button id="solo-btn-start" class="btn btn-primary btn-glow btn-lg">Iniciar Partida</button>
         </div>
       </div>
@@ -405,10 +397,6 @@
               <option value="medium" selected>Médio (1024x640)</option>
               <option value="large">Grande (1280x768)</option>
             </select>
-          </div>
-          <div class="input-group check-group">
-            <input type="checkbox" id="room-replay-toggle" checked />
-            <label for="room-replay-toggle">Habilitar Replays de Gols</label>
           </div>
           <button type="submit" class="btn btn-primary btn-glow btn-lg">Criar Sala e Ir ao Lobby</button>
         </form>
@@ -554,10 +542,22 @@
               <div class="side-vbar"><div class="side-vlabel">PW</div><i id="right-pow-fill"></i></div>
             </div>
             <div class="side-stats-pill">
-              <div>📊 Posse: <span id="right-stat-possession">50%</span></div>
-              <div>🎯 Chutes: <span id="right-stat-shots">0</span></div>
-              <div>🛡️ Desarmes: <span id="right-stat-tackles">0</span></div>
-              <div>⚡ Dribles: <span id="right-stat-dribbles">0</span></div>
+              <div class="stat-row">
+                <span class="stat-label">📊 Posse</span>
+                <span class="stat-value" id="right-stat-possession">50%</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">🎯 Chutes</span>
+                <span class="stat-value" id="right-stat-shots">0</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">🛡️ Desarmes</span>
+                <span class="stat-value" id="right-stat-tackles">0</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">⚡ Dribles</span>
+                <span class="stat-value" id="right-stat-dribbles">0</span>
+              </div>
             </div>
           </aside>
         </div>
@@ -575,7 +575,6 @@
       <div class="replay-overlay hidden" id="replay-overlay">
         <div class="replay-hud">
           <div class="pill">REPLAY DO GOL</div>
-          <button class="btn btn-secondary btn-sm" id="btn-skip-replay">Pular Replay</button>
           <button class="btn btn-primary btn-sm" id="btn-save-replay">Salvar Replay</button>
         </div>
         <div class="replay-caption" id="replay-caption"></div>

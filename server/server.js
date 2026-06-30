@@ -37,12 +37,21 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, '../client/index.html'));
 });
 
+let onlineCount = 0;
 io.on('connection', (socket) => {
+  onlineCount++;
+  io.emit('onlineUsersCount', onlineCount);
+
   registerRoomHandlers(io, socket);
   registerGameHandlers(io, socket);
 
   // Send initial room listings
   socket.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+
+  socket.on('disconnect', () => {
+    onlineCount = Math.max(0, onlineCount - 1);
+    io.emit('onlineUsersCount', onlineCount);
+  });
 });
 
 const PORT = process.env.PORT || 8080;

@@ -189,51 +189,43 @@ export const firebaseService = {
   },
 
   async getGlobalRanking(criteria = 'wins', maxCount = 10) {
-    let q;
-    if (criteria === 'level') {
+    try {
       const usersRef = collection(db, 'users');
-      q = query(usersRef, orderBy('level', 'desc'), orderBy('xp', 'desc'), limit(maxCount));
-      const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(usersRef);
       const ranking = [];
-      
-      // Match users with their stats
+
       for (const userDoc of querySnapshot.docs) {
         const userData = userDoc.data();
+        if (!userData.uid) continue;
         const statsData = await this.getUserStats(userData.uid) || {};
         ranking.push({
           username: userData.username,
           displayName: userData.username,
-          badge: userData.badge,
-          level: userData.level,
+          badge: userData.badge || '🏳️',
+          level: userData.level || 1,
           wins: statsData.wins || 0,
           losses: statsData.losses || 0,
-          goals: statsData.goals || 0
+          goals: statsData.goals || 0,
+          xp: userData.xp || 0
         });
       }
-      return ranking;
-    } else {
-      // Wins or Goals
-      const statsRef = collection(db, 'stats');
-      q = query(statsRef, orderBy(criteria, 'desc'), limit(maxCount));
-      const querySnapshot = await getDocs(q);
-      const ranking = [];
 
-      for (const statsDoc of querySnapshot.docs) {
-        const statsData = statsDoc.data();
-        const userData = await this.getUserProfile(statsData.uid);
-        if (userData) {
-          ranking.push({
-            username: userData.username,
-            displayName: userData.username,
-            badge: userData.badge,
-            level: userData.level,
-            wins: statsData.wins || 0,
-            losses: statsData.losses || 0,
-            goals: statsData.goals || 0
-          });
-        }
+      // Sort in-memory in Javascript
+      if (criteria === 'level') {
+        ranking.sort((a, b) => {
+          if (b.level !== a.level) return b.level - a.level;
+          return b.xp - a.xp;
+        });
+      } else if (criteria === 'wins') {
+        ranking.sort((a, b) => b.wins - a.wins);
+      } else if (criteria === 'goals') {
+        ranking.sort((a, b) => b.goals - a.goals);
       }
-      return ranking;
+
+      return ranking.slice(0, maxCount);
+    } catch (e) {
+      console.error("[Firestore] Error fetching ranking:", e);
+      throw e;
     }
   },
 

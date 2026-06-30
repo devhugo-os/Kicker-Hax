@@ -51,6 +51,14 @@ export const settingsController = {
       });
     }
 
+    // Settings Replay checkbox
+    const replayCheckbox = document.getElementById('settings-replay');
+    if (replayCheckbox) {
+      replayCheckbox.addEventListener('change', (e) => {
+        localStorage.setItem('kicker_hax_show_replay', e.target.checked ? 'true' : 'false');
+      });
+    }
+
     // Back buttons
     const btnSetBack = document.getElementById('settings-btn-back');
     if (btnSetBack) btnSetBack.onclick = () => router.show('menu-screen');
@@ -80,6 +88,12 @@ export const settingsController = {
         const savedVol = localStorage.getItem('kicker_hax_volume') || '80';
         if (volSlider) volSlider.value = savedVol;
         if (volDisplay) volDisplay.textContent = `${savedVol}%`;
+
+        // Reload replay setting checkbox visual
+        const replayCheckbox = document.getElementById('settings-replay');
+        if (replayCheckbox) {
+          replayCheckbox.checked = localStorage.getItem('kicker_hax_show_replay') !== 'false';
+        }
       }
     });
 
@@ -131,9 +145,8 @@ export const settingsController = {
 
   renderRemapGrids() {
     const gridP1 = document.getElementById('grid-controls-p1');
-    const gridP2 = document.getElementById('grid-controls-p2');
 
-    if (!gridP1 || !gridP2) return;
+    if (!gridP1) return;
 
     const buildGrid = (gridEl, playerNum, ctrlObj) => {
       gridEl.innerHTML = '';
@@ -155,7 +168,6 @@ export const settingsController = {
     };
 
     buildGrid(gridP1, 1, this.CTRL_P1);
-    buildGrid(gridP2, 2, this.CTRL_P2);
   },
 
   startRemapping(playerNum, actionId, btn) {

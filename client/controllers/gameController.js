@@ -82,6 +82,20 @@ export const gameController = {
     // Navigation and View Triggers setup
     this.setupViewTriggers();
     this.bindDOMEvents();
+
+    // Establish WebSocket connection on startup to bind indicators
+    try {
+      socketService.connect();
+      const socket = socketService.getSocket();
+      if (socket) {
+        socket.on('onlineUsersCount', (count) => {
+          const el = document.getElementById('online-users-count');
+          if (el) el.textContent = count;
+        });
+      }
+    } catch (e) {
+      console.warn("[Socket.IO] Failed to connect on startup:", e);
+    }
   },
 
   setupViewTriggers() {
@@ -268,9 +282,8 @@ export const gameController = {
         const goals = document.getElementById('room-goals').value;
 
         const sizeSelect = document.getElementById('room-field-size');
-        const replayToggle = document.getElementById('room-replay-toggle');
         const fieldSize = sizeSelect ? sizeSelect.value : 'medium';
-        const showReplay = replayToggle ? replayToggle.checked : true;
+        const showReplay = localStorage.getItem('kicker_hax_show_replay') !== 'false';
 
         const profile = {
           uid: this.currentUser.uid,
@@ -279,10 +292,14 @@ export const gameController = {
         };
 
         socketService.createRoom(name, pass, max, duration, goals, fieldSize, showReplay, profile);
-        socketService.getSocket().once('roomCreated', (code) => {
-          showToast('Lobby criado!', 'success');
-          router.show('lobby-screen');
-        });
+        
+        const s = socketService.getSocket();
+        if (s) {
+          s.once('roomCreated', (code) => {
+            showToast('Lobby criado!', 'success');
+            router.show('lobby-screen');
+          });
+        }
       };
     }
 
@@ -302,14 +319,17 @@ export const gameController = {
 
         socketService.joinRoom(code, pass, profile);
         
-        socketService.getSocket().once('joinSuccess', () => {
-          showToast('Entrou no lobby com sucesso!', 'success');
-          router.show('lobby-screen');
-        });
+        const s = socketService.getSocket();
+        if (s) {
+          s.once('joinSuccess', () => {
+            showToast('Entrou no lobby com sucesso!', 'success');
+            router.show('lobby-screen');
+          });
 
-        socketService.getSocket().once('joinError', (err) => {
-          showToast(err, 'error');
-        });
+          s.once('joinError', (err) => {
+            showToast(err, 'error');
+          });
+        }
       };
     }
 
@@ -530,10 +550,8 @@ export const gameController = {
     
     // Retrieve selected field size and replay settings
     const sizeSelect = document.getElementById('solo-field-size');
-    const replayCheck = document.getElementById('solo-replay-toggle');
-    
     const fieldSize = sizeSelect ? sizeSelect.value : 'medium';
-    this.showReplay = replayCheck ? replayCheck.checked : true;
+    this.showReplay = localStorage.getItem('kicker_hax_show_replay') !== 'false';
 
     // Apply dimensions to canvas
     if (fieldSize === 'small') {
@@ -586,7 +604,7 @@ export const gameController = {
       x: C.BORDER + 120,
       y: this.canvas.height * 0.5,
       vx: 0, vy: 0, r: C.PLAYER_RADIUS, dir: 0, lastMoveDir: 0,
-      stamina: 1.0, staminaLock: 0, stun: 0, slowTimer: 0,
+      stamina: 1.0, staminaLock: 0, stun: 0, slowTimer: 0, kickCharge: 0, cool: 0,
       tackle_cd: 0, dribble_cd: 0, dash_time: 0, invuln: 0, power_cd: 0,
       tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, shootHalo: 0, aiShootLock: 0, aiFeintLock: 0
     };
@@ -598,7 +616,7 @@ export const gameController = {
       x: this.canvas.width - C.BORDER - 120,
       y: this.canvas.height * 0.5,
       vx: 0, vy: 0, r: C.PLAYER_RADIUS, dir: 0, lastMoveDir: 0,
-      stamina: 1.0, staminaLock: 0, stun: 0, slowTimer: 0,
+      stamina: 1.0, staminaLock: 0, stun: 0, slowTimer: 0, kickCharge: 0, cool: 0,
       tackle_cd: 0, dribble_cd: 0, dash_time: 0, invuln: 0, power_cd: 0,
       tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, shootHalo: 0
     };
