@@ -4,6 +4,7 @@ import { firebaseService } from '../services/firebaseService.js';
 import { socketService } from '../services/socketService.js';
 import { gamepadService } from '../services/gamepadService.js';
 import { settingsController } from './settingsController.js';
+import { menuController } from './menuController.js';
 import { soundFx } from '../utils/soundFx.js';
 import { showToast } from '../utils/toast.js';
 import { ClientBall } from '../models/clientBall.js';
