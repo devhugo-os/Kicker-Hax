@@ -2,10 +2,9 @@
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut, 
-  sendPasswordResetEmail,
   onAuthStateChanged
 } from 'firebase/auth';
 import { 
@@ -22,6 +21,7 @@ import {
   getDocs,
   runTransaction
 } from 'firebase/firestore';
+import { getDatabase, ref, push, onChildAdded, serverTimestamp } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCaTQa6JoMj2MBgDgdponVBY_NAeQO8_us",
@@ -38,71 +38,65 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const rtdb = getDatabase(app);
 
 export const firebaseService = {
   // Authentication methods
-  async login(email, password) {
-    return await signInWithEmailAndPassword(auth, email, password);
-  },
+  async loginWithGoogle() {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+    
+    // Check if this is the first login by verifying if a profile exists
+    const profileRef = doc(db, 'users', user.uid);
+    const profileSnap = await getDoc(profileRef);
+    
+    if (!profileSnap.exists()) {
+      // First login, register default profile and stats
+      const randomTag = Math.floor(Math.random() * 9000) + 1000;
+      const safeName = (user.displayName || 'Jogador').replace(/\s+/g, '').toLowerCase();
+      const generatedUsername = `${safeName}${randomTag}`;
 
-  async register(username, displayName, email, password, country) {
-    const sanitizedUsername = username.trim().toLowerCase();
-    
-    // Check if username is unique in database
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('username', '==', sanitizedUsername));
-    const querySnapshot = await getDocs(q);
-    
-    if (!querySnapshot.empty) {
-      throw new Error('Este nome de usuário já está em uso.');
+      const userProfile = {
+        uid: user.uid,
+        username: generatedUsername,
+        displayName: user.displayName || 'Novo Jogador',
+        badge: '🌐', // Default badge
+        bio: '',
+        level: 1,
+        xp: 0,
+        dateCreated: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+        settings: {
+          volume: 80,
+          quality: 'high',
+          fieldSize: 'medium'
+        }
+      };
+
+      const userStats = {
+        uid: user.uid,
+        matchesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        draws: 0,
+        goals: 0,
+        assists: 0,
+        saves: 0
+      };
+
+      await setDoc(doc(db, 'users', user.uid), userProfile);
+      await setDoc(doc(db, 'stats', user.uid), userStats);
+    } else {
+      // Update last login
+      await updateDoc(profileRef, { lastLogin: new Date().toISOString() });
     }
-
-    // Create Firebase Auth user
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const uid = userCredential.user.uid;
-
-    // Create user profile document in Firestore
-    const userProfile = {
-      uid,
-      username: sanitizedUsername,
-      displayName: displayName.trim(),
-      badge: country, // Flag emoji
-      bio: '',
-      level: 1,
-      xp: 0,
-      dateCreated: new Date().toISOString(),
-      lastLogin: new Date().toISOString(),
-      settings: {
-        volume: 80,
-        quality: 'high',
-        fieldSize: 'medium'
-      }
-    };
-
-    // Create user statistics document in Firestore
-    const userStats = {
-      uid,
-      matchesPlayed: 0,
-      wins: 0,
-      losses: 0,
-      draws: 0,
-      goals: 0,
-      assists: 0,
-      saves: 0
-    };
-
-    await setDoc(doc(db, 'users', uid), userProfile);
-    await setDoc(doc(db, 'stats', uid), userStats);
-
-    return userCredential;
+    
+    return result;
   },
 
   async logout() {
     return await signOut(auth);
-  },
-
-  async recoverPassword(email) {
-    return await sendPasswordResetEmail(auth, email);
   },
 
   subscribeToAuth(callback) {
@@ -239,7 +233,28 @@ export const firebaseService = {
       }
       return ranking;
     }
+  },
+
+  // ==========================================================================
+  // REALTIME DATABASE (GLOBAL CHAT)
+  // ==========================================================================
+  async sendGlobalChatMessage(profile, text) {
+    const chatRef = ref(rtdb, 'globalChat');
+    await push(chatRef, {
+      uid: profile.uid,
+      username: profile.displayName || profile.username,
+      badge: profile.badge || '🌐',
+      text: text,
+      timestamp: serverTimestamp()
+    });
+  },
+
+  subscribeToGlobalChat(callback) {
+    const chatRef = ref(rtdb, 'globalChat');
+    onChildAdded(chatRef, (snapshot) => {
+      callback(snapshot.val());
+    });
   }
 };
-export { auth, db };
+export { auth, db, rtdb };
 export default firebaseService;

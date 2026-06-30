@@ -24,3 +24,5 @@ Thumbs.db
 
 # Local Dev Rules (from prompt rules)
 AGENTS.md
+README.md
+firestore.rules

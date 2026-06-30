@@ -5,6 +5,7 @@ import { authController } from './controllers/authController.js';
 import { menuController } from './controllers/menuController.js';
 import { settingsController } from './controllers/settingsController.js';
 import { gameController } from './controllers/gameController.js';
+import { chatController } from './controllers/chatController.js';
 
 // Setup full SPA lifecycle
 function initApp() {
@@ -19,6 +20,7 @@ function initApp() {
   // 2) Initialize individual screen controllers
   authController.init();
   settingsController.loadSettings();
+  chatController.init();
 
   // 3) Setup ripple buttons dynamic highlights
   document.querySelectorAll('button, .btn').forEach(btn => {

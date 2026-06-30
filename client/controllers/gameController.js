@@ -1303,15 +1303,34 @@ export const gameController = {
     const gTop = (h - C.GOAL_W_INIT) / 2;
     const gBot = (h + C.GOAL_W_INIT) / 2;
 
-    // Draw grid grass stripes
-    const stripe = 24;
-    for (let y = 0; y < h; y += stripe) {
-      cx.fillStyle = (Math.floor(y / stripe) % 2 ? '#153028' : '#183a2e');
-      cx.fillRect(0, y, w, stripe);
-    }
+    // Dark cyber space background
+    cx.fillStyle = '#060a13';
+    cx.fillRect(0, 0, w, h);
 
-    // Draw borders lines
-    cx.strokeStyle = '#94a3b8';
+    // Glowing grid lines
+    cx.save();
+    cx.strokeStyle = 'rgba(59, 130, 246, 0.15)'; // Blue neon grid
+    cx.lineWidth = 1;
+    const gridSpacing = 40;
+    
+    // Vertical grid lines
+    for (let x = 0; x <= w; x += gridSpacing) {
+      cx.beginPath();
+      cx.moveTo(x, 0); cx.lineTo(x, h);
+      cx.stroke();
+    }
+    // Horizontal grid lines
+    for (let y = 0; y <= h; y += gridSpacing) {
+      cx.beginPath();
+      cx.moveTo(0, y); cx.lineTo(w, y);
+      cx.stroke();
+    }
+    cx.restore();
+
+    // Draw borders lines (Neon Glow)
+    cx.shadowColor = '#3b82f6';
+    cx.shadowBlur = 10;
+    cx.strokeStyle = '#3b82f6';
     cx.lineWidth = 4;
     cx.strokeRect(C.BORDER, C.BORDER, w - 2 * C.BORDER, h - 2 * C.BORDER);
 
@@ -1327,17 +1346,25 @@ export const gameController = {
 
     // Area lines
     cx.lineWidth = 3;
+    cx.shadowBlur = 8;
+    cx.strokeStyle = '#ef4444'; // Red side
     cx.strokeRect(C.BORDER, (h - 300) / 2, 200, 300);
     cx.strokeRect(C.BORDER, (h - 160) / 2, 100, 160);
+    
+    cx.strokeStyle = '#3b82f6'; // Blue side
     cx.strokeRect(w - C.BORDER - 200, (h - 300) / 2, 200, 300);
     cx.strokeRect(w - C.BORDER - 100, (h - 160) / 2, 100, 160);
 
+    // Turn off shadow
+    cx.shadowBlur = 0;
+
     // Goals backgrounds
-    cx.fillStyle = '#0f172a';
+    cx.fillStyle = '#060a13';
     cx.fillRect(C.BORDER - C.POST_T, gTop, C.POST_T, C.GOAL_W_INIT);
     cx.fillRect(w - C.BORDER, gTop, C.POST_T, C.GOAL_W_INIT);
 
-    cx.fillStyle = 'rgba(255,255,255,.06)';
+    // Cyber Net Fill
+    cx.fillStyle = 'rgba(59, 130, 246, 0.08)';
     cx.fillRect(C.BORDER - C.POST_T - C.GOAL_DEPTH, gTop, C.GOAL_DEPTH, C.GOAL_W_INIT);
     cx.fillRect(w - C.BORDER + C.POST_T, gTop, C.GOAL_DEPTH, C.GOAL_W_INIT);
   },
