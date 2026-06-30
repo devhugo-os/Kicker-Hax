@@ -36,11 +36,15 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve compiled static files
+// Serve compiled static files (production build)
 app.use(express.static(path.join(__dirname, '../dist')));
 
-// Fallback to source client files (for development integration)
+// Serve source files for development (client/, shared/, server/)
+// The client imports modules from ../../shared/ and ../../server/models/
+// so we need to serve those directories at the project root level
 app.use(express.static(path.join(__dirname, '../client')));
+app.use('/shared', express.static(path.join(__dirname, '../shared')));
+app.use('/server', express.static(path.join(__dirname, '../server')));
 
 // Redirect index routes if needed
 app.get('*', (req, res, next) => {

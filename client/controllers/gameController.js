@@ -641,6 +641,7 @@ export const gameController = {
         if (router.currentScreenId !== 'match-screen') return;
         try {
         frameSfx = [];
+        let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
 
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -698,7 +699,7 @@ export const gameController = {
             }
 
             // 1) Read P1 keyboard Inputs
-            let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+            inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
             const keysCtrl = settingsController.CTRL_P1;
             if (this.keys.get(keysCtrl.up)) inputP1.y -= 1;
             if (this.keys.get(keysCtrl.down)) inputP1.y += 1;
