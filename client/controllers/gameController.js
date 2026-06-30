@@ -9,6 +9,7 @@ import { showToast } from '../utils/toast.js';
 import { ClientBall } from '../models/clientBall.js';
 import { ClientPlayer } from '../models/clientPlayer.js';
 import * as C from '../../shared/constants.js';
+import { ServerPhysics } from '../../server/models/serverPhysics.js';
 
 export const gameController = {
   currentUser: null,
@@ -557,9 +558,9 @@ export const gameController = {
       strikeTimer: 0, lastStrikeType: null, noPickupFrames: 0, noPickupFrom: null
     };
 
-    // Load dynamic physics modules directly on client tick
-    import('../../server/models/serverPhysics.js').then(module => {
-      const Physics = module.ServerPhysics;
+    // Load static physics modules directly on client tick
+    (() => {
+      const Physics = ServerPhysics;
       let frameSfx = [];
 
       const tickLocalGame = () => {
@@ -948,7 +949,7 @@ export const gameController = {
       // Boot local simulation loop
       resetFieldPositions();
       this.localPhysicsTick = requestAnimationFrame(tickLocalGame);
-    });
+    })();
   },
 
   localMatchEnd(score) {
@@ -1292,6 +1293,9 @@ export const gameController = {
     document.getElementById('replay-overlay')?.classList.add('hidden');
     const captionEl = document.getElementById('replay-caption');
     if (captionEl) captionEl.style.display = 'none';
+    
+    // Stop persistent sounds
+    soundFx.stopCrowd();
   },
 
   // ==========================================================================

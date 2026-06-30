@@ -154,6 +154,10 @@ h1, h2, h3, h4, h5, h6 {
   padding: 8px;
   font-size: 13px;
 }
+button, .btn {
+  position: relative;
+  overflow: hidden;
+}
 .global-chat-input-area .btn {
   padding: 8px 12px;
   font-size: 12px;
@@ -169,7 +173,6 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
   align-items: center;
   padding: 20px;
-  animation: fadeIn 0.3s var(--transition-normal);
   z-index: 2;
 }
 
