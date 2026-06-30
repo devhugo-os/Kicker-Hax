@@ -1,0 +1,311 @@
+// Kicker Hax - Settings & Key Remapping Controller
+import { router } from '../router.js';
+import { soundFx } from '../utils/soundFx.js';
+import { gamepadService } from '../services/gamepadService.js';
+import { showToast } from '../utils/toast.js';
+
+export const settingsController = {
+  // Key mappings
+  CTRL_P1: null,
+  CTRL_P2: null,
+  
+  // Game dimensions config
+  fieldSize: 'medium', // 'small' | 'medium' | 'large'
+  dimensions: { w: 1024, h: 640 },
+
+  // Key remap target
+  waitingRemap: null, // { playerNum, actionId, btnElement }
+
+  defaultP1: {
+    up: 'w', down: 's', left: 'a', right: 'd',
+    sprint: 'ShiftLeft', shoot: ' ', dribble: 'f', tackle: 'e', power: 'q'
+  },
+  defaultP2: {
+    up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright',
+    sprint: 'ShiftRight', shoot: '1', dribble: '2', tackle: '3', power: 'enter'
+  },
+
+  actions: [
+    { id: 'up', label: 'Mover Cima' },
+    { id: 'down', label: 'Mover Baixo' },
+    { id: 'left', label: 'Mover Esquerda' },
+    { id: 'right', label: 'Mover Direita' },
+    { id: 'sprint', label: 'Correr' },
+    { id: 'shoot', label: 'Chutar' },
+    { id: 'dribble', label: 'Driblar' },
+    { id: 'tackle', label: 'Desarme' },
+    { id: 'power', label: 'Power Shoot' }
+  ],
+
+  init() {
+    this.loadSettings();
+
+    // Volume Slider
+    const volSlider = document.getElementById('settings-volume');
+    const volDisplay = document.getElementById('volume-val-display');
+    if (volSlider) {
+      volSlider.addEventListener('input', (e) => {
+        const val = e.target.value;
+        if (volDisplay) volDisplay.textContent = `${val}%`;
+        soundFx.setVolume(val);
+        localStorage.setItem('kicker_hax_volume', val);
+      });
+    }
+
+    // Quality Selector
+    const qualSel = document.getElementById('settings-quality');
+    if (qualSel) {
+      qualSel.addEventListener('change', (e) => {
+        localStorage.setItem('kicker_hax_quality', e.target.value);
+      });
+    }
+
+    // Back buttons
+    const btnSetBack = document.getElementById('settings-btn-back');
+    if (btnSetBack) btnSetBack.onclick = () => router.show('menu-screen');
+
+    const btnCtrlBack = document.getElementById('controls-btn-back');
+    if (btnCtrlBack) btnCtrlBack.onclick = () => router.show('menu-screen');
+
+    // Size preset selectors
+    const btnSmall = document.getElementById('size-btn-small');
+    const btnMedium = document.getElementById('size-btn-medium');
+    const btnLarge = document.getElementById('size-btn-large');
+
+    const setSize = (size, w, h) => {
+      this.fieldSize = size;
+      this.dimensions = { w, h };
+      localStorage.setItem('kicker_hax_field_size', size);
+      
+      [btnSmall, btnMedium, btnLarge].forEach(b => b && b.classList.remove('active'));
+      if (size === 'small') btnSmall?.classList.add('active');
+      if (size === 'medium') btnMedium?.classList.add('active');
+      if (size === 'large') btnLarge?.classList.add('active');
+
+      const warning = document.getElementById('controls-restart-warning');
+      if (warning) warning.classList.remove('hidden');
+    };
+
+    if (btnSmall) btnSmall.onclick = () => setSize('small', 896, 560);
+    if (btnMedium) btnMedium.onclick = () => setSize('medium', 1024, 640);
+    if (btnLarge) btnLarge.onclick = () => setSize('large', 1280, 768);
+
+    // Global Key Listener for Remapping
+    window.addEventListener('keydown', (e) => this.handleRemapKey(e));
+
+    // Reset Controls button
+    const btnReset = document.getElementById('controls-btn-reset');
+    if (btnReset) {
+      btnReset.onclick = () => {
+        this.CTRL_P1 = JSON.parse(JSON.stringify(this.defaultP1));
+        this.CTRL_P2 = JSON.parse(JSON.stringify(this.defaultP2));
+        this.saveControls();
+        this.renderRemapGrids();
+        showToast('Controles restaurados aos padrões!', 'success');
+      };
+    }
+
+    // Settings lifecycle triggers
+    router.register('settings-screen', {
+      onEnter: () => {
+        // Reload slider visual
+        const savedVol = localStorage.getItem('kicker_hax_volume') || '80';
+        if (volSlider) volSlider.value = savedVol;
+        if (volDisplay) volDisplay.textContent = `${savedVol}%`;
+      }
+    });
+
+    router.register('controls-screen', {
+      onEnter: () => {
+        this.renderRemapGrids();
+        const warning = document.getElementById('controls-restart-warning');
+        if (warning) warning.classList.add('hidden');
+        
+        // Gamepad binding
+        gamepadService.init();
+        gamepadService.onUpdate((statusText) => {
+          const el = document.getElementById('gamepad-status');
+          if (el) el.textContent = statusText;
+        });
+
+        // Gamepad sensitivity slider
+        const sensSlider = document.getElementById('gamepad-sensitivity');
+        if (sensSlider) {
+          sensSlider.value = gamepadService.settings.sensitivity;
+          sensSlider.oninput = (e) => {
+            gamepadService.settings.sensitivity = parseInt(e.target.value, 10);
+            localStorage.setItem('kicker_hax_gp_sensitivity', e.target.value);
+          };
+        }
+      }
+    });
+  },
+
+  loadSettings() {
+    // 1) Sound volume
+    const savedVol = localStorage.getItem('kicker_hax_volume') || '80';
+    soundFx.setVolume(parseInt(savedVol, 10));
+
+    // 2) Field dimensions
+    const savedSize = localStorage.getItem('kicker_hax_field_size') || 'medium';
+    this.fieldSize = savedSize;
+    if (savedSize === 'small') this.dimensions = { w: 896, h: 560 };
+    else if (savedSize === 'large') this.dimensions = { w: 1280, h: 768 };
+    else this.dimensions = { w: 1024, h: 640 };
+
+    // Activate visual size buttons on settings screen load
+    setTimeout(() => {
+      const btnSmall = document.getElementById('size-btn-small');
+      const btnMedium = document.getElementById('size-btn-medium');
+      const btnLarge = document.getElementById('size-btn-large');
+      
+      [btnSmall, btnMedium, btnLarge].forEach(b => b?.classList.remove('active'));
+      if (savedSize === 'small') btnSmall?.classList.add('active');
+      if (savedSize === 'medium') btnMedium?.classList.add('active');
+      if (savedSize === 'large') btnLarge?.classList.add('active');
+    }, 100);
+
+    // 3) Key controls
+    try {
+      this.CTRL_P1 = JSON.parse(localStorage.getItem('kicker_hax_keys_p1')) || JSON.parse(JSON.stringify(this.defaultP1));
+      this.CTRL_P2 = JSON.parse(localStorage.getItem('kicker_hax_keys_p2')) || JSON.parse(JSON.stringify(this.defaultP2));
+    } catch (e) {
+      this.CTRL_P1 = JSON.parse(JSON.stringify(this.defaultP1));
+      this.CTRL_P2 = JSON.parse(JSON.stringify(this.defaultP2));
+    }
+
+    // 4) Gamepad sensitivity
+    const savedGpSens = localStorage.getItem('kicker_hax_gp_sensitivity');
+    if (savedGpSens) {
+      gamepadService.settings.sensitivity = parseInt(savedGpSens, 10);
+    }
+  },
+
+  saveControls() {
+    localStorage.setItem('kicker_hax_keys_p1', JSON.stringify(this.CTRL_P1));
+    localStorage.setItem('kicker_hax_keys_p2', JSON.stringify(this.CTRL_P2));
+  },
+
+  getKeyLabel(keyOrCode) {
+    if (!keyOrCode) return '—';
+    if (keyOrCode === 'ShiftLeft') return 'Shift Esq.';
+    if (keyOrCode === 'ShiftRight') return 'Shift Dir.';
+    if (keyOrCode === ' ') return 'Espaço';
+    if (keyOrCode === 'arrowup') return '↑';
+    if (keyOrCode === 'arrowdown') return '↓';
+    if (keyOrCode === 'arrowleft') return '←';
+    if (keyOrCode === 'arrowright') return '→';
+    if (keyOrCode === 'enter') return 'Enter';
+    return keyOrCode.toUpperCase();
+  },
+
+  renderRemapGrids() {
+    const gridP1 = document.getElementById('grid-controls-p1');
+    const gridP2 = document.getElementById('grid-controls-p2');
+
+    if (!gridP1 || !gridP2) return;
+
+    const buildGrid = (gridEl, playerNum, ctrlObj) => {
+      gridEl.innerHTML = '';
+      this.actions.forEach(act => {
+        // Label
+        const lbl = document.createElement('div');
+        lbl.className = 'map-label';
+        lbl.textContent = act.label;
+        gridEl.appendChild(lbl);
+
+        // Key Value Button
+        const val = ctrlObj[act.id];
+        const btn = document.createElement('button');
+        btn.className = 'map-key-btn';
+        btn.textContent = this.getKeyLabel(val);
+        btn.onclick = () => this.startRemapping(playerNum, act.id, btn);
+        gridEl.appendChild(btn);
+      });
+    };
+
+    buildGrid(gridP1, 1, this.CTRL_P1);
+    buildGrid(gridP2, 2, this.CTRL_P2);
+  },
+
+  startRemapping(playerNum, actionId, btn) {
+    // Clear any previous remapping state
+    if (this.waitingRemap) {
+      const prevBtn = this.waitingRemap.btn;
+      const prevVal = this.waitingRemap.playerNum === 1 ? this.CTRL_P1[this.waitingRemap.actionId] : this.CTRL_P2[this.waitingRemap.actionId];
+      prevBtn.textContent = this.getKeyLabel(prevVal);
+      prevBtn.classList.remove('active');
+    }
+
+    this.waitingRemap = { playerNum, actionId, btn };
+    btn.textContent = 'Aguardando tecla...';
+    btn.classList.add('active');
+  },
+
+  handleRemapKey(e) {
+    if (!this.waitingRemap) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const { playerNum, actionId, btn } = this.waitingRemap;
+    btn.classList.remove('active');
+
+    // Cancel on ESC
+    if (e.key === 'Escape') {
+      const val = playerNum === 1 ? this.CTRL_P1[actionId] : this.CTRL_P2[actionId];
+      btn.textContent = this.getKeyLabel(val);
+      this.waitingRemap = null;
+      return;
+    }
+
+    // Clear on Backspace
+    if (e.key === 'Backspace') {
+      if (playerNum === 1) this.CTRL_P1[actionId] = '';
+      else this.CTRL_P2[actionId] = '';
+      this.saveControls();
+      this.renderRemapGrids();
+      this.waitingRemap = null;
+      return;
+    }
+
+    // Read input key value or code (for modifier shifts)
+    let selectedKey = e.key.toLowerCase();
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
+      selectedKey = e.code;
+    }
+
+    const selfCtrl = playerNum === 1 ? this.CTRL_P1 : this.CTRL_P2;
+    const oppCtrl = playerNum === 1 ? this.CTRL_P2 : this.CTRL_P1;
+
+    // Block cross players duplicate key
+    const usedByOpponent = Object.values(oppCtrl).includes(selectedKey);
+    if (usedByOpponent && selectedKey) {
+      btn.classList.add('warn');
+      btn.textContent = 'Já em uso pelo outro jogador!';
+      setTimeout(() => {
+        btn.classList.remove('warn');
+        const val = playerNum === 1 ? this.CTRL_P1[actionId] : this.CTRL_P2[actionId];
+        btn.textContent = this.getKeyLabel(val);
+      }, 1000);
+      this.waitingRemap = null;
+      return;
+    }
+
+    // Self swap if key is already assigned inside same player
+    const prevAction = Object.keys(selfCtrl).find(key => selfCtrl[key] === selectedKey);
+    if (prevAction && prevAction !== actionId) {
+      // Swap key values
+      const tempVal = selfCtrl[actionId];
+      selfCtrl[actionId] = selectedKey;
+      selfCtrl[prevAction] = tempVal;
+    } else {
+      selfCtrl[actionId] = selectedKey;
+    }
+
+    this.saveControls();
+    this.renderRemapGrids();
+    this.waitingRemap = null;
+  }
+};
+export default settingsController;

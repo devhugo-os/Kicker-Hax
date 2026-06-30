@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kicker Hax - Next Gen Multiplayer</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="styles/main.css" />
+  <link rel="stylesheet" href="styles/screens.css" />
+  <link rel="stylesheet" href="styles/game.css" />
+</head>
+<body>
+
+  <!-- APP CONTAINER -->
+  <div id="app">
+
+    <!-- 1. SPLASH SCREEN -->
+    <div id="splash-screen" class="screen-view active">
+      <div class="splash-content">
+        <div class="logo-container">
+          <h1 class="logo-text">KICKER<span>HAX</span></h1>
+          <p class="logo-subtext">Online Arena</p>
+        </div>
+        <div class="loading-spinner"></div>
+        <p id="splash-status" class="status-text">Inicializando conexões...</p>
+      </div>
+    </div>
+
+    <!-- 2. LOGIN SCREEN -->
+    <div id="login-screen" class="screen-view hidden">
+      <div class="auth-card card-blur">
+        <h2>Entrar na Arena</h2>
+        <p class="auth-subtitle">Conecte-se para salvar estatísticas e jogar online</p>
+        <form id="login-form" class="auth-form">
+          <div class="input-group">
+            <label for="login-email">E-mail</label>
+            <input type="email" id="login-email" required placeholder="seu@email.com" />
+          </div>
+          <div class="input-group">
+            <label for="login-password">Senha</label>
+            <input type="password" id="login-password" required placeholder="Digite sua senha" />
+          </div>
+          <button type="submit" class="btn btn-primary">Entrar</button>
+        </form>
+        <div class="auth-footer">
+          <button id="go-to-register" class="btn-link">Criar uma conta</button> |
+          <button id="go-to-recovery" class="btn-link">Esqueci a senha</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. REGISTER SCREEN -->
+    <div id="register-screen" class="screen-view hidden">
+      <div class="auth-card card-blur">
+        <h2>Nova Conta</h2>
+        <p class="auth-subtitle">Crie seu perfil único de jogador</p>
+        <form id="register-form" class="auth-form">
+          <div class="input-group">
+            <label for="register-username">Nome de Usuário (único)</label>
+            <input type="text" id="register-username" minlength="3" maxlength="12" required placeholder="username" />
+          </div>
+          <div class="input-group">
+            <label for="register-displayname">Nome de Exibição</label>
+            <input type="text" id="register-displayname" minlength="3" maxlength="12" required placeholder="Como será visto no jogo" />
+          </div>
+          <div class="input-group">
+            <label for="register-email">E-mail</label>
+            <input type="email" id="register-email" required placeholder="seu@email.com" />
+          </div>
+          <div class="input-group">
+            <label for="register-password">Senha (mínimo 6 caracteres)</label>
+            <input type="password" id="register-password" minlength="6" required placeholder="Digite sua senha" />
+          </div>
+          <div class="input-group">
+            <label for="register-country">País / Bandeira</label>
+            <select id="register-country">
+              <option value="🇧🇷">Brasil 🇧🇷</option>
+              <option value="🇺🇸">EUA 🇺🇸</option>
+              <option value="🇦🇷">Argentina 🇦🇷</option>
+              <option value="🇵🇹">Portugal 🇵🇹</option>
+              <option value="🇪🇸">Espanha 🇪🇸</option>
+              <option value="🇬🇧">Reino Unido 🇬🇧</option>
+              <option value="🇯🇵">Japão 🇯🇵</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary">Registrar</button>
+        </form>
+        <div class="auth-footer">
+          <button id="register-back-to-login" class="btn-link">Voltar ao Login</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. RECOVERY SCREEN -->
+    <div id="recovery-screen" class="screen-view hidden">
+      <div class="auth-card card-blur">
+        <h2>Recuperar Senha</h2>
+        <p class="auth-subtitle">Enviaremos as instruções para seu e-mail</p>
+        <form id="recovery-form" class="auth-form">
+          <div class="input-group">
+            <label for="recovery-email">E-mail Cadastrado</label>
+            <input type="email" id="recovery-email" required placeholder="seu@email.com" />
+          </div>
+          <button type="submit" class="btn btn-primary">Enviar Instruções</button>
+        </form>
+        <div class="auth-footer">
+          <button id="recovery-back-to-login" class="btn-link">Voltar ao Login</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. MAIN MENU SCREEN -->
+    <div id="menu-screen" class="screen-view hidden">
+      <div class="menu-layout">
+        <div class="menu-logo">
+          <h1>KICKER<span>HAX</span></h1>
+          <div class="menu-online-indicator">
+            <span class="pulse-dot"></span> <span id="online-users-count">...</span> jogadores online
+          </div>
+        </div>
+
+        <div class="menu-options">
+          <button id="menu-btn-play" class="menu-btn btn-glow">JOGAR</button>
+          <button id="menu-btn-profile" class="menu-btn">PERFIL DO JOGADOR</button>
+          <button id="menu-btn-ranking" class="menu-btn">RANKING GLOBAL</button>
+          <button id="menu-btn-settings" class="menu-btn">CONFIGURAÇÕES</button>
+          <button id="menu-btn-controls" class="menu-btn">CONTROLES</button>
+          <button id="menu-btn-credits" class="menu-btn">CRÉDITOS</button>
+          <button id="menu-btn-logout" class="menu-btn btn-danger">SAIR DA CONTA</button>
+        </div>
+
+        <!-- Perfil rápido no canto superior -->
+        <div class="quick-profile card-blur" id="menu-quick-profile">
+          <div class="quick-avatar" id="quick-avatar-char">👤</div>
+          <div class="quick-details">
+            <div class="quick-name"><span id="quick-profile-flag">🇧🇷</span> <span id="quick-profile-name">Carregando...</span></div>
+            <div class="quick-level">Nível <span id="quick-profile-level">1</span></div>
+            <div class="quick-xp-bar"><div class="quick-xp-fill" style="width: 10%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. PROFILE SCREEN -->
+    <div id="profile-screen" class="screen-view hidden">
+      <div class="profile-layout card-blur">
+        <div class="profile-header">
+          <button id="profile-btn-back" class="btn btn-secondary btn-icon">⬅️ Voltar</button>
+          <h2>Perfil do Jogador</h2>
+        </div>
+
+        <div class="profile-grid">
+          <!-- Editor de Perfil -->
+          <div class="profile-edit-section">
+            <div class="avatar-editor">
+              <div class="avatar-preview" id="profile-avatar-display">👤</div>
+              <div class="avatar-inputs">
+                <input type="text" id="profile-badge-input" maxlength="2" placeholder="Emoji / Badge" />
+                <span class="subtext">Use um emoji ou iniciais</span>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="profile-displayname-input">Nome de Exibição</label>
+              <input type="text" id="profile-displayname-input" maxlength="12" />
+            </div>
+
+            <div class="input-group">
+              <label for="profile-bio-input">Biografia (opcional)</label>
+              <textarea id="profile-bio-input" maxlength="100" placeholder="Fale um pouco sobre você..."></textarea>
+            </div>
+
+            <div class="input-group">
+              <label for="profile-flag-input">País / Bandeira</label>
+              <select id="profile-flag-input">
+                <option value="🇧🇷">Brasil 🇧🇷</option>
+                <option value="🇺🇸">EUA 🇺🇸</option>
+                <option value="🇦🇷">Argentina 🇦🇷</option>
+                <option value="🇵🇹">Portugal 🇵🇹</option>
+                <option value="🇪🇸">Espanha 🇪🇸</option>
+                <option value="🇬🇧">Reino Unido 🇬🇧</option>
+                <option value="🇯🇵">Japão 🇯🇵</option>
+              </select>
+            </div>
+
+            <button id="profile-btn-save" class="btn btn-primary">Salvar Alterações</button>
+          </div>
+
+          <!-- Estatísticas -->
+          <div class="profile-stats-section">
+            <div class="stats-cards-grid">
+              <div class="stat-card">
+                <div class="stat-num" id="stats-played">0</div>
+                <div class="stat-lbl">Partidas</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num text-success" id="stats-wins">0</div>
+                <div class="stat-lbl">Vitórias</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num text-danger" id="stats-losses">0</div>
+                <div class="stat-lbl">Derrotas</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="stats-winrate">0%</div>
+                <div class="stat-lbl">Winrate</div>
+              </div>
+            </div>
+
+            <div class="advanced-stats card-blur-dark">
+              <h3>Detalhes Individuais</h3>
+              <div class="adv-stat-row"><span>⚽ Gols Marcados</span> <strong id="stats-goals">0</strong></div>
+              <div class="adv-stat-row"><span>🤝 Assistências</span> <strong id="stats-assists">0</strong></div>
+              <div class="adv-stat-row"><span>🛡️ Defesas</span> <strong id="stats-saves">0</strong></div>
+              <div class="adv-stat-row"><span>⚡ Nível Atual</span> <strong id="stats-level">1</strong></div>
+              <div class="adv-stat-row"><span>✨ Experiência (XP)</span> <strong id="stats-xp">0</strong></div>
+            </div>
+            
+            <div class="history-section">
+              <h3>Histórico Recente</h3>
+              <div id="profile-match-history" class="history-list">
+                <div class="subtext">Nenhuma partida registrada ainda.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. CONFIGURAÇÕES SCREEN -->
+    <div id="settings-screen" class="screen-view hidden">
+      <div class="settings-card card-blur">
+        <div class="screen-header">
+          <button id="settings-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurações do Jogo</h2>
+        </div>
+        
+        <div class="settings-body">
+          <div class="input-group">
+            <label for="settings-volume">Volume de Efeitos Sonoros</label>
+            <input type="range" id="settings-volume" min="0" max="100" value="80" />
+            <span class="subtext" id="volume-val-display">80%</span>
+          </div>
+
+          <div class="input-group">
+            <label>Tamanho do Campo de Jogo</label>
+            <div class="btn-group">
+              <button id="size-btn-small" class="btn btn-secondary">Pequeno (896x560)</button>
+              <button id="size-btn-medium" class="btn btn-secondary active">Médio (1024x640)</button>
+              <button id="size-btn-large" class="btn btn-secondary">Grande (1280x768)</button>
+            </div>
+          </div>
+          
+          <div class="input-group">
+            <label for="settings-quality">Efeitos Gráficos</label>
+            <select id="settings-quality">
+              <option value="high">Altos (Partículas e Sombras)</option>
+              <option value="medium">Médios (Apenas Sombras)</option>
+              <option value="low">Baixos (Maximização de FPS)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. CONTROLES SCREEN -->
+    <div id="controls-screen" class="screen-view hidden">
+      <div class="controls-card card-blur">
+        <div class="screen-header">
+          <button id="controls-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurar Controles</h2>
+          <button id="controls-btn-reset" class="btn btn-secondary btn-sm">Restaurar Padrões</button>
+        </div>
+
+        <p class="subtext">Clique em uma ação para remapear a tecla correspondente. Pressione ESC para cancelar ou BACKSPACE para limpar.</p>
+        <span id="controls-restart-warning" class="warning-banner hidden">As alterações de tamanho serão aplicadas na próxima partida.</span>
+
+        <!-- Layout de Jogadores -->
+        <div class="controls-grid">
+          <div class="controls-column">
+            <h3>🎮 Jogador 1 (Azul)</h3>
+            <div class="map-grid" id="grid-controls-p1">
+              <!-- JS Injected Controls -->
+            </div>
+          </div>
+          <div class="controls-column">
+            <h3>🎮 Jogador 2 (Vermelho / Local)</h3>
+            <div class="map-grid" id="grid-controls-p2">
+              <!-- JS Injected Controls -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Suporte Gamepad -->
+        <div class="gamepad-section card-blur-dark">
+          <h3>🎮 Integração com Gamepad</h3>
+          <p id="gamepad-status" class="subtext">Nenhum controle detectado. Pressione qualquer botão no controle para ativar.</p>
+          <div class="input-group">
+            <label for="gamepad-sensitivity">Sensibilidade do Analógico</label>
+            <input type="range" id="gamepad-sensitivity" min="1" max="10" value="5" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 9. CREDITS SCREEN -->
+    <div id="credits-screen" class="screen-view hidden">
+      <div class="credits-card card-blur text-center">
+        <h2>Créditos</h2>
+        <p class="logo-text">KICKER<span>HAX</span></p>
+        <p>Desenvolvido com carinho para a melhor jogabilidade retrô em tempo real.</p>
+        
+        <div class="credits-list">
+          <div class="credits-role">Desenvolvedor Principal</div>
+          <div class="credits-name">Hugo</div>
+          <div class="credits-role">Engine de Física & Multiplayer</div>
+          <div class="credits-name">Antigravity AI (Google DeepMind)</div>
+          <div class="credits-role">Trilha Sonora & Sintetizadores</div>
+          <div class="credits-name">Web Audio API</div>
+        </div>
+
+        <button id="credits-btn-back" class="btn btn-primary">Voltar ao Menu</button>
+      </div>
+    </div>
+
+    <!-- 10. GAME MODE SELECTION -->
+    <div id="mode-select-screen" class="screen-view hidden">
+      <div class="mode-select-layout">
+        <button id="mode-btn-back" class="btn btn-secondary select-back">⬅️ Voltar</button>
+        <h2 class="text-center select-title">Selecione o Modo</h2>
+        
+        <div class="modes-container">
+          <div class="mode-card card-blur btn-hover" id="mode-card-solo">
+            <div class="mode-icon">👤</div>
+            <h3>Jogar Sozinho</h3>
+            <p>Jogue uma partida local contra o Bot do Kicker Hax com inteligência aprimorada.</p>
+          </div>
+          <div class="mode-card card-blur btn-hover" id="mode-card-multiplayer">
+            <div class="mode-icon">🌐</div>
+            <h3>Multiplayer Online</h3>
+            <p>Participe de salas, convide amigos ou enfrente jogadores de todo o mundo via WebSockets.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 11. SOLO MATCH CONFIG SCREEN -->
+    <div id="solo-screen" class="screen-view hidden">
+      <div class="solo-card card-blur">
+        <div class="screen-header">
+          <button id="solo-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurar Partida Solo</h2>
+        </div>
+
+        <div class="solo-settings-body">
+          <div class="input-group">
+            <label>Dificuldade da Inteligência Artificial (Bot)</label>
+            <div class="btn-group" id="solo-ai-difficulty">
+              <button data-diff="easy" class="btn btn-secondary">Fácil</button>
+              <button data-diff="medium" class="btn btn-secondary active">Médio</button>
+              <button data-diff="hard" class="btn btn-secondary">Difícil</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="solo-minutes">Duração da Partida</label>
+            <select id="solo-minutes">
+              <option value="1">1 Minuto</option>
+              <option value="3" selected>3 Minutos</option>
+              <option value="5">5 Minutos</option>
+              <option value="10">10 Minutos</option>
+            </select>
+          </div>
+          
+          <div class="input-group">
+            <label for="solo-goals">Limite de Gols (Vitória Automática)</label>
+            <select id="solo-goals">
+              <option value="1">1 Gol</option>
+              <option value="3" selected>3 Gols</option>
+              <option value="5">5 Gols</option>
+              <option value="0">Sem Limite</option>
+            </select>
+          </div>
+
+          <button id="solo-btn-start" class="btn btn-primary btn-glow btn-lg">Iniciar Partida</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 12. MULTIPLAYER SCREEN -->
+    <div id="multiplayer-screen" class="screen-view hidden">
+      <div class="multiplayer-layout card-blur">
+        <div class="multiplayer-header">
+          <button id="multiplayer-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Arena Multiplayer</h2>
+          <div class="multiplayer-actions">
+            <button id="multi-btn-create-room" class="btn btn-primary">Criar Sala</button>
+            <button id="multi-btn-join-code" class="btn btn-secondary">Entrar por Código</button>
+          </div>
+        </div>
+
+        <div class="rooms-section">
+          <h3>Salas Disponíveis</h3>
+          <div class="rooms-table-container">
+            <table class="rooms-table">
+              <thead>
+                <tr>
+                  <th>Nome da Sala</th>
+                  <th>Jogadores</th>
+                  <th>Duração</th>
+                  <th>Gols</th>
+                  <th>Segurança</th>
+                  <th>Ação</th>
+                </tr>
+              </thead>
+              <tbody id="rooms-list-body">
+                <tr>
+                  <td colspan="6" class="text-center">Procurando por salas ativas...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 13. CRIAR SALA MODAL / SCREEN -->
+    <div id="create-room-screen" class="screen-view hidden">
+      <div class="solo-card card-blur">
+        <div class="screen-header">
+          <button id="create-room-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurar Nova Sala</h2>
+        </div>
+        <form id="create-room-form">
+          <div class="input-group">
+            <label for="room-name-input">Nome da Sala</label>
+            <input type="text" id="room-name-input" maxlength="20" required placeholder="Arena de Haxball" />
+          </div>
+          <div class="input-group">
+            <label for="room-password-input">Senha de Acesso (opcional)</label>
+            <input type="password" id="room-password-input" maxlength="12" placeholder="Deixe em branco para pública" />
+          </div>
+          <div class="input-group">
+            <label for="room-max-players">Limite de Jogadores</label>
+            <select id="room-max-players">
+              <option value="2">2 Jogadores</option>
+              <option value="4">4 Jogadores</option>
+              <option value="6">6 Jogadores</option>
+              <option value="10" selected>10 Jogadores</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="room-duration">Tempo de Partida</label>
+            <select id="room-duration">
+              <option value="1">1 Minuto</option>
+              <option value="3" selected>3 Minutos</option>
+              <option value="5">5 Minutos</option>
+              <option value="10">10 Minutos</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="room-goals">Limite de Gols</label>
+            <select id="room-goals">
+              <option value="1">1 Gol</option>
+              <option value="3" selected>3 Gols</option>
+              <option value="5">5 Gols</option>
+              <option value="0">Sem Limite</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-glow btn-lg">Criar Sala e Ir ao Lobby</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 14. ENTRAR POR CÓDIGO SCREEN -->
+    <div id="join-code-screen" class="screen-view hidden">
+      <div class="auth-card card-blur">
+        <h2>Entrar por Código</h2>
+        <p class="auth-subtitle">Digite o código de 6 dígitos fornecido pelo host</p>
+        <form id="join-code-form">
+          <div class="input-group">
+            <input type="text" id="join-code-input" class="text-center uppercase" required minlength="6" maxlength="6" placeholder="XXXXXX" />
+          </div>
+          <div class="input-group" id="join-password-container" style="display: none;">
+            <label for="join-password-input">Senha da Sala</label>
+            <input type="password" id="join-password-input" placeholder="Digite a senha" />
+          </div>
+          <button type="submit" class="btn btn-primary">Entrar na Sala</button>
+        </form>
+        <div class="auth-footer">
+          <button id="join-code-btn-back" class="btn-link">Voltar ao Multiplayer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 15. LOBBY SCREEN -->
+    <div id="lobby-screen" class="screen-view hidden">
+      <div class="lobby-layout card-blur">
+        <!-- Header -->
+        <div class="lobby-header">
+          <div class="lobby-info">
+            <h2 id="lobby-room-name">Nome do Lobby</h2>
+            <p>Código da Sala: <strong id="lobby-room-code" class="text-glow">XXXXXX</strong> <button id="btn-copy-code" class="btn btn-sm">📋 Copiar</button></p>
+          </div>
+          <button id="lobby-btn-leave" class="btn btn-secondary">Sair da Sala</button>
+        </div>
+
+        <div class="lobby-grid">
+          <!-- Players Teams lists -->
+          <div class="lobby-teams">
+            <!-- Team Red -->
+            <div class="lobby-team-box red-team">
+              <h3>🔴 Time Vermelho</h3>
+              <div class="lobby-team-list" id="lobby-red-players">
+                <!-- Injected via JS -->
+              </div>
+              <button id="lobby-btn-join-red" class="btn btn-sm btn-danger w-full mt-2">Entrar no Vermelho</button>
+            </div>
+
+            <!-- Team Blue -->
+            <div class="lobby-team-box blue-team">
+              <h3>🔵 Time Azul</h3>
+              <div class="lobby-team-list" id="lobby-blue-players">
+                <!-- Injected via JS -->
+              </div>
+              <button id="lobby-btn-join-blue" class="btn btn-sm btn-primary w-full mt-2">Entrar no Azul</button>
+            </div>
+
+            <!-- Spectators -->
+            <div class="lobby-team-box spec-team">
+              <h3>👓 Espectadores</h3>
+              <div class="lobby-team-list" id="lobby-spec-players">
+                <!-- Injected via JS -->
+              </div>
+              <button id="lobby-btn-join-spec" class="btn btn-sm btn-secondary w-full mt-2">Espectar</button>
+            </div>
+            
+            <!-- Host bot control -->
+            <div id="lobby-host-bot-controls" class="lobby-team-box mt-2 hidden">
+              <h3>⚙️ Controles de Bots (Host)</h3>
+              <div class="flex-row gap-2 mt-2">
+                <button id="btn-add-bot-red" class="btn btn-sm btn-danger">Bot 🔴</button>
+                <button id="btn-add-bot-blue" class="btn btn-sm btn-primary">Bot 🔵</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chat and Start Settings -->
+          <div class="lobby-chat-settings">
+            <!-- Room Chat -->
+            <div class="lobby-chat card-blur-dark">
+              <div class="lobby-chat-messages" id="lobby-chat-messages">
+                <!-- Messages Injected -->
+              </div>
+              <form id="lobby-chat-form" class="lobby-chat-form">
+                <input type="text" id="lobby-chat-input" maxlength="120" placeholder="Escreva uma mensagem..." />
+                <button type="submit" class="btn">Enviar</button>
+              </form>
+            </div>
+
+            <!-- Controls and settings -->
+            <div class="lobby-ready-section">
+              <div class="lobby-settings-summary card-blur-dark">
+                <div>⏱️ Tempo: <strong id="lobby-setting-time">3m</strong></div>
+                <div>⚽ Limite de Gols: <strong id="lobby-setting-goals">3</strong></div>
+              </div>
+              <div class="lobby-actions flex-row gap-2">
+                <button id="lobby-btn-ready" class="btn btn-secondary w-full btn-lg">Marcar como Pronto</button>
+                <button id="lobby-btn-start" class="btn btn-primary btn-glow w-full btn-lg hidden">Iniciar Jogo</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 16. MATCH SCREEN (O JOGO REAL) -->
+    <div id="match-screen" class="screen-view hidden">
+      <!-- HUD superior -->
+      <div class="match-hud">
+        <div class="hud-pill hud-score" id="match-score">0 : 0</div>
+        <div class="hud-pill"><span class="hud-label">Tempo</span> <span id="match-clock">00:00</span></div>
+        <div class="hud-pill flex-row gap-2">
+          <button id="match-btn-fullscreen" class="btn btn-sm">Fullscreen</button>
+          <button id="match-btn-exit" class="btn btn-danger btn-sm">Sair</button>
+        </div>
+      </div>
+
+      <!-- Stage -->
+      <div class="match-wrap">
+        <div class="match-stage" id="match-stage">
+          <!-- Lateral Esquerda P2 -->
+          <aside class="match-side side-left">
+            <div class="side-title">P2 / CPU</div>
+            <div class="side-vbar"><div class="side-vlabel">ST</div><i id="left-stam-fill"></i></div>
+            <div class="side-vbar"><div class="side-vlabel">PW</div><i id="left-pow-fill"></i></div>
+          </aside>
+
+          <!-- Canvas -->
+          <canvas id="match-canvas" width="1024" height="640" tabindex="0"></canvas>
+
+          <!-- Lateral Direita P1 -->
+          <aside class="match-side side-right">
+            <div class="side-title">P1</div>
+            <div class="side-vbar"><div class="side-vlabel">ST</div><i id="right-stam-fill"></i></div>
+            <div class="side-vbar"><div class="side-vlabel">PW</div><i id="right-pow-fill"></i></div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- Chat In-game transparente -->
+      <div class="game-chat-overlay" id="game-chat-overlay">
+        <div class="game-chat-messages" id="game-chat-messages"></div>
+        <form id="game-chat-form">
+          <input type="text" id="game-chat-input" maxlength="120" placeholder="Aperte Enter para falar..." />
+        </form>
+      </div>
+
+      <!-- Overlay de Replay -->
+      <div class="replay-overlay hidden" id="replay-overlay">
+        <div class="replay-hud">
+          <div class="pill">REPLAY DO GOL</div>
+          <button class="btn btn-secondary btn-sm" id="btn-skip-replay">Pular Replay</button>
+          <button class="btn btn-primary btn-sm" id="btn-save-replay">Salvar Replay</button>
+        </div>
+        <div class="replay-caption" id="replay-caption"></div>
+      </div>
+
+      <!-- Ping Overlay -->
+      <div id="ping-indicator" class="ping-badge">Ping: 0ms</div>
+      <div class="paused-badge hidden" id="focus-lost-badge">⏸️ Pausado (fora da aba)</div>
+    </div>
+
+    <!-- 17. PÓS-JOGO SCREEN -->
+    <div id="post-game-screen" class="screen-view hidden">
+      <div class="post-card card-blur text-center">
+        <h2 class="text-glow">Partida Finalizada</h2>
+        <div class="post-teams-summary">
+          <div class="team-result red-result">
+            <div class="team-score" id="post-score-red">0</div>
+            <div class="team-name">Time Vermelho</div>
+          </div>
+          <div class="score-vs">:</div>
+          <div class="team-result blue-result">
+            <div class="team-score" id="post-score-blue">0</div>
+            <div class="team-name">Time Azul</div>
+          </div>
+        </div>
+
+        <div class="post-stats card-blur-dark">
+          <h3>Estatísticas de Destaque</h3>
+          <div class="adv-stat-row"><span>⭐ MVP da Partida</span> <strong id="post-mvp">—</strong></div>
+          <div class="adv-stat-row"><span>📈 XP Ganho</span> <strong class="text-success" id="post-xp-gained">+0 XP</strong></div>
+          <div class="adv-stat-row"><span>⚽ Gols Totais</span> <strong id="post-total-goals">0</strong></div>
+        </div>
+
+        <button id="post-btn-continue" class="btn btn-primary btn-glow btn-lg w-full mt-4">Voltar ao Lobby</button>
+      </div>
+    </div>
+
+    <!-- 18. LEADERBOARD / RANKING SCREEN -->
+    <div id="ranking-screen" class="screen-view hidden">
+      <div class="ranking-card card-blur">
+        <div class="screen-header">
+          <button id="ranking-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Ranking Global de Jogadores</h2>
+        </div>
+
+        <div class="ranking-filters">
+          <button id="rank-filter-wins" class="btn btn-secondary active">Mais Vitórias</button>
+          <button id="rank-filter-goals" class="btn btn-secondary">Mais Gols</button>
+          <button id="rank-filter-level" class="btn btn-secondary">Maior Nível</button>
+        </div>
+
+        <div class="leaderboard-container">
+          <table class="leaderboard-table">
+            <thead>
+              <tr>
+                <th>Posição</th>
+                <th>Jogador</th>
+                <th>Nível</th>
+                <th>Vitórias</th>
+                <th>Derrotas</th>
+                <th>Gols</th>
+                <th>Taxa de Vitórias</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+              <tr>
+                <td colspan="7" class="text-center">Carregando dados da tabela...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Javascript Modules Client -->
+  <script type="module" src="main.js"></script>
+</body>
+</html>

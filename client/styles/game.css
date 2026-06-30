@@ -1,0 +1,266 @@
+/* Kicker Hax - In-game HUD & Match Canvas Layout */
+
+#match-screen {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #0b1222;
+}
+
+/* Match HUD */
+.match-hud {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 12px;
+  z-index: 5;
+}
+
+.hud-pill {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  padding: 10px 20px;
+  border-radius: 999px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.hud-score {
+  font-size: 24px;
+  padding: 8px 24px;
+  border-color: rgba(255, 255, 255, 0.15);
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.hud-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+/* Stage Wrap */
+.match-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.match-stage {
+  display: grid;
+  grid-template-columns: 56px auto 56px;
+  gap: 8px;
+  align-items: stretch;
+  margin: 0 auto;
+}
+
+#match-canvas {
+  background: #15251d; /* Field green texture base */
+  border-radius: 16px;
+  box-shadow: 0 15px 50px rgba(0, 0, 0, 0.6);
+  outline: none;
+  display: block;
+}
+
+/* Lateral Sidebar Fills (STAMINA/POWER) */
+.match-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.side-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.side-vbar {
+  position: relative;
+  width: 16px;
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  margin: 4px 0;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.side-vlabel {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.side-vbar i {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 1px;
+  height: 0%;
+  border-radius: 8px;
+  transition: height 0.1s ease;
+}
+
+/* Color gradients for bars */
+/* P2 (Red team) Left Side */
+.side-left .side-vbar:nth-of-type(1) i {
+  background: linear-gradient(180deg, #ef4444, #b91c1c);
+}
+.side-left .side-vbar:nth-of-type(2) i {
+  background: linear-gradient(180deg, #f59e0b, #d97706);
+}
+
+/* P1 (Blue team) Right Side */
+.side-right .side-vbar:nth-of-type(1) i {
+  background: linear-gradient(180deg, #22c55e, #15803d);
+}
+.side-right .side-vbar:nth-of-type(2) i {
+  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
+}
+
+/* Game Chat overlay inside canvas */
+.game-chat-overlay {
+  position: absolute;
+  bottom: 24px;
+  left: 100px;
+  width: 320px;
+  max-height: 180px;
+  display: flex;
+  flex-direction: column;
+  z-index: 4;
+  pointer-events: none; /* Allows canvas clicks through it */
+}
+
+.game-chat-messages {
+  flex: 1;
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(7, 11, 25, 0.45);
+  border-radius: 8px;
+  padding: 8px;
+  transition: opacity 0.5s ease;
+  pointer-events: auto; /* Allow chat scroll */
+}
+
+.game-chat-messages.inactive {
+  opacity: 0;
+}
+
+.game-chat-overlay form {
+  margin-top: 6px;
+  display: none;
+  pointer-events: auto;
+}
+
+.game-chat-overlay form.active {
+  display: block;
+}
+
+#game-chat-input {
+  background: rgba(7, 11, 25, 0.85);
+  border: 1px solid var(--border-light);
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+/* Replay overlay panels */
+.replay-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(2, 6, 23, 0.25);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.replay-hud {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.replay-hud .pill {
+  background: var(--bg-secondary);
+  border: 1px solid var(--color-warning);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 800;
+  border-radius: 999px;
+  color: var(--color-warning);
+}
+
+.replay-caption {
+  background: rgba(2, 6, 23, 0.9);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  text-shadow: 0 0 5px rgba(255, 255, 255, 0.2);
+  margin-bottom: 20px;
+}
+
+/* Ping badge indicators */
+.ping-badge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(7, 11, 25, 0.7);
+  border: 1px solid var(--border-light);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  z-index: 3;
+}
+
+.paused-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(7, 11, 25, 0.95);
+  border: 1px solid var(--border-light);
+  padding: 16px 30px;
+  border-radius: 12px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  z-index: 6;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
