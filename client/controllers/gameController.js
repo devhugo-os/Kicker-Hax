@@ -268,13 +268,18 @@ export const gameController = {
         const duration = document.getElementById('room-duration').value;
         const goals = document.getElementById('room-goals').value;
 
+        const sizeSelect = document.getElementById('room-field-size');
+        const replayToggle = document.getElementById('room-replay-toggle');
+        const fieldSize = sizeSelect ? sizeSelect.value : 'medium';
+        const showReplay = replayToggle ? replayToggle.checked : true;
+
         const profile = {
           uid: this.currentUser.uid,
           username: menuController.profileData.displayName || menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️'
         };
 
-        socketService.createRoom(name, pass, max, duration, goals, profile);
+        socketService.createRoom(name, pass, max, duration, goals, fieldSize, showReplay, profile);
         socketService.getSocket().once('roomCreated', (code) => {
           showToast('Lobby criado!', 'success');
           router.show('lobby-screen');
@@ -475,8 +480,8 @@ export const gameController = {
     if (!wrap || !stage) return;
 
     const aspect = this.canvas.width / this.canvas.height;
-    const availW = window.innerWidth - 140; // paddings and sidebars
-    const availH = window.innerHeight - 150; // top HUD and paddings
+    const availW = window.innerWidth - 80; // paddings and sidebars
+    const availH = window.innerHeight - 110; // top HUD and paddings
     
     let canvasH = availH;
     let canvasW = canvasH * aspect;
@@ -506,6 +511,24 @@ export const gameController = {
     const displayName = menuController.profileData.displayName || menuController.profileData.username;
     const badge = menuController.profileData.badge || '🇧🇷';
     
+    // Retrieve selected field size and replay settings
+    const sizeSelect = document.getElementById('solo-field-size');
+    const replayCheck = document.getElementById('solo-replay-toggle');
+    
+    const fieldSize = sizeSelect ? sizeSelect.value : 'medium';
+    this.showReplay = replayCheck ? replayCheck.checked : true;
+
+    // Apply dimensions to canvas
+    if (fieldSize === 'small') {
+      this.canvas.width = 896; this.canvas.height = 560;
+    } else if (fieldSize === 'large') {
+      this.canvas.width = 1280; this.canvas.height = 768;
+    } else {
+      this.canvas.width = 1024; this.canvas.height = 640;
+    }
+
+    this.resizeCanvasContainer();
+
     const p1Lobby = { id: 'p1', uid: this.currentUser.uid, username: displayName, badge, team: 'blue', cpu: false };
     const cpuLobby = { id: 'cpu', uid: '', username: 'CPU Bot', badge: '⚙️', team: 'red', cpu: true, difficulty: this.difficulty };
 
@@ -579,10 +602,8 @@ export const gameController = {
         const rightNetBack = rightPostX + C.GOAL_DEPTH;
         const cornerR = 10;
 
-        // Skip calculations if paused on loss of focus
-        const lostFocus = document.hidden || !document.hasFocus();
-
-        if (!lostFocus) {
+        // Continuous simulation even when screen loses focus
+        if (true) {
           if (MatchSim.status === 'countdown') {
             MatchSim.countdownTimer--;
             if (MatchSim.countdownTimer <= 0) {
@@ -667,8 +688,35 @@ export const gameController = {
               }
 
               const distBall = Math.hypot(ballFuture.x - redPlayer.x, ballFuture.y - redPlayer.y);
-              const targetX = localBallSim.owner === 'cpu' ? rightPostX : ballFuture.x;
-              const targetY = localBallSim.owner === 'cpu' ? Physics.clamp(redPlayer.y, gTop + 20, gBot - 20) : ballFuture.y;
+              
+              // Intelligent Roles setup
+              let targetX = ballFuture.x;
+              let targetY = ballFuture.y;
+
+              const ballInOurHalf = localBallSim.x < w / 2;
+              
+              if (localBallSim.owner === 'cpu') {
+                // attacking state
+                targetX = rightPostX;
+                const oppDist = Math.hypot(bluePlayer.x - redPlayer.x, bluePlayer.y - redPlayer.y);
+                if (this.difficulty !== 'easy' && oppDist < 120) {
+                  // Dribble feint: steer away from blue player
+                  targetY = bluePlayer.y > redPlayer.y ? redPlayer.y - 80 : redPlayer.y + 80;
+                  if (this.difficulty === 'hard' && redPlayer.dribble_cd <= 0) {
+                    inputCPU.dribble = true;
+                  }
+                } else {
+                  targetY = Physics.clamp(redPlayer.y, gTop + 20, gBot - 20);
+                }
+              } else if (ballInOurHalf && distBall > 260 && this.difficulty !== 'easy') {
+                // Goalie defensive stance
+                targetX = C.BORDER + 50;
+                targetY = Physics.clamp(ballFuture.y, gTop + 10, gBot - 10);
+              } else {
+                // Pursuing ball
+                targetX = ballFuture.x;
+                targetY = ballFuture.y;
+              }
 
               let dx = targetX - redPlayer.x;
               let dy = targetY - redPlayer.y;
@@ -676,15 +724,15 @@ export const gameController = {
               let ax = dx / L;
               let ay = dy / L;
 
-              // difficulty adjustments
+              // difficulty speed factor adjustments
               let speedFactor = 1.0;
               let err = 0;
               if (this.difficulty === 'easy') {
-                speedFactor = 0.75;
-                err = 0.22;
+                speedFactor = 0.72;
+                err = 0.25;
               } else if (this.difficulty === 'medium') {
-                speedFactor = 0.9;
-                err = 0.1;
+                speedFactor = 0.88;
+                err = 0.12;
               }
 
               if (err > 0 && Math.random() < 0.05) {
@@ -695,18 +743,15 @@ export const gameController = {
               inputCPU.x = ax * speedFactor;
               inputCPU.y = ay * speedFactor;
               
-              const wantSprint = (localBallSim.owner === 'cpu' && Math.abs(rightPostX - redPlayer.x) > 220) ||
-                                 (!localBallSim.owner && distBall > 140);
-              inputCPU.sprint = wantSprint && redPlayer.staminaLock <= 0 && redPlayer.stamina > 0.35;
+              const wantSprint = (localBallSim.owner === 'cpu' && Math.abs(rightPostX - redPlayer.x) > 200) ||
+                                 (!localBallSim.owner && distBall > 120);
+              inputCPU.sprint = wantSprint && redPlayer.staminaLock <= 0 && redPlayer.stamina > 0.30;
 
-              // Skills trigger
+              // Shoot/Tackle trigger
               if (localBallSim.owner === 'cpu') {
                 const distToGoal = Math.abs(rightPostX - redPlayer.x);
                 if (distToGoal < 100 || (distToGoal < 160 && redPlayer.y > gTop && redPlayer.y < gBot)) {
                   inputCPU.shoot = true;
-                }
-                if (this.difficulty === 'hard' && Math.random() < 0.02 && redPlayer.dribble_cd <= 0) {
-                  inputCPU.dribble = true;
                 }
               } else if (localBallSim.owner === 'p1') {
                 if (distBall < C.TACKLE_RANGE && redPlayer.tackle_cd <= 0 && this.difficulty !== 'easy') {
@@ -796,8 +841,12 @@ export const gameController = {
             Physics.updatePlayerPhysics(bluePlayer, inputP1, localBallSim, (sfx) => frameSfx.push(sfx));
             Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
 
-            Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR);
-            Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR);
+            // Apply Boost Pads local physics
+            Physics.applyBoostPads(bluePlayer, w, h, () => frameSfx.push('dribble'));
+            Physics.applyBoostPads(redPlayer, w, h, () => frameSfx.push('dribble'));
+
+            Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
+            Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
 
             Physics.resolvePlayerPlayer(localPlayers);
             Physics.resolvePlayerBall(localPlayers, localBallSim, () => {
@@ -806,24 +855,42 @@ export const gameController = {
               }
             });
 
+            // Apply Boost Pads to ball
+            Physics.applyBoostPads(localBallSim, w, h, () => frameSfx.push('power'));
+
             Physics.updateBallPhysics(
               localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, localPlayers,
               (sfx) => frameSfx.push(sfx),
               (side) => {
                 // Goal triggered offline
-                MatchSim.status = 'freeze';
-                MatchSim.goalFreezeTimer = C.GOAL_FREEZE_FRAMES;
-                frameSfx.push('whistle');
-                frameSfx.push('goal');
-                frameSfx.push('cheer');
-
                 if (side === 'blue') MatchSim.score.blue++; else MatchSim.score.red++;
                 
                 // Set last goal detail
                 const scorerName = localBallSim.lastTouch === 'p1' ? displayName : 'CPU Bot';
                 const ownGoal = (side === 'blue' && localBallSim.lastTouch === 'cpu') || (side === 'red' && localBallSim.lastTouch === 'p1');
                 this.lastGoal = { side, scorerName, ownGoal };
-              }
+
+                frameSfx.push('whistle');
+                frameSfx.push('goal');
+                frameSfx.push('cheer');
+
+                const goalsTotal = MatchSim.score.red >= this.goalLimit || MatchSim.score.blue >= this.goalLimit;
+                if (goalsTotal && this.goalLimit > 0) {
+                  MatchSim.status = 'ended';
+                  this.localMatchEnd(MatchSim.score);
+                } else {
+                  if (this.showReplay) {
+                    MatchSim.status = 'freeze';
+                    MatchSim.goalFreezeTimer = C.GOAL_FREEZE_FRAMES;
+                  } else {
+                    // Bypass replay, restart directly
+                    MatchSim.status = 'countdown';
+                    MatchSim.countdownTimer = 150;
+                    resetFieldPositions();
+                  }
+                }
+              },
+              w, h
             );
           }
 
@@ -1005,6 +1072,16 @@ export const gameController = {
   startOnlineMatch() {
     this.status = 'countdown';
     this.countdown = 150;
+
+    // Apply dimensions to canvas from room fieldSize
+    if (this.fieldSize === 'small') {
+      this.canvas.width = 896; this.canvas.height = 560;
+    } else if (this.fieldSize === 'large') {
+      this.canvas.width = 1280; this.canvas.height = 768;
+    } else {
+      this.canvas.width = 1024; this.canvas.height = 640;
+    }
+    this.resizeCanvasContainer();
 
     socketService.onGameState((state) => {
       this.status = state.status;
@@ -1305,74 +1382,204 @@ export const gameController = {
   // ==========================================================================
   // CANVAS RENDERING HELPERS
   // ==========================================================================
+  drawSpeedPad(cx, x, y, active) {
+    cx.save();
+    // Glowing outer circle
+    cx.shadowColor = '#00f0ff';
+    cx.shadowBlur = active ? 16 : 8;
+    cx.fillStyle = active ? 'rgba(0, 240, 255, 0.45)' : 'rgba(0, 240, 255, 0.18)';
+    cx.strokeStyle = '#00f0ff';
+    cx.lineWidth = 2.5;
+    cx.beginPath();
+    cx.arc(x, y, 32, 0, Math.PI * 2);
+    cx.fill();
+    cx.stroke();
+
+    // Glowing arrows inside pointing in motion direction (Right-Up for top, Left-Down for bottom)
+    cx.fillStyle = '#00f0ff';
+    cx.beginPath();
+    if (x < this.canvas.width / 2) {
+      // Top pad arrows point top-right
+      cx.moveTo(x - 6, y + 6);
+      cx.lineTo(x + 10, y - 10);
+      cx.lineTo(x + 2, y - 10);
+      cx.lineTo(x + 10, y - 10);
+      cx.lineTo(x + 10, y - 2);
+    } else {
+      // Bottom pad arrows point bottom-left
+      cx.moveTo(x + 6, y - 6);
+      cx.lineTo(x - 10, y + 10);
+      cx.lineTo(x - 2, y + 10);
+      cx.lineTo(x - 10, y + 10);
+      cx.lineTo(x - 10, y + 2);
+    }
+    cx.strokeStyle = '#00f0ff';
+    cx.lineWidth = 3;
+    cx.stroke();
+    cx.restore();
+  },
+
   drawFieldGrid(cx) {
     const w = this.canvas.width;
     const h = this.canvas.height;
     const gTop = (h - C.GOAL_W_INIT) / 2;
     const gBot = (h + C.GOAL_W_INIT) / 2;
 
-    // Dark cyber space background
-    cx.fillStyle = '#0f172a';
+    // 1) Concrete background outer zone (Stands / Arquibancada)
+    cx.fillStyle = '#1e293b';
     cx.fillRect(0, 0, w, h);
 
-    // Glowing grid lines
-    cx.save();
-    cx.strokeStyle = 'rgba(59, 130, 246, 0.4)'; // Blue neon grid
-    cx.lineWidth = 1;
-    const gridSpacing = 40;
-    
-    // Vertical grid lines
-    for (let x = 0; x <= w; x += gridSpacing) {
-      cx.beginPath();
-      cx.moveTo(x, 0); cx.lineTo(x, h);
-      cx.stroke();
+    // Draw stands rows outside C.BORDER
+    cx.strokeStyle = '#334155';
+    cx.lineWidth = 2;
+    for (let offset = 4; offset < C.BORDER - 8; offset += 6) {
+      cx.strokeRect(offset, offset, w - offset * 2, h - offset * 2);
     }
-    // Horizontal grid lines
-    for (let y = 0; y <= h; y += gridSpacing) {
-      cx.beginPath();
-      cx.moveTo(0, y); cx.lineTo(w, y);
-      cx.stroke();
+
+    // Populate stands with simplified crowds (tiny colored dots)
+    cx.save();
+    // seedable random to keep spectator dots static per frame
+    let crowdSeed = 12345;
+    const pseudoRandom = () => {
+      let x = Math.sin(crowdSeed++) * 10000;
+      return x - Math.floor(x);
+    };
+
+    for (let x = 8; x < w - 8; x += 12) {
+      for (let y = 8; y < h - 8; y += 12) {
+        // Only draw if outside the grass boundary
+        const outsideX = x < C.BORDER - 8 || x > w - C.BORDER + 8;
+        const outsideY = y < C.BORDER - 8 || y > h - C.BORDER + 8;
+        if ((outsideX || outsideY) && pseudoRandom() < 0.35) {
+          const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#94a3b8'];
+          cx.fillStyle = colors[Math.floor(pseudoRandom() * colors.length)];
+          cx.beginPath();
+          cx.arc(x, y, 2.5, 0, Math.PI * 2);
+          cx.fill();
+        }
+      }
     }
     cx.restore();
 
-    // Draw borders lines (Neon Glow)
-    cx.shadowColor = '#3b82f6';
-    cx.shadowBlur = 10;
-    cx.strokeStyle = '#3b82f6';
-    cx.lineWidth = 4;
+    // 2) Grass pitch background (Alternating stripes)
+    cx.fillStyle = '#2e7d32'; // Base dark green
+    cx.fillRect(C.BORDER - 8, C.BORDER - 8, w - 2 * C.BORDER + 16, h - 2 * C.BORDER + 16);
+
+    // Draw stripes
+    const stripeCount = 14;
+    const stripeW = (w - 2 * C.BORDER + 16) / stripeCount;
+    cx.fillStyle = '#388e3c'; // Lighter green
+    for (let i = 0; i < stripeCount; i += 2) {
+      cx.fillRect(C.BORDER - 8 + i * stripeW, C.BORDER - 8, stripeW, h - 2 * C.BORDER + 16);
+    }
+
+    // 3) White Chalk Field Lines
+    cx.save();
+    cx.strokeStyle = '#ffffff';
+    cx.lineWidth = 3;
+
+    // Field Boundary
     cx.strokeRect(C.BORDER, C.BORDER, w - 2 * C.BORDER, h - 2 * C.BORDER);
 
-    // Draw center circles
+    // Center Line
     cx.beginPath();
     cx.moveTo(w / 2, C.BORDER);
     cx.lineTo(w / 2, h - C.BORDER);
     cx.stroke();
 
+    // Center Circle
     cx.beginPath();
-    cx.arc(w / 2, h / 2, 60, 0, Math.PI * 2);
+    cx.arc(w / 2, h / 2, 72, 0, Math.PI * 2);
     cx.stroke();
 
-    // Area lines
-    cx.lineWidth = 3;
-    cx.shadowBlur = 8;
-    cx.strokeStyle = '#ef4444'; // Red side
-    cx.strokeRect(C.BORDER, (h - 300) / 2, 200, 300);
-    cx.strokeRect(C.BORDER, (h - 160) / 2, 100, 160);
-    
-    cx.strokeStyle = '#3b82f6'; // Blue side
-    cx.strokeRect(w - C.BORDER - 200, (h - 300) / 2, 200, 300);
-    cx.strokeRect(w - C.BORDER - 100, (h - 160) / 2, 100, 160);
+    // Center point
+    cx.beginPath();
+    cx.arc(w / 2, h / 2, 4, 0, Math.PI * 2);
+    cx.fillStyle = '#ffffff';
+    cx.fill();
 
-    // Turn off shadow
-    cx.shadowBlur = 0;
+    // 4) Area penalty boxes
+    // Left Team area
+    cx.strokeRect(C.BORDER, (h - 260) / 2, 140, 260); // Grande area
+    cx.strokeRect(C.BORDER, (h - 110) / 2, 50, 110);  // Pequena area
+    // Penalty Spot
+    cx.beginPath();
+    cx.arc(C.BORDER + 100, h / 2, 3, 0, Math.PI * 2);
+    cx.fill();
+    // Penalty arc
+    cx.beginPath();
+    cx.arc(C.BORDER + 100, h / 2, 45, -Math.PI * 0.28, Math.PI * 0.28);
+    cx.stroke();
 
-    // Goals backgrounds
-    cx.fillStyle = '#060a13';
+    // Right Team area
+    cx.strokeRect(w - C.BORDER - 140, (h - 260) / 2, 140, 260); // Grande area
+    cx.strokeRect(w - C.BORDER - 50, (h - 110) / 2, 50, 110);  // Pequena area
+    // Penalty Spot
+    cx.beginPath();
+    cx.arc(w - C.BORDER - 100, h / 2, 3, 0, Math.PI * 2);
+    cx.fill();
+    // Penalty arc
+    cx.beginPath();
+    cx.arc(w - C.BORDER - 100, h / 2, 45, Math.PI * 0.72, Math.PI * 1.28);
+    cx.stroke();
+
+    // Corner flag arcs
+    const cornerArcR = 12;
+    cx.lineWidth = 2;
+    // Top-Left
+    cx.beginPath(); cx.arc(C.BORDER, C.BORDER, cornerArcR, 0, Math.PI * 0.5); cx.stroke();
+    // Bottom-Left
+    cx.beginPath(); cx.arc(C.BORDER, h - C.BORDER, cornerArcR, -Math.PI * 0.5, 0); cx.stroke();
+    // Top-Right
+    cx.beginPath(); cx.arc(w - C.BORDER, C.BORDER, cornerArcR, Math.PI * 0.5, Math.PI); cx.stroke();
+    // Bottom-Right
+    cx.beginPath(); cx.arc(w - C.BORDER, h - C.BORDER, cornerArcR, Math.PI, -Math.PI * 0.5); cx.stroke();
+    cx.restore();
+
+    // 5) Corner flags drawing
+    const drawFlag = (fx, fy, angle) => {
+      cx.save();
+      cx.translate(fx, fy);
+      cx.rotate(angle);
+      // Pole
+      cx.strokeStyle = '#fbbf24';
+      cx.lineWidth = 2;
+      cx.beginPath(); cx.moveTo(0, 0); cx.lineTo(-6, -6); cx.stroke();
+      // Flag banner
+      cx.fillStyle = '#ef4444';
+      cx.beginPath();
+      cx.moveTo(-6, -6);
+      cx.lineTo(-12, -4);
+      cx.lineTo(-8, -10);
+      cx.closePath();
+      cx.fill();
+      cx.restore();
+    };
+    drawFlag(C.BORDER, C.BORDER, 0);
+    drawFlag(C.BORDER, h - C.BORDER, -Math.PI * 0.5);
+    drawFlag(w - C.BORDER, C.BORDER, Math.PI * 0.5);
+    drawFlag(w - C.BORDER, h - C.BORDER, Math.PI);
+
+    // 6) Draw Boost Pads (Speed Pads)
+    const pad1X = w * 0.35, pad1Y = h * 0.3;
+    const pad2X = w * 0.65, pad2Y = h * 0.7;
+
+    const pad1Active = this.players.some(p => Math.hypot(p.x - pad1X, p.y - pad1Y) < p.r + 32) || 
+                       Math.hypot(this.ball.x - pad1X, this.ball.y - pad1Y) < this.ball.r + 32;
+
+    const pad2Active = this.players.some(p => Math.hypot(p.x - pad2X, p.y - pad2Y) < p.r + 32) || 
+                       Math.hypot(this.ball.x - pad2X, this.ball.y - pad2Y) < this.ball.r + 32;
+
+    this.drawSpeedPad(cx, pad1X, pad1Y, pad1Active);
+    this.drawSpeedPad(cx, pad2X, pad2Y, pad2Active);
+
+    // 7) Goals concrete background bases
+    cx.fillStyle = '#0f172a';
     cx.fillRect(C.BORDER - C.POST_T, gTop, C.POST_T, C.GOAL_W_INIT);
     cx.fillRect(w - C.BORDER, gTop, C.POST_T, C.GOAL_W_INIT);
 
-    // Cyber Net Fill
-    cx.fillStyle = 'rgba(59, 130, 246, 0.08)';
+    // Goal Nets inner background
+    cx.fillStyle = 'rgba(255, 255, 255, 0.04)';
     cx.fillRect(C.BORDER - C.POST_T - C.GOAL_DEPTH, gTop, C.GOAL_DEPTH, C.GOAL_W_INIT);
     cx.fillRect(w - C.BORDER + C.POST_T, gTop, C.GOAL_DEPTH, C.GOAL_W_INIT);
   },
@@ -1497,10 +1704,21 @@ export const gameController = {
   },
 
   updateLobbyView(room) {
+    if (!room) return;
+    this.fieldSize = room.fieldSize || 'medium';
+    this.showReplay = room.showReplay !== undefined ? room.showReplay : true;
+
     document.getElementById('lobby-room-name').textContent = room.name;
     document.getElementById('lobby-room-code').textContent = room.code;
     document.getElementById('lobby-setting-time').textContent = `${room.duration}m`;
     document.getElementById('lobby-setting-goals').textContent = room.goalLimit === 0 ? 'Sem Limite' : room.goalLimit;
+    
+    const sizeMap = { small: 'Pequeno', medium: 'Médio', large: 'Grande' };
+    const sizeEl = document.getElementById('lobby-setting-size');
+    if (sizeEl) sizeEl.textContent = sizeMap[this.fieldSize] || 'Médio';
+    
+    const replayEl = document.getElementById('lobby-setting-replay');
+    if (replayEl) replayEl.textContent = this.showReplay ? 'Sim' : 'Não';
 
     const myId = socketService.getSocket().id;
     const isHost = room.hostId === myId;

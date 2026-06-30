@@ -67,28 +67,7 @@ export const settingsController = {
     const btnCtrlBack = document.getElementById('controls-btn-back');
     if (btnCtrlBack) btnCtrlBack.onclick = () => router.show('menu-screen');
 
-    // Size preset selectors
-    const btnSmall = document.getElementById('size-btn-small');
-    const btnMedium = document.getElementById('size-btn-medium');
-    const btnLarge = document.getElementById('size-btn-large');
-
-    const setSize = (size, w, h) => {
-      this.fieldSize = size;
-      this.dimensions = { w, h };
-      localStorage.setItem('kicker_hax_field_size', size);
-      
-      [btnSmall, btnMedium, btnLarge].forEach(b => b && b.classList.remove('active'));
-      if (size === 'small') btnSmall?.classList.add('active');
-      if (size === 'medium') btnMedium?.classList.add('active');
-      if (size === 'large') btnLarge?.classList.add('active');
-
-      const warning = document.getElementById('controls-restart-warning');
-      if (warning) warning.classList.remove('hidden');
-    };
-
-    if (btnSmall) btnSmall.onclick = () => setSize('small', 896, 560);
-    if (btnMedium) btnMedium.onclick = () => setSize('medium', 1024, 640);
-    if (btnLarge) btnLarge.onclick = () => setSize('large', 1280, 768);
+    // Global Key Listener for Remapping
 
     // Global Key Listener for Remapping
     window.addEventListener('keydown', (e) => this.handleRemapKey(e));
@@ -146,24 +125,9 @@ export const settingsController = {
     const savedVol = localStorage.getItem('kicker_hax_volume') || '80';
     soundFx.setVolume(parseInt(savedVol, 10));
 
-    // 2) Field dimensions
-    const savedSize = localStorage.getItem('kicker_hax_field_size') || 'medium';
-    this.fieldSize = savedSize;
-    if (savedSize === 'small') this.dimensions = { w: 896, h: 560 };
-    else if (savedSize === 'large') this.dimensions = { w: 1280, h: 768 };
-    else this.dimensions = { w: 1024, h: 640 };
-
-    // Activate visual size buttons on settings screen load
-    setTimeout(() => {
-      const btnSmall = document.getElementById('size-btn-small');
-      const btnMedium = document.getElementById('size-btn-medium');
-      const btnLarge = document.getElementById('size-btn-large');
-      
-      [btnSmall, btnMedium, btnLarge].forEach(b => b?.classList.remove('active'));
-      if (savedSize === 'small') btnSmall?.classList.add('active');
-      if (savedSize === 'medium') btnMedium?.classList.add('active');
-      if (savedSize === 'large') btnLarge?.classList.add('active');
-    }, 100);
+    // 2) Default dimensions
+    this.fieldSize = 'medium';
+    this.dimensions = { w: 1024, h: 640 };
 
     // 3) Key controls
     try {

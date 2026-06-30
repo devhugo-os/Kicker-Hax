@@ -41,9 +41,9 @@ export const socketService = {
   },
 
   // Emitters
-  createRoom(name, password, maxPlayers, duration, goalLimit, profile) {
+  createRoom(name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay, profile) {
     if (!socket) return;
-    socket.emit('createRoom', { name, password, maxPlayers, duration, goalLimit, profile });
+    socket.emit('createRoom', { name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay, profile });
   },
 
   joinRoom(code, password, profile) {

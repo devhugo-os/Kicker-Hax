@@ -69,13 +69,11 @@ export const menuController = {
     }
 
     // Setup input listeners to show dynamic badge/avatar preview
-    const badgeInput = document.getElementById('profile-badge-input');
+    const badgeSelect = document.getElementById('profile-badge-select');
     const avatarDisplay = document.getElementById('profile-avatar-display');
-    if (badgeInput && avatarDisplay) {
-      badgeInput.addEventListener('input', (e) => {
-        const cleaned = sanitizeBadgeInput(e.target.value);
-        if (e.target.value !== cleaned) e.target.value = cleaned;
-        avatarDisplay.textContent = cleaned || '👤';
+    if (badgeSelect && avatarDisplay) {
+      badgeSelect.addEventListener('change', (e) => {
+        avatarDisplay.textContent = e.target.value || '👤';
       });
     }
 
@@ -121,15 +119,13 @@ export const menuController = {
 
     // Bind edit fields
     const dispInput = document.getElementById('profile-displayname-input');
-    const badgeInput = document.getElementById('profile-badge-input');
+    const badgeSelect = document.getElementById('profile-badge-select');
     const bioInput = document.getElementById('profile-bio-input');
-    const flagInput = document.getElementById('profile-flag-input');
     const avatarDisplay = document.getElementById('profile-avatar-display');
 
     if (dispInput) dispInput.value = this.profileData.displayName || '';
-    if (badgeInput) badgeInput.value = this.profileData.badge || '';
+    if (badgeSelect) badgeSelect.value = this.profileData.badge || '👤';
     if (bioInput) bioInput.value = this.profileData.bio || '';
-    if (flagInput) flagInput.value = this.profileData.badge || '🇧🇷';
     if (avatarDisplay) avatarDisplay.textContent = this.profileData.badge || '👤';
 
     // Load statistics
@@ -195,24 +191,28 @@ export const menuController = {
   async saveProfileEdits() {
     if (!this.currentUser) return;
     const dispInput = document.getElementById('profile-displayname-input');
-    const badgeInput = document.getElementById('profile-badge-input');
+    const badgeSelect = document.getElementById('profile-badge-select');
     const bioInput = document.getElementById('profile-bio-input');
-    const flagInput = document.getElementById('profile-flag-input');
 
     const displayName = dispInput ? dispInput.value.trim() : '';
-    const badge = badgeInput ? sanitizeBadgeInput(badgeInput.value) : '';
+    const badge = badgeSelect ? badgeSelect.value : '👤';
     const bio = bioInput ? bioInput.value.trim() : '';
-    const country = flagInput ? flagInput.value : '🇧🇷';
 
     if (displayName.length < 3) {
       return showToast('Nome de exibição precisa de no mínimo 3 caracteres.', 'error');
     }
 
     try {
+      showToast('Verificando disponibilidade do nome...', 'info');
+      const isUnique = await firebaseService.isDisplayNameUnique(displayName, this.currentUser.uid);
+      if (!isUnique) {
+        return showToast('Este nome de exibição já está em uso por outro jogador.', 'error');
+      }
+
       showToast('Salvando dados...', 'info');
       await firebaseService.updateUserProfile(this.currentUser.uid, {
         displayName,
-        badge: badge || country, // Prefer custom badge, fallback to country flag
+        badge,
         bio
       });
       showToast('Perfil atualizado com sucesso!', 'success');

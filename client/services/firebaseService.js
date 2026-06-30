@@ -235,6 +235,18 @@ export const firebaseService = {
     }
   },
 
+  async isDisplayNameUnique(displayName, uid) {
+    const q = query(collection(db, 'users'), where('displayName', '==', displayName));
+    const querySnapshot = await getDocs(q);
+    let unique = true;
+    querySnapshot.forEach((docSnap) => {
+      if (docSnap.id !== uid) {
+        unique = false;
+      }
+    });
+    return unique;
+  },
+
   // ==========================================================================
   // REALTIME DATABASE (GLOBAL CHAT)
   // ==========================================================================

@@ -19,7 +19,7 @@ export function registerRoomHandlers(io, socket) {
     socket.emit('pong');
   });
 
-  socket.on('createRoom', ({ name, password, maxPlayers, duration, goalLimit, profile }) => {
+  socket.on('createRoom', ({ name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay, profile }) => {
     let code;
     let attempts = 0;
     do {
@@ -31,7 +31,9 @@ export function registerRoomHandlers(io, socket) {
       maxPlayers,
       password,
       duration,
-      goalLimit
+      goalLimit,
+      fieldSize,
+      showReplay
     });
 
     db.createRoom(code, room);
@@ -235,7 +237,8 @@ export function registerRoomHandlers(io, socket) {
         io.to(room.code).emit('matchEnded', score);
         io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
         io.emit('publicRoomsList', db.getAllRooms().filter(r => !r.password).map(r => r.getPublicInfo()));
-      }
+      },
+      room.fieldSize
     );
 
     io.to(room.code).emit('matchStarted');

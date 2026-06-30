@@ -200,6 +200,7 @@ export class ServerPhysics {
     }
 
     // Skill ticks
+    if (p.boostCooldown > 0) p.boostCooldown--;
     if (p.tackle_cd > 0) p.tackle_cd--;
     if (p.dribble_cd > 0) p.dribble_cd--;
     if (p.dash_time > 0) p.dash_time--;
@@ -219,14 +220,14 @@ export class ServerPhysics {
     }
   }
 
-  static applyLimits(p, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR) {
+  static applyLimits(p, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w = 1024, h = 640) {
     let nx = p.x + p.vx;
     let ny = p.y + p.vy;
 
     // Vertical boundary limits
     if (!(ny > gTop && ny < gBot)) {
       if (ny - p.r < C.BORDER) { ny = C.BORDER + p.r; p.vy *= -0.5; }
-      if (ny + p.r > C.H - C.BORDER) { ny = C.H - C.BORDER - p.r; p.vy *= -0.5; }
+      if (ny + p.r > h - C.BORDER) { ny = h - C.BORDER - p.r; p.vy *= -0.5; }
     }
 
     // Goals bounds and posts collisions
@@ -235,7 +236,7 @@ export class ServerPhysics {
       if (nx + p.r > rightNetBack) { nx = rightNetBack - p.r; p.vx = Math.min(p.vx, 0) * 0.5; }
 
       const inLeft = nx < C.BORDER && nx >= leftNetBack - 6;
-      const inRight = nx > C.W - C.BORDER && nx <= rightNetBack + 6;
+      const inRight = nx > w - C.BORDER && nx <= rightNetBack + 6;
       if (inLeft || inRight) {
         if (ny - p.r < gTop) { ny = gTop + p.r; p.vy = Math.max(p.vy, 0) * 0.4; }
         if (ny + p.r > gBot) { ny = gBot - p.r; p.vy = Math.min(p.vy, 0) * 0.4; }
@@ -249,7 +250,7 @@ export class ServerPhysics {
       nx = tmp.x; ny = tmp.y; p.vx = tmp.vx; p.vy = tmp.vy;
     } else {
       if (nx - p.r < C.BORDER) { nx = C.BORDER + p.r; p.vx *= -0.5; }
-      if (nx + p.r > C.W - C.BORDER) { nx = C.W - C.BORDER - p.r; p.vx *= -0.5; }
+      if (nx + p.r > w - C.BORDER) { nx = w - C.BORDER - p.r; p.vx *= -0.5; }
 
       const tmp = { x: nx, y: ny, vx: p.vx, vy: p.vy, r: p.r };
       this.collidePlayerWithCorner(tmp, leftPostX, gTop, cornerR);
@@ -263,7 +264,8 @@ export class ServerPhysics {
     p.y = ny;
   }
 
-  static updateBallPhysics(b, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, players, onSoundEffect, onGoal) {
+  static updateBallPhysics(b, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, players, onSoundEffect, onGoal, w = 1024, h = 640) {
+    if (b.boostCooldown > 0) b.boostCooldown--;
     if (b.noPickupFrames > 0) {
       b.noPickupFrames--;
       if (b.noPickupFrames === 0) b.noPickupFrom = null;
@@ -281,14 +283,14 @@ export class ServerPhysics {
         let ny = p.y + py * off;
 
         let minX = C.BORDER + b.r;
-        let maxX = C.W - C.BORDER - b.r;
+        let maxX = w - C.BORDER - b.r;
         if (ny > gTop && ny < gBot) {
           minX = leftNetBack + b.r;
           maxX = rightNetBack - b.r;
         }
 
         b.x = this.clamp(nx, minX, maxX);
-        b.y = this.clamp(ny, C.BORDER + b.r, C.H - C.BORDER - b.r);
+        b.y = this.clamp(ny, C.BORDER + b.r, h - C.BORDER - b.r);
         b.vx = p.vx;
         b.vy = p.vy;
 
@@ -310,7 +312,7 @@ export class ServerPhysics {
 
     // Field bounds collisions
     if (b.y - b.r < C.BORDER) { b.y = C.BORDER + b.r; b.vy *= -0.75; }
-    if (b.y + b.r > C.H - C.BORDER) { b.y = C.H - C.BORDER - b.r; b.vy *= -0.75; }
+    if (b.y + b.r > h - C.BORDER) { b.y = h - C.BORDER - b.r; b.vy *= -0.75; }
 
     if (b.x - b.r < C.BORDER) {
       if (b.y > gTop && b.y < gBot) {
@@ -320,19 +322,19 @@ export class ServerPhysics {
         b.x = C.BORDER + b.r; b.vx *= -0.75;
       }
     }
-    if (b.x + b.r > C.W - C.BORDER) {
+    if (b.x + b.r > w - C.BORDER) {
       if (b.y > gTop && b.y < gBot) {
         this.collideBallWithCorner(b, rightPostX, gTop, cornerR, () => onSoundEffect('post'));
         this.collideBallWithCorner(b, rightPostX, gBot, cornerR, () => onSoundEffect('post'));
       } else {
-        b.x = C.W - C.BORDER - b.r; b.vx *= -0.75;
+        b.x = w - C.BORDER - b.r; b.vx *= -0.75;
       }
     }
 
     // Net limits
     if (b.y > gTop && b.y < gBot) {
       const inLeft = b.x < C.BORDER && b.x >= leftNetBack - 30;
-      const inRight = b.x > C.W - C.BORDER && b.x <= rightNetBack + 30;
+      const inRight = b.x > w - C.BORDER && b.x <= rightNetBack + 30;
       if (inLeft || inRight) {
         if (inLeft && b.x - b.r < leftNetBack) { b.x = leftNetBack + b.r; b.vx *= -0.65; }
         if (inRight && b.x + b.r > rightNetBack) { b.x = rightNetBack - b.r; b.vx *= -0.65; }

@@ -97,8 +97,26 @@
             <div class="avatar-editor">
               <div class="avatar-preview" id="profile-avatar-display">👤</div>
               <div class="avatar-inputs">
-                <input type="text" id="profile-badge-input" maxlength="2" placeholder="Emoji / Badge" />
-                <span class="subtext">Use um emoji ou iniciais</span>
+                <label for="profile-badge-select">Emoji / Badge</label>
+                <select id="profile-badge-select">
+                  <option value="🇧🇷">Brasil 🇧🇷</option>
+                  <option value="🇺🇸">EUA 🇺🇸</option>
+                  <option value="🇦🇷">Argentina 🇦🇷</option>
+                  <option value="🇵🇹">Portugal 🇵🇹</option>
+                  <option value="🇪🇸">Espanha 🇪🇸</option>
+                  <option value="🇬🇧">Reino Unido 🇬🇧</option>
+                  <option value="🇯🇵">Japão 🇯🇵</option>
+                  <option value="🇫🇷">França 🇫🇷</option>
+                  <option value="⚽">Futebol ⚽</option>
+                  <option value="🏆">Troféu 🏆</option>
+                  <option value="🤖">Robô 🤖</option>
+                  <option value="🦁">Leão 🦁</option>
+                  <option value="👑">Coroa 👑</option>
+                  <option value="⚡">Raio ⚡</option>
+                  <option value="🌟">Estrela 🌟</option>
+                  <option value="🔥">Fogo 🔥</option>
+                  <option value="👤">Padrão 👤</option>
+                </select>
               </div>
             </div>
 
@@ -110,19 +128,6 @@
             <div class="input-group">
               <label for="profile-bio-input">Biografia (opcional)</label>
               <textarea id="profile-bio-input" maxlength="100" placeholder="Fale um pouco sobre você..."></textarea>
-            </div>
-
-            <div class="input-group">
-              <label for="profile-flag-input">País / Bandeira</label>
-              <select id="profile-flag-input">
-                <option value="🇧🇷">Brasil 🇧🇷</option>
-                <option value="🇺🇸">EUA 🇺🇸</option>
-                <option value="🇦🇷">Argentina 🇦🇷</option>
-                <option value="🇵🇹">Portugal 🇵🇹</option>
-                <option value="🇪🇸">Espanha 🇪🇸</option>
-                <option value="🇬🇧">Reino Unido 🇬🇧</option>
-                <option value="🇯🇵">Japão 🇯🇵</option>
-              </select>
             </div>
 
             <button id="profile-btn-save" class="btn btn-primary">Salvar Alterações</button>
@@ -182,15 +187,6 @@
             <label for="settings-volume">Volume de Efeitos Sonoros</label>
             <input type="range" id="settings-volume" min="0" max="100" value="80" />
             <span class="subtext" id="volume-val-display">80%</span>
-          </div>
-
-          <div class="input-group">
-            <label>Tamanho do Campo de Jogo</label>
-            <div class="btn-group">
-              <button id="size-btn-small" class="btn btn-secondary">Pequeno (896x560)</button>
-              <button id="size-btn-medium" class="btn btn-secondary active">Médio (1024x640)</button>
-              <button id="size-btn-large" class="btn btn-secondary">Grande (1280x768)</button>
-            </div>
           </div>
           
           <div class="input-group">
@@ -324,6 +320,20 @@
             </select>
           </div>
 
+          <div class="input-group">
+            <label for="solo-field-size">Tamanho do Campo</label>
+            <select id="solo-field-size">
+              <option value="small">Pequeno (896x560)</option>
+              <option value="medium" selected>Médio (1024x640)</option>
+              <option value="large">Grande (1280x768)</option>
+            </select>
+          </div>
+
+          <div class="input-group check-group">
+            <input type="checkbox" id="solo-replay-toggle" checked />
+            <label for="solo-replay-toggle">Habilitar Replays de Gols</label>
+          </div>
+
           <button id="solo-btn-start" class="btn btn-primary btn-glow btn-lg">Iniciar Partida</button>
         </div>
       </div>
@@ -408,6 +418,18 @@
               <option value="5">5 Gols</option>
               <option value="0">Sem Limite</option>
             </select>
+          </div>
+          <div class="input-group">
+            <label for="room-field-size">Tamanho do Campo</label>
+            <select id="room-field-size">
+              <option value="small">Pequeno (896x560)</option>
+              <option value="medium" selected>Médio (1024x640)</option>
+              <option value="large">Grande (1280x768)</option>
+            </select>
+          </div>
+          <div class="input-group check-group">
+            <input type="checkbox" id="room-replay-toggle" checked />
+            <label for="room-replay-toggle">Habilitar Replays de Gols</label>
           </div>
           <button type="submit" class="btn btn-primary btn-glow btn-lg">Criar Sala e Ir ao Lobby</button>
         </form>
@@ -504,7 +526,9 @@
             <div class="lobby-ready-section">
               <div class="lobby-settings-summary card-blur-dark">
                 <div>⏱️ Tempo: <strong id="lobby-setting-time">3m</strong></div>
-                <div>⚽ Limite de Gols: <strong id="lobby-setting-goals">3</strong></div>
+                <div>⚽ Gols: <strong id="lobby-setting-goals">3</strong></div>
+                <div>📐 Campo: <strong id="lobby-setting-size">Médio</strong></div>
+                <div>🎬 Replays: <strong id="lobby-setting-replay">Sim</strong></div>
               </div>
               <div class="lobby-actions flex-row gap-2">
                 <button id="lobby-btn-ready" class="btn btn-secondary w-full btn-lg">Marcar como Pronto</button>

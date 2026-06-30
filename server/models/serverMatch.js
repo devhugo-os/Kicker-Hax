@@ -3,12 +3,21 @@ import * as C from '../../shared/constants.js';
 import { ServerPhysics } from './serverPhysics.js';
 
 export class ServerMatch {
-  constructor(roomCode, duration, goalLimit, players, io, onMatchEnd) {
+  constructor(roomCode, duration, goalLimit, players, io, onMatchEnd, fieldSize = 'medium') {
     this.roomCode = roomCode;
     this.duration = duration;
     this.goalLimit = goalLimit;
     this.io = io;
     this.onMatchEnd = onMatchEnd;
+    this.fieldSize = fieldSize;
+
+    if (this.fieldSize === 'small') {
+      this.w = 896; this.h = 560;
+    } else if (this.fieldSize === 'large') {
+      this.w = 1280; this.h = 768;
+    } else {
+      this.w = 1024; this.h = 640;
+    }
 
     this.score = { red: 0, blue: 0 };
     this.matchTime = duration * 60;
@@ -19,8 +28,8 @@ export class ServerMatch {
 
     // Initialize physical objects
     this.ball = {
-      x: C.W / 2,
-      y: C.H / 2,
+      x: this.w / 2,
+      y: this.h / 2,
       vx: 0,
       vy: 0,
       r: C.BALL_RADIUS,
@@ -60,8 +69,8 @@ export class ServerMatch {
 
   createPhysicalPlayer(lobbyPlayer) {
     const isRed = lobbyPlayer.team === 'red';
-    const startX = isRed ? C.BORDER + 120 : C.W - C.BORDER - 120;
-    const startY = C.H * 0.5;
+    const startX = isRed ? C.BORDER + 120 : this.w - C.BORDER - 120;
+    const startY = this.h * 0.5;
 
     return {
       id: lobbyPlayer.id,
@@ -115,8 +124,8 @@ export class ServerMatch {
   kickoff() {
     for (const p of this.players) {
       const isRed = p.team === C.Team.RED;
-      p.x = isRed ? C.BORDER + 120 : C.W - C.BORDER - 120;
-      p.y = C.H * 0.5;
+      p.x = isRed ? C.BORDER + 120 : this.w - C.BORDER - 120;
+      p.y = this.h * 0.5;
       p.vx = 0;
       p.vy = 0;
       p.kickCharge = 0;
@@ -135,8 +144,8 @@ export class ServerMatch {
       p.aiShootLock = 0;
       p.aiFeintLock = 0;
     }
-    this.ball.x = C.W / 2;
-    this.ball.y = C.H / 2;
+    this.ball.x = this.w / 2;
+    this.ball.y = this.h / 2;
     this.ball.vx = 0;
     this.ball.vy = 0;
     this.ball.owner = null;
@@ -212,9 +221,9 @@ export class ServerMatch {
 
     const ours = this.players.filter(x => x.team === p.team);
     const their = this.players.filter(x => x.team !== p.team);
-    const goalX = p.team === C.Team.RED ? C.W - C.BORDER - C.POST_T - 2 : C.BORDER + C.POST_T + 2;
-    const gTop = (C.H - C.GOAL_W_INIT) / 2;
-    const gBot = (C.H + C.GOAL_W_INIT) / 2;
+    const goalX = p.team === C.Team.RED ? this.w - C.BORDER - C.POST_T - 2 : C.BORDER + C.POST_T + 2;
+    const gTop = (this.h - C.GOAL_W_INIT) / 2;
+    const gBot = (this.h + C.GOAL_W_INIT) / 2;
 
     // Ball prediction math
     const ballFuture = { x: this.ball.x, y: this.ball.y };
@@ -348,11 +357,11 @@ export class ServerMatch {
   tick() {
     this.soundEffects = [];
 
-    // Dimensions setup based on constants
-    const gTop = (C.H - C.GOAL_W_INIT) / 2;
-    const gBot = (C.H + C.GOAL_W_INIT) / 2;
+    // Dimensions setup based on dynamic sizes
+    const gTop = (this.h - C.GOAL_W_INIT) / 2;
+    const gBot = (this.h + C.GOAL_W_INIT) / 2;
     const leftPostX = C.BORDER - C.POST_T;
-    const rightPostX = C.W - C.BORDER + C.POST_T;
+    const rightPostX = this.w - C.BORDER + C.POST_T;
     const leftNetBack = leftPostX - C.GOAL_DEPTH;
     const rightNetBack = rightPostX + C.GOAL_DEPTH;
     const cornerR = 10;
@@ -498,7 +507,8 @@ export class ServerMatch {
 
         // Run movements and boundaries
         ServerPhysics.updatePlayerPhysics(p, input, this.ball, (sfx) => this.soundEffects.push(sfx));
-        ServerPhysics.applyLimits(p, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR);
+        ServerPhysics.applyBoostPads(p, this.w, this.h, () => this.soundEffects.push('dribble'));
+        ServerPhysics.applyLimits(p, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, this.w, this.h);
       }
 
       // Collisions and ball movement
@@ -510,10 +520,14 @@ export class ServerMatch {
         }
       });
 
+      // Apply Boost Pads to ball
+      ServerPhysics.applyBoostPads(this.ball, this.w, this.h, () => this.soundEffects.push('power'));
+
       ServerPhysics.updateBallPhysics(
         this.ball, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, this.players,
         (sfx) => this.soundEffects.push(sfx),
-        (side, scorerId) => this.triggerGoal(side, scorerId)
+        (side, scorerId) => this.triggerGoal(side, scorerId),
+        this.w, this.h
       );
 
       this.recordFrame();
