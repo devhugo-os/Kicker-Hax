@@ -448,8 +448,8 @@ export class ServerMatch {
           goalInfo: this.lastGoal
         });
         this.status = 'replay';
-        // Give 240 frames length + padding to clear replay
-        this.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2) + 60;
+        // Give 2x frames length (due to slow motion) + padding to clear replay
+        this.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2 * 2) + 60;
       }
     } else if (this.status === 'replay') {
       this.countdownTimer--;
@@ -555,16 +555,19 @@ export class ServerMatch {
 
           // Regular Shoot Release
           if (p.kickCharge > 0 && !input.shoot) {
-            const charge = ServerPhysics.clamp(p.kickCharge, 0, 1);
-            const cost = Math.max(0.08, 0.40 * charge);
-            if (p.staminaLock <= 0 && p.stamina >= cost) {
-              p.stamina = Math.max(0, p.stamina - cost);
-              p.cool = 14;
-              p.shootHalo = 18;
-              const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
-              const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
-              ServerPhysics.kickBall(p, this.ball, ang, pow);
-              this.soundEffects.push('kick');
+            const nearBall = this.ball.owner === p.id || Math.hypot(p.x - this.ball.x, p.y - this.ball.y) < p.r + this.ball.r + 14;
+            if (nearBall) {
+              const charge = ServerPhysics.clamp(p.kickCharge, 0, 1);
+              const cost = Math.max(0.08, 0.40 * charge);
+              if (p.staminaLock <= 0 && p.stamina >= cost) {
+                p.stamina = Math.max(0, p.stamina - cost);
+                p.cool = 14;
+                p.shootHalo = 18;
+                const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
+                const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
+                ServerPhysics.kickBall(p, this.ball, ang, pow);
+                this.soundEffects.push('kick');
+              }
             }
             p.kickCharge = 0;
           }

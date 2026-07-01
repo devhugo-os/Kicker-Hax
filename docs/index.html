@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-Bjq0hr6t.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-2kRnVtnZ.css">
+  <script type="module" crossorigin src="./assets/index-CalShkMr.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-fKA_g5TV.css">
 </head>
 <body>
 
@@ -181,10 +181,7 @@
             <input type="range" id="settings-volume" min="0" max="100" value="80" />
             <span class="subtext" id="volume-val-display">80%</span>
           </div>
-          <div class="input-group check-group">
-            <input type="checkbox" id="settings-replay" checked />
-            <label for="settings-replay">Habilitar Replays de Gols</label>
-          </div>
+
 
         </div>
       </div>
@@ -522,7 +519,7 @@
       <div class="match-wrap">
         <div class="match-stage" id="match-stage">
           <!-- Lateral Esquerda P2 -->
-          <aside class="match-side side-left">
+          <aside class="match-side side-left" id="match-side-left">
             <div class="side-title">CPU / P2</div>
             <div class="side-bars-container">
               <div class="side-vbar"><div class="side-vlabel">ST</div><i id="left-stam-fill"></i></div>
@@ -534,7 +531,7 @@
           <canvas id="match-canvas" width="1024" height="640" tabindex="0"></canvas>
 
           <!-- Lateral Direita P1 -->
-          <aside class="match-side side-right">
+          <aside class="match-side side-right" id="match-side-right">
             <div class="side-title">Você (P1)</div>
             <div class="side-bars-container">
               <div class="side-vbar"><div class="side-vlabel">ST</div><i id="right-stam-fill"></i></div>
@@ -574,7 +571,6 @@
       <div class="replay-overlay hidden" id="replay-overlay">
         <div class="replay-hud">
           <div class="pill">REPLAY DO GOL</div>
-          <button class="btn btn-primary btn-sm" id="btn-save-replay">Salvar Replay</button>
         </div>
         <div class="replay-caption" id="replay-caption"></div>
       </div>
@@ -691,8 +687,42 @@
       </div>
     </div>
 
+    <!-- VERSION BADGE & CHANGELOG MODAL -->
+    <div id="game-version-badge" class="version-badge">v2.0.0</div>
+
+    <div id="changelog-modal" class="modal-overlay hidden">
+      <div class="modal-card card-blur text-center" style="max-width: 500px; max-height: 80vh; overflow-y: auto;">
+        <h2 class="text-glow">Histórico de Atualizações</h2>
+        <div class="changelog-content" style="text-align: left; margin: 15px 0; font-size: 13px; line-height: 1.6; color: var(--text-secondary);">
+          <div class="changelog-release" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 12px;">
+            <h4 style="color: var(--color-success); margin: 0 0 6px 0;">v2.0.0 - Versão Estável (Atual)</h4>
+            <ul style="padding-left: 18px; margin: 0;">
+              <li>Otimização do loop de física local com acumulador fixo a 60Hz (suporte a monitores de alta taxa de atualização).</li>
+              <li>Correção da hitbox de chute para evitar chutes automáticos de longa distância.</li>
+              <li>Nova interface pós-jogo premium com placar neon e cards de estatísticas.</li>
+              <li>Sistema de pausa automática local e pausar em multiplayer se o Host perder o foco.</li>
+              <li>Esconder painel do bot/CPU no modo solo.</li>
+              <li>Remoção da opção de salvar replay local e otimização do tempo do replay automático em câmera lenta.</li>
+              <li>Arquitetura multiplayer Peer-to-Peer sem necessidade de servidores externos dedicados.</li>
+            </ul>
+          </div>
+          <div class="changelog-release" style="margin-bottom: 20px; opacity: 0.7;">
+            <h4 style="color: var(--text-muted); margin: 0 0 6px 0;">v1.3.0 - Firebase & Correções</h4>
+            <ul style="padding-left: 18px; margin: 0;">
+              <li>Correção de login com Google (Firebase Auth).</li>
+              <li>Prevenção de salvamento de estatísticas no banco de dados para partidas locais de treino contra a CPU.</li>
+              <li>Ajuste do banner de comemoração de gols.</li>
+            </ul>
+          </div>
+        </div>
+        <button id="changelog-btn-close" class="btn btn-secondary w-full">Fechar</button>
+      </div>
+    </div>
+
   </div>
 
+  <!-- PeerJS WebRTC P2P Support -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <!-- Javascript Modules Client -->
 </body>
 </html>

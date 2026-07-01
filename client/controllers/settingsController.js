@@ -51,14 +51,6 @@ export const settingsController = {
       });
     }
 
-    // Settings Replay checkbox
-    const replayCheckbox = document.getElementById('settings-replay');
-    if (replayCheckbox) {
-      replayCheckbox.addEventListener('change', (e) => {
-        localStorage.setItem('kicker_hax_show_replay', e.target.checked ? 'true' : 'false');
-      });
-    }
-
     // Back buttons
     const btnSetBack = document.getElementById('settings-btn-back');
     if (btnSetBack) btnSetBack.onclick = () => router.show('menu-screen');
@@ -88,12 +80,6 @@ export const settingsController = {
         const savedVol = localStorage.getItem('kicker_hax_volume') || '80';
         if (volSlider) volSlider.value = savedVol;
         if (volDisplay) volDisplay.textContent = `${savedVol}%`;
-
-        // Reload replay setting checkbox visual
-        const replayCheckbox = document.getElementById('settings-replay');
-        if (replayCheckbox) {
-          replayCheckbox.checked = localStorage.getItem('kicker_hax_show_replay') !== 'false';
-        }
       }
     });
 

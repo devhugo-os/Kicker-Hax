@@ -547,8 +547,16 @@ export const gameController = {
     canvasW = Math.floor(canvasW);
     canvasH = Math.floor(canvasH);
 
-    stage.style.gridTemplateColumns = `150px ${canvasW}px 150px`;
-    stage.style.width = `${canvasW + 300 + 16}px`;
+    const leftSidebar = document.getElementById('match-side-left');
+    if (this.mode === 'solo') {
+      if (leftSidebar) leftSidebar.style.display = 'none';
+      stage.style.gridTemplateColumns = `${canvasW}px 150px`;
+      stage.style.width = `${canvasW + 150 + 16}px`;
+    } else {
+      if (leftSidebar) leftSidebar.style.display = 'flex';
+      stage.style.gridTemplateColumns = `150px ${canvasW}px 150px`;
+      stage.style.width = `${canvasW + 300 + 16}px`;
+    }
     stage.style.height = `${canvasH}px`;
     
     this.canvas.style.width = `${canvasW}px`;
@@ -572,7 +580,7 @@ export const gameController = {
     // Retrieve selected field size and replay settings
     const sizeSelect = document.getElementById('solo-field-size');
     const fieldSize = sizeSelect ? sizeSelect.value : 'medium';
-    this.showReplay = localStorage.getItem('kicker_hax_show_replay') !== 'false';
+    this.showReplay = true;
 
     // Apply dimensions to canvas
     if (fieldSize === 'small') {
@@ -621,6 +629,8 @@ export const gameController = {
 
     const redPlayer = {
       id: 'cpu',
+      name: 'CPU Bot',
+      badge: '⚙️',
       team: C.Team.RED,
       cpu: true,
       difficulty: this.difficulty,
@@ -634,6 +644,8 @@ export const gameController = {
 
     const bluePlayer = {
       id: 'p1',
+      name: username,
+      badge: badge,
       team: C.Team.BLUE,
       cpu: false,
       x: this.canvas.width - C.BORDER - 120,
@@ -661,12 +673,19 @@ export const gameController = {
     (() => {
       const Physics = ServerPhysics;
       let frameSfx = [];
+      let lastTime = performance.now();
+      const timeStep = 1000 / 60; // 16.67ms per physical tick
+      let accumulator = 0;
 
-      const tickLocalGame = () => {
+      const tickLocalGame = (timestamp) => {
         if (router.currentScreenId !== 'match-screen') return;
         try {
-        frameSfx = [];
-        let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+        
+        if (typeof timestamp !== 'number') timestamp = performance.now();
+        let dt = timestamp - lastTime;
+        if (dt > 100) dt = 100; // Cap to avoid freeze spirals
+        lastTime = timestamp;
+        accumulator += dt;
 
         const w = this.canvas.width;
         const h = this.canvas.height;
@@ -677,9 +696,11 @@ export const gameController = {
         const leftNetBack = leftPostX - C.GOAL_DEPTH;
         const rightNetBack = rightPostX + C.GOAL_DEPTH;
         const cornerR = 10;
+        let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
 
-        // Continuous simulation even when screen loses focus
-        if (!this.isPaused) {
+        while (accumulator >= timeStep) {
+          frameSfx = [];
+          if (!this.isPaused) {
           if (MatchSim.status === 'countdown') {
             MatchSim.countdownTimer--;
             if (MatchSim.countdownTimer <= 0) {
@@ -695,8 +716,8 @@ export const gameController = {
               this.replayTimer = 0;
               document.getElementById('replay-overlay')?.classList.remove('hidden');
               MatchSim.status = 'replay';
-              // Set replay duration
-              MatchSim.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2) + 30;
+              // Set replay duration (accounting for 2x slow motion)
+              MatchSim.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2 * 2) + 60;
               
               // Start local recording
               this.startLocalReplayRecording();
@@ -900,16 +921,19 @@ export const gameController = {
 
               // Regular Shoot Release
               if (p.kickCharge > 0 && !input.shoot) {
-                const charge = Physics.clamp(p.kickCharge, 0, 1);
-                const cost = Math.max(0.08, 0.40 * charge);
-                if (p.staminaLock <= 0 && p.stamina >= cost) {
-                  p.stamina = Math.max(0, p.stamina - cost);
-                  p.cool = 14;
-                  p.shootHalo = 18;
-                  const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
-                  const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
-                  Physics.kickBall(p, localBallSim, ang, pow);
-                  frameSfx.push('kick');
+                const nearBall = localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 14;
+                if (nearBall) {
+                  const charge = Physics.clamp(p.kickCharge, 0, 1);
+                  const cost = Math.max(0.08, 0.40 * charge);
+                  if (p.staminaLock <= 0 && p.stamina >= cost) {
+                    p.stamina = Math.max(0, p.stamina - cost);
+                    p.cool = 14;
+                    p.shootHalo = 18;
+                    const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
+                    const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
+                    Physics.kickBall(p, localBallSim, ang, pow);
+                    frameSfx.push('kick');
+                  }
                 }
                 p.kickCharge = 0;
               }
@@ -970,6 +994,8 @@ export const gameController = {
           // Record locally for replay frames
           recordLocalFrame();
         }
+        accumulator -= timeStep;
+      }
 
         // Render Frame Canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);

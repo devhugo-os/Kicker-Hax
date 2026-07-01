@@ -18,6 +18,22 @@ function initApp() {
     fsBtn1.onclick = () => toggleFullscreen();
   }
 
+  // Version changelog triggers
+  const versionBadge = document.getElementById('game-version-badge');
+  const changelogModal = document.getElementById('changelog-modal');
+  const changelogCloseBtn = document.getElementById('changelog-btn-close');
+
+  if (versionBadge && changelogModal) {
+    versionBadge.onclick = () => {
+      changelogModal.classList.remove('hidden');
+    };
+  }
+  if (changelogCloseBtn && changelogModal) {
+    changelogCloseBtn.onclick = () => {
+      changelogModal.classList.add('hidden');
+    };
+  }
+
   // 2) Initialize individual screen controllers
   authController.init();
   settingsController.loadSettings();

@@ -1,5 +1,7 @@
 // Kicker Hax - SPA Client-side View Router
 
+import { soundFx } from './utils/soundFx.js';
+
 class Router {
   constructor() {
     this.routes = new Map(); // screenId -> { onEnter, onExit }
@@ -14,6 +16,11 @@ class Router {
   }
 
   show(screenId) {
+    if (screenId !== 'match-screen') {
+      try {
+        soundFx.stopCrowd();
+      } catch (err) {}
+    }
     const nextScreen = document.getElementById(screenId);
     if (!nextScreen) {
       console.error(`[Router] Tela não encontrada: ${screenId}`);

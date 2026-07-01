@@ -40,7 +40,7 @@ export const DRIBBLE_STAM_COST = 1 / 3;
 export const POWER_KICK_POWER = 22.0;
 export const POWER_KICK_CD = 60;
 
-export const GOAL_FREEZE_FRAMES = 120;
+export const GOAL_FREEZE_FRAMES = 180;
 export const END_FREEZE_FRAMES = 180;
 
 export const Team = {

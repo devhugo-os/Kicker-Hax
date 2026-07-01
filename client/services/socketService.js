@@ -1,180 +1,573 @@
-// Kicker Hax - Socket.IO Client Service
-import { io } from 'socket.io-client';
+// Kicker Hax - WebRTC Peer-to-Peer & Firebase RTDB Multiplayer Client Service
+import { rtdb } from './firebaseService.js';
+import { ref, set, remove, get, update, onValue, off } from 'firebase/database';
+import { ServerRoom } from '../../server/models/serverRoom.js';
+import { ServerMatch } from '../../server/models/serverMatch.js';
+import { ServerPhysics } from '../../server/models/serverPhysics.js';
+import * as C from '../../shared/constants.js';
 
-let socket = null;
-let roomCode = null;
+class P2PSocketService {
+  constructor() {
+    this.listeners = new Map();
+    this.clientId = null;
+    this.peer = null;
+    this.isHost = false;
+    this.roomCode = null;
+    
+    // Peer connections
+    this.connections = []; // guest WebRTC connections (if host)
+    this.hostConn = null;   // host WebRTC connection (if guest)
+    
+    // Host Room state (only instantiated if host)
+    this.serverRoom = null;
+  }
 
-export const socketService = {
   connect(url = window.location.origin) {
-    if (socket) return socket;
-    
-    // If not local, default to our production remote Socket server
-    let connectUrl = url;
-    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-    
-    if (!isLocal) {
-      connectUrl = 'https://kicker-hax-server.onrender.com';
-      // Wake up sleeping Render container on production
-      fetch(connectUrl).catch(() => {});
-    } else if (url.includes(':3000') || url.includes(':5173')) {
-      connectUrl = `http://${window.location.hostname}:8080`;
+    if (!this.clientId) {
+      this.clientId = 'user_' + Math.random().toString(36).substring(2, 8);
     }
     
-    const transports = isLocal ? ['polling', 'websocket'] : ['websocket'];
-
-    socket = io(connectUrl, {
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 2000,
-      timeout: 10000,
-      // GitHub Pages has hit CORS failures on Socket.IO polling. Production
-      // connects straight through WebSocket, while local dev keeps polling as a fallback.
-      transports,
-      upgrade: isLocal,
-      withCredentials: false
-    });
-
-    socket.on('connect', () => {
-      console.log(`[Socket.IO] Conectado: ${socket.id}`);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.warn(`[Socket.IO] Erro de conexão: ${err.message}`);
-    });
-
-    socket.on('disconnect', () => {
-      console.log(`[Socket.IO] Desconectado.`);
-    });
-
-    return socket;
-  },
+    console.log(`[P2PSocket] Inicializado com ID do Cliente: ${this.clientId}`);
+    this.listenToPublicRooms();
+    return this;
+  }
 
   disconnect() {
-    if (socket) {
-      socket.disconnect();
-      socket = null;
-    }
-  },
+    this.leaveRoom();
+  }
 
   getSocket() {
-    return socket;
-  },
+    return this;
+  }
 
-  // Emitters
+  get id() {
+    return this.clientId;
+  }
+
+  // Socket-like Listener Registry
+  on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event).push(callback);
+  }
+
+  once(event, callback) {
+    const tempCb = (data) => {
+      this.off(event, tempCb);
+      callback(data);
+    };
+    this.on(event, tempCb);
+  }
+
+  off(event, callback) {
+    if (!callback) {
+      this.listeners.delete(event);
+      return;
+    }
+    const arr = this.listeners.get(event);
+    if (arr) {
+      this.listeners.set(event, arr.filter(x => x !== callback));
+    }
+  }
+
+  triggerLocalEvent(event, data) {
+    const arr = this.listeners.get(event);
+    if (arr) {
+      arr.forEach(cb => {
+        try {
+          cb(data);
+        } catch (e) {
+          console.error(`[P2PSocket] Erro no listener do evento ${event}:`, e);
+        }
+      });
+    }
+  }
+
+  emit(event, data) {
+    if (this.isHost) {
+      // Direct local execution for host's own emissions
+      this.handleHostReceivedData(this.clientId, event, data);
+    } else if (this.hostConn && this.hostConn.open) {
+      // Send payload to host via WebRTC
+      this.hostConn.send({ event, data });
+    }
+  }
+
+  // Broadcast helper for host to send to self + all connected guests
+  broadcast(event, data) {
+    this.triggerLocalEvent(event, data);
+    this.connections.forEach(conn => {
+      if (conn.open) {
+        conn.send({ event, data });
+      }
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // ROOM LIFECYCLE
+  // --------------------------------------------------------------------------
   createRoom(name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay, profile) {
-    if (!socket) return;
-    socket.emit('createRoom', { name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay: true, profile });
-  },
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    
+    this.isHost = true;
+    this.roomCode = code;
+    
+    // Instantiate Host PeerJS
+    if (this.peer) this.peer.destroy();
+    this.peer = new Peer(this.clientId);
+    
+    this.peer.on('open', (id) => {
+      console.log('[P2PSocket] Host Peer criado:', id);
+      
+      this.serverRoom = new ServerRoom(code, name, this.clientId, {
+        maxPlayers: parseInt(maxPlayers) || 10,
+        password: password || null,
+        duration: parseInt(duration) || 3,
+        goalLimit: parseInt(goalLimit) || 3,
+        fieldSize: fieldSize || 'medium',
+        showReplay: true
+      });
+      
+      this.serverRoom.addPlayer(this.clientId, profile, 'spectator');
+
+      // Add connection to mock database structure
+      this.connections = [];
+
+      // Save room meta record to Firebase RTDB for matchmaking
+      const roomRef = ref(rtdb, `multiplayerRooms/${code}`);
+      set(roomRef, {
+        code,
+        name,
+        maxPlayers: parseInt(maxPlayers) || 10,
+        password: password || '',
+        playersCount: 1,
+        status: 'lobby',
+        duration: parseInt(duration) || 3,
+        goalLimit: parseInt(goalLimit) || 3,
+        fieldSize: fieldSize || 'medium',
+        hostPeerId: id
+      }).then(() => {
+        this.triggerLocalEvent('roomCreated', code);
+        this.triggerLocalEvent('lobbyUpdate', this.serverRoom.getLobbyInfo());
+      });
+    });
+
+    this.peer.on('connection', (conn) => {
+      console.log('[P2PSocket] Recebida tentativa de conexão de:', conn.peer);
+      
+      conn.on('data', (payload) => {
+        if (payload && payload.event) {
+          this.handleHostReceivedData(conn.peer, payload.event, payload.data, conn);
+        }
+      });
+      
+      conn.on('close', () => {
+        this.handleHostPlayerDisconnect(conn);
+      });
+
+      conn.on('error', (err) => {
+        console.error('[P2PSocket] Erro no canal de dados do peer:', err);
+      });
+    });
+  }
 
   joinRoom(code, password, profile) {
-    if (!socket) return;
-    socket.emit('joinRoom', { roomCode: code, password, profile });
-  },
+    const roomCode = code.toUpperCase();
+    this.isHost = false;
+    this.roomCode = roomCode;
+
+    // Fetch room from RTDB
+    const roomRef = ref(rtdb, `multiplayerRooms/${roomCode}`);
+    get(roomRef).then((snapshot) => {
+      if (!snapshot.exists()) {
+        this.triggerLocalEvent('joinError', 'Sala não encontrada.');
+        return;
+      }
+
+      const roomData = snapshot.val();
+      if (roomData.password && roomData.password !== password) {
+        this.triggerLocalEvent('joinError', 'Senha incorreta.');
+        return;
+      }
+
+      if (roomData.playersCount >= roomData.maxPlayers) {
+        this.triggerLocalEvent('joinError', 'Sala cheia.');
+        return;
+      }
+
+      // Instantiate Guest PeerJS
+      if (this.peer) this.peer.destroy();
+      this.peer = new Peer(this.clientId);
+
+      this.peer.on('open', (id) => {
+        console.log('[P2PSocket] Conectando como convidado com ID:', id);
+
+        const conn = this.peer.connect(roomData.hostPeerId);
+        this.hostConn = conn;
+
+        conn.on('open', () => {
+          console.log('[P2PSocket] WebRTC aberto com Host. Enviando requisição de entrada...');
+          conn.send({
+            event: 'joinRoom',
+            data: { profile }
+          });
+        });
+
+        conn.on('data', (payload) => {
+          const { event, data } = payload;
+          if (event === 'joinSuccess') {
+            this.triggerLocalEvent('joinSuccess', roomCode);
+          } else if (event === 'joinError') {
+            this.triggerLocalEvent('joinError', data);
+            this.leaveRoom();
+          } else {
+            this.triggerLocalEvent(event, data);
+          }
+        });
+
+        conn.on('close', () => {
+          console.log('[P2PSocket] Host encerrou a conexão.');
+          this.triggerLocalEvent('kicked');
+          this.leaveRoom();
+        });
+      });
+
+      this.peer.on('error', (err) => {
+        console.error('[P2PSocket] Erro do guest peer:', err);
+        this.triggerLocalEvent('joinError', 'Falha ao conectar via WebRTC.');
+      });
+    });
+  }
 
   leaveRoom() {
-    if (!socket) return;
-    socket.emit('leaveRoom');
-  },
+    if (this.isHost && this.roomCode) {
+      // Remove from matchmaking index
+      const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
+      remove(roomRef);
 
+      // Halt match simulation
+      if (this.serverRoom && this.serverRoom.match) {
+        this.serverRoom.match.isHostPaused = false;
+        clearInterval(this.serverRoom.match.tickInterval);
+      }
+
+      // Close guests WebRTC channels
+      this.connections.forEach(c => c.close());
+      this.connections = [];
+      this.serverRoom = null;
+    } else if (this.hostConn) {
+      this.hostConn.close();
+      this.hostConn = null;
+    }
+
+    if (this.peer) {
+      this.peer.destroy();
+      this.peer = null;
+    }
+
+    this.isHost = false;
+    this.roomCode = null;
+  }
+
+  // --------------------------------------------------------------------------
+  // HOST NETWORK REQUEST PROCESSING
+  // --------------------------------------------------------------------------
+  handleHostReceivedData(socketId, event, data, conn) {
+    if (!this.serverRoom) return;
+
+    if (event === 'joinRoom') {
+      const { profile } = data;
+      if (this.serverRoom.players.length >= this.serverRoom.maxPlayers) {
+        if (conn) conn.send({ event: 'joinError', data: 'Sala cheia.' });
+        return;
+      }
+
+      // Save player WebRTC data channel
+      if (conn) {
+        conn.peerId = socketId;
+        this.connections.push(conn);
+      }
+
+      this.serverRoom.addPlayer(socketId, profile, 'spectator');
+
+      // Update matchmaking metadata count
+      const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
+      update(roomRef, { playersCount: this.serverRoom.players.length });
+
+      if (conn) conn.send({ event: 'joinSuccess', data: this.roomCode });
+
+      this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+      const msg = this.serverRoom.addChatMessage('Sistema', '', '📢', `${profile.username} entrou na sala.`);
+      this.broadcast('chatMessage', msg);
+    } 
+    
+    else if (event === 'changeTeam') {
+      const changed = this.serverRoom.changeTeam(socketId, data);
+      if (changed) {
+        this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+      }
+    } 
+    
+    else if (event === 'toggleReady') {
+      this.serverRoom.toggleReady(socketId);
+      this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+    } 
+    
+    else if (event === 'chatMessage') {
+      const player = this.serverRoom.players.find(p => p.id === socketId);
+      const username = player ? player.username : 'Jogador';
+      const badge = player ? player.badge : '';
+      const msg = this.serverRoom.addChatMessage(username, '', badge, data);
+      this.broadcast('chatMessage', msg);
+    } 
+    
+    else if (event === 'gameInput') {
+      if (this.serverRoom.match) {
+        this.serverRoom.match.updateInput(socketId, data);
+      }
+    }
+
+    else if (event === 'hostFocusChanged') {
+      if (this.serverRoom.match) {
+        this.serverRoom.match.isHostPaused = !!data.focusLost;
+      }
+    }
+  }
+
+  handleHostPlayerDisconnect(conn) {
+    const socketId = conn.peer;
+    this.connections = this.connections.filter(c => c !== conn);
+
+    if (this.serverRoom) {
+      const removed = this.serverRoom.removePlayer(socketId);
+      
+      const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
+      update(roomRef, { playersCount: this.serverRoom.players.length });
+
+      if (removed) {
+        const leaveMsg = this.serverRoom.addChatMessage('Sistema', '', '📢', `${removed.username} saiu da sala.`);
+        this.broadcast('chatMessage', leaveMsg);
+      }
+
+      this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // LOBBY CONTROL ACTIONS (HOST ONLY OR GUEST)
+  // --------------------------------------------------------------------------
   changeTeam(team) {
-    if (!socket) return;
-    socket.emit('changeTeam', team);
-  },
+    this.emit('changeTeam', team);
+  }
 
   toggleReady() {
-    if (!socket) return;
-    socket.emit('toggleReady');
-  },
+    this.emit('toggleReady');
+  }
 
   sendChatMessage(text) {
-    if (!socket) return;
-    socket.emit('chatMessage', text);
-  },
+    this.emit('chatMessage', text);
+  }
 
   addBot(team) {
-    if (!socket) return;
-    socket.emit('addBot', team);
-  },
+    if (!this.isHost || !this.serverRoom) return;
+
+    const botId = `bot_${Math.random().toString(36).substr(2, 5)}`;
+    const botProfile = {
+      uid: '',
+      username: `Bot ${team === 'red' ? 'Vermelho' : 'Azul'} (CPU)`,
+      badge: '⚙️',
+      cpu: true,
+      difficulty: 'medium'
+    };
+
+    this.serverRoom.addPlayer(botId, botProfile, team);
+    this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+  }
 
   removeBot(botId) {
-    if (!socket) return;
-    socket.emit('removeBot', botId);
-  },
+    if (!this.isHost || !this.serverRoom) return;
+    this.serverRoom.removePlayer(botId);
+    this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+  }
 
   kickPlayer(targetSocketId) {
-    if (!socket) return;
-    socket.emit('kickPlayer', targetSocketId);
-  },
+    if (!this.isHost || !this.serverRoom) return;
+
+    const conn = this.connections.find(c => c.peer === targetSocketId);
+    const targetPlayer = this.serverRoom.players.find(p => p.id === targetSocketId);
+
+    if (targetPlayer) {
+      this.serverRoom.removePlayer(targetSocketId);
+      this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+
+      const kickMsg = this.serverRoom.addChatMessage('Sistema', '', '📢', `${targetPlayer.username} foi expulso da sala.`);
+      this.broadcast('chatMessage', kickMsg);
+
+      if (conn) {
+        conn.send({ event: 'kicked' });
+        conn.close();
+      }
+    }
+  }
 
   updateRoomSettings(settings) {
-    if (!socket) return;
-    socket.emit('updateRoomSettings', settings);
-  },
+    if (!this.isHost || !this.serverRoom) return;
+
+    this.serverRoom.updateSettings(settings);
+    this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+
+    // Update settings in Firebase Realtime Database
+    const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
+    update(roomRef, {
+      name: this.serverRoom.name,
+      maxPlayers: this.serverRoom.maxPlayers,
+      duration: this.serverRoom.duration,
+      goalLimit: this.serverRoom.goalLimit,
+      fieldSize: this.serverRoom.fieldSize
+    });
+  }
 
   startGame() {
-    if (!socket) return;
-    socket.emit('startGame');
-  },
+    if (!this.isHost || !this.serverRoom) return;
+
+    const redTeam = this.serverRoom.players.filter(p => p.team === 'red');
+    const blueTeam = this.serverRoom.players.filter(p => p.team === 'blue');
+
+    if (redTeam.length === 0 || blueTeam.length === 0) {
+      this.triggerLocalEvent('startError', 'Cada time precisa de pelo menos 1 jogador (ou bot).');
+      return;
+    }
+
+    this.serverRoom.status = 'playing';
+
+    // Mock IO object to pass to ServerMatch
+    const mockIo = {
+      to: (roomCode) => ({
+        emit: (event, data) => {
+          this.broadcast(event, data);
+        }
+      })
+    };
+
+    // Instantiate physics tick simulator inside host client browser!
+    this.serverRoom.match = new ServerMatch(
+      this.roomCode,
+      this.serverRoom.duration,
+      this.serverRoom.goalLimit,
+      this.serverRoom.players,
+      mockIo,
+      (score) => {
+        // Callback on match end
+        this.serverRoom.status = 'lobby';
+        this.serverRoom.players.forEach(p => p.ready = false);
+        this.serverRoom.match = null;
+
+        this.broadcast('matchEnded', score);
+        this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+
+        // Update status in Firebase
+        const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
+        update(roomRef, { status: 'lobby' });
+      },
+      this.serverRoom.fieldSize
+    );
+
+    this.broadcast('matchStarted');
+
+    const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
+    update(roomRef, { status: 'playing' });
+  }
 
   sendGameInput(inputData) {
-    if (!socket) return;
-    socket.emit('gameInput', inputData);
-  },
+    this.emit('gameInput', inputData);
+  }
 
-  // Event Listeners Registration
+  hostResetMatch() {
+    if (this.isHost && this.serverRoom && this.serverRoom.match) {
+      this.serverRoom.match.resetMatch();
+      this.broadcast('matchReset');
+    }
+  }
+
+  hostChangeFieldSize(size) {
+    if (this.isHost && this.serverRoom) {
+      this.serverRoom.fieldSize = size;
+      if (this.serverRoom.match) {
+        this.serverRoom.match.changeFieldSize(size);
+      }
+      this.broadcast('fieldSizeUpdated', { size });
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // EVENT LISTENER REGISTRATION
+  // --------------------------------------------------------------------------
   onLobbyUpdate(callback) {
-    if (!socket) return;
-    socket.on('lobbyUpdate', callback);
-  },
+    this.on('lobbyUpdate', callback);
+  }
 
   onChat(callback) {
-    if (!socket) return;
-    socket.on('chatMessage', callback);
-  },
+    this.on('chatMessage', callback);
+  }
 
   onMatchStarted(callback) {
-    if (!socket) return;
-    socket.on('matchStarted', callback);
-  },
+    this.on('matchStarted', callback);
+  }
 
   onGameState(callback) {
-    if (!socket) return;
-    // Realtime high frequency event, use off to prevent double binding
-    socket.off('gameState');
-    socket.on('gameState', callback);
-  },
+    this.off('gameState');
+    this.on('gameState', callback);
+  }
 
   onPlayReplay(callback) {
-    if (!socket) return;
-    socket.on('playReplay', callback);
-  },
+    this.on('playReplay', callback);
+  }
 
   onMatchEnded(callback) {
-    if (!socket) return;
-    socket.on('matchEnded', callback);
-  },
+    this.on('matchEnded', callback);
+  }
 
   onKicked(callback) {
-    if (!socket) return;
-    socket.on('kicked', callback);
-  },
+    this.on('kicked', callback);
+  }
 
   onPublicRoomsList(callback) {
-    if (!socket) return;
-    socket.on('publicRoomsList', callback);
-  },
+    this.on('publicRoomsList', callback);
+  }
 
   clearListeners() {
-    if (!socket) return;
-    socket.off('lobbyUpdate');
-    socket.off('chatMessage');
-    socket.off('matchStarted');
-    socket.off('gameState');
-    socket.off('playReplay');
-    socket.off('matchEnded');
-    socket.off('kicked');
-    socket.off('publicRoomsList');
+    this.off('lobbyUpdate');
+    this.off('chatMessage');
+    this.off('matchStarted');
+    this.off('gameState');
+    this.off('playReplay');
+    this.off('matchEnded');
+    this.off('kicked');
+    this.off('publicRoomsList');
   }
-};
+
+  // --------------------------------------------------------------------------
+  // MATCHMAKING PUBLIC ROOMS LISTENING (FIREBASE RTDB)
+  // --------------------------------------------------------------------------
+  listenToPublicRooms() {
+    const roomsRef = ref(rtdb, 'multiplayerRooms');
+    onValue(roomsRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const list = Object.keys(data).map(key => data[key]);
+      this.triggerLocalEvent('publicRoomsList', list);
+    });
+  }
+
+  stopListeningToPublicRooms() {
+    const roomsRef = ref(rtdb, 'multiplayerRooms');
+    off(roomsRef);
+  }
+}
+
+export const socketService = new P2PSocketService();
 export default socketService;
