@@ -409,13 +409,11 @@ export const gameController = {
     }
 
     // Bind ranking screens selector filters
-    const btnRankWins = document.getElementById('rank-filter-wins');
-    const btnRankGoals = document.getElementById('rank-filter-goals');
-    const btnRankLvl = document.getElementById('rank-filter-level');
-
-    if (btnRankWins) btnRankWins.onclick = () => this.loadRanking('wins');
-    if (btnRankGoals) btnRankGoals.onclick = () => this.loadRanking('goals');
-    if (btnRankLvl) btnRankLvl.onclick = () => this.loadRanking('level');
+    const filters = ['overall', 'wins', 'goals', 'level', 'played', 'dribbles', 'shots', 'mvps'];
+    filters.forEach(f => {
+      const btn = document.getElementById(`rank-filter-${f}`);
+      if (btn) btn.onclick = () => this.loadRanking(f);
+    });
 
     // Post Game Screen Continue button
     const btnPostContinue = document.getElementById('post-btn-continue');
@@ -548,15 +546,9 @@ export const gameController = {
     canvasH = Math.floor(canvasH);
 
     const leftSidebar = document.getElementById('match-side-left');
-    if (this.mode === 'solo') {
-      if (leftSidebar) leftSidebar.style.display = 'none';
-      stage.style.gridTemplateColumns = `${canvasW}px 150px`;
-      stage.style.width = `${canvasW + 150 + 16}px`;
-    } else {
-      if (leftSidebar) leftSidebar.style.display = 'flex';
-      stage.style.gridTemplateColumns = `150px ${canvasW}px 150px`;
-      stage.style.width = `${canvasW + 300 + 16}px`;
-    }
+    if (leftSidebar) leftSidebar.style.display = 'none';
+    stage.style.gridTemplateColumns = `${canvasW}px 150px`;
+    stage.style.width = `${canvasW + 150 + 16}px`;
     stage.style.height = `${canvasH}px`;
     
     this.canvas.style.width = `${canvasW}px`;
@@ -953,6 +945,19 @@ export const gameController = {
               }
             });
 
+            // Track Shots on Goal (60Hz)
+            if (this.shotCooldown > 0) {
+              this.shotCooldown--;
+            }
+            const p1NearBall = Math.hypot(bluePlayer.x - localBallSim.x, bluePlayer.y - localBallSim.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 12;
+            if (p1NearBall && (inputP1.shoot || inputP1.power) && !this.shotCooldown) {
+              const ang = Math.atan2(localBallSim.y - bluePlayer.y, localBallSim.x - bluePlayer.x);
+              if (Math.cos(ang) > 0.2) {
+                this.p1Shots = (this.p1Shots || 0) + 1;
+                this.shotCooldown = 30;
+              }
+            }
+
             Physics.updateBallPhysics(
               localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, localPlayers,
               (sfx) => frameSfx.push(sfx),
@@ -969,16 +974,15 @@ export const gameController = {
                 frameSfx.push('goal');
                 frameSfx.push('cheer');
 
-                const goalsTotal = MatchSim.score.red >= this.goalLimit || MatchSim.score.blue >= this.goalLimit;
-                if (goalsTotal && this.goalLimit > 0) {
-                  MatchSim.status = 'ended';
-                  this.localMatchEnd(MatchSim.score);
+                if (this.showReplay) {
+                  MatchSim.status = 'freeze';
+                  MatchSim.goalFreezeTimer = C.GOAL_FREEZE_FRAMES;
                 } else {
-                  if (this.showReplay) {
-                    MatchSim.status = 'freeze';
-                    MatchSim.goalFreezeTimer = C.GOAL_FREEZE_FRAMES;
+                  const goalsTotal = MatchSim.score.red >= this.goalLimit || MatchSim.score.blue >= this.goalLimit;
+                  if (goalsTotal && this.goalLimit > 0) {
+                    MatchSim.status = 'ended';
+                    this.localMatchEnd(MatchSim.score);
                   } else {
-                    // Bypass replay, restart directly
                     MatchSim.status = 'countdown';
                     MatchSim.countdownTimer = 300;
                     resetFieldPositions();
@@ -1063,18 +1067,7 @@ export const gameController = {
         this.totalPossessionFrames = (this.totalPossessionFrames || 0) + 1;
         const p1Poss = Math.round(((this.p1PossessionFrames || 0) / (this.totalPossessionFrames || 1)) * 100);
 
-        // Track Shots on Goal
-        if (this.shotCooldown > 0) {
-          this.shotCooldown--;
-        }
-        const p1NearBall = Math.hypot(bluePlayer.x - localBallSim.x, bluePlayer.y - localBallSim.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 12;
-        if (p1NearBall && (inputP1.shoot || inputP1.power) && !this.shotCooldown) {
-          const ang = Math.atan2(localBallSim.y - bluePlayer.y, localBallSim.x - bluePlayer.x);
-          if (Math.cos(ang) > 0.2) {
-            this.p1Shots = (this.p1Shots || 0) + 1;
-            this.shotCooldown = 30;
-          }
-        }
+
 
         // Track Tackles and Dribbles counts from state cooldown activations
         if (bluePlayer.tackle_cd > 0 && !this.p1TackleLock) {
@@ -1196,7 +1189,21 @@ export const gameController = {
     document.getElementById('post-score-blue').textContent = score.blue;
     document.getElementById('post-mvp').textContent = score.blue >= score.red ? menuController.profileData.username : 'CPU Bot';
     document.getElementById('post-xp-gained').textContent = `+0 XP (Modo Treino)`;
-    document.getElementById('post-total-goals').textContent = score.red + score.blue;
+    
+    const winTitle = document.getElementById('post-winner-title');
+    if (winTitle) {
+      if (score.blue === score.red) {
+        winTitle.textContent = 'Empate!';
+        winTitle.style.color = '#94a3b8'; // text-muted style slate
+      } else if (score.blue > score.red) {
+        winTitle.textContent = 'Time Azul Ganhou!';
+        winTitle.style.color = '#3b82f6'; // blue
+      } else {
+        winTitle.textContent = 'Time Vermelho Ganhou!';
+        winTitle.style.color = '#ef4444'; // red
+      }
+    }
+    
     router.show('post-game-screen');
   },
 
@@ -1241,7 +1248,10 @@ export const gameController = {
       // Update focusLostBadge based on server's host pause state
       const badge = document.getElementById('focus-lost-badge');
       if (badge) {
-        if (state.isHostPaused) {
+        if (state.isPausedByUser) {
+          badge.textContent = '⏸️ Partida Pausada pelo Host';
+          badge.classList.remove('hidden');
+        } else if (state.isHostPaused) {
           badge.textContent = '⏸️ Pausado (Dono da sala fora da aba)';
           badge.classList.remove('hidden');
         } else {
@@ -1292,6 +1302,10 @@ export const gameController = {
       this.replayTimer = 0;
       this.lastGoal = goalInfo;
 
+      if (goalInfo && goalInfo.scorerId === socketService.getSocket().id && !goalInfo.ownGoal) {
+        this.goalsScored = (this.goalsScored || 0) + 1;
+      }
+
       document.getElementById('replay-overlay')?.classList.remove('hidden');
 
       // Start recording locally for MP4 export
@@ -1302,19 +1316,34 @@ export const gameController = {
       showToast('Partida finalizada!', 'info');
       this.stopLocalReplayRecording();
       
-      const isSpec = !this.players.find(p => p.id === socketService.getSocket().id && p.team !== 'spectator');
+      const localId = socketService.getSocket().id;
+      const localP = this.players.find(p => p.id === localId);
+      const isSpec = !localP || localP.team === 'spectator';
       
       let isWin = false;
       let isLoss = false;
       let isDraw = score.red === score.blue;
 
-      if (!isSpec) {
-        const localP = this.players.find(p => p.id === socketService.getSocket().id);
+      if (!isSpec && localP) {
         const winTeam = score.blue > score.red ? C.Team.BLUE : C.Team.RED;
         isWin = localP.team === winTeam && !isDraw;
         isLoss = localP.team !== winTeam && !isDraw;
       }
 
+      // Determine MVP
+      const winTeam = score.blue > score.red ? C.Team.BLUE : C.Team.RED;
+      const winningPlayers = this.players.filter(p => p.team === winTeam);
+      let mvpName = 'Nenhum';
+      let mvpId = '';
+      if (winningPlayers.length > 0) {
+        // Fallback to first winning player or local if local won
+        const localWin = winningPlayers.find(p => p.id === localId);
+        const mvpP = localWin || winningPlayers[0];
+        mvpName = mvpP.username || 'Jogador';
+        mvpId = mvpP.id;
+      }
+
+      const isMvp = !isSpec && isWin && (mvpId === localId);
       const xpGained = isSpec ? 0 : isWin ? 80 : isDraw ? 30 : 15;
 
       if (!isSpec) {
@@ -1322,7 +1351,10 @@ export const gameController = {
         firebaseService.saveMatchResult(
           this.currentUser.uid,
           isWin, isLoss, isDraw,
-          this.goalsScored, this.assistsGained, this.savesDone,
+          this.goalsScored || 0,
+          this.p1Dribbles || 0,
+          this.p1Shots || 0,
+          isMvp ? 1 : 0,
           xpGained
         ).then(() => {
           const matchDoc = {
@@ -1341,9 +1373,23 @@ export const gameController = {
       // Show results
       document.getElementById('post-score-red').textContent = score.red;
       document.getElementById('post-score-blue').textContent = score.blue;
-      document.getElementById('post-mvp').textContent = score.blue >= score.red ? 'Azul' : 'Vermelho';
+      document.getElementById('post-mvp').textContent = mvpName;
       document.getElementById('post-xp-gained').textContent = isSpec ? 'Espectador' : `+${xpGained} XP`;
-      document.getElementById('post-total-goals').textContent = score.red + score.blue;
+      
+      const winTitle = document.getElementById('post-winner-title');
+      if (winTitle) {
+        if (score.blue === score.red) {
+          winTitle.textContent = 'Empate!';
+          winTitle.style.color = '#94a3b8'; // text-muted style slate
+        } else if (score.blue > score.red) {
+          winTitle.textContent = 'Time Azul Ganhou!';
+          winTitle.style.color = '#3b82f6'; // blue
+        } else {
+          winTitle.textContent = 'Time Vermelho Ganhou!';
+          winTitle.style.color = '#ef4444'; // red
+        }
+      }
+      
       router.show('post-game-screen');
     });
 
@@ -1498,6 +1544,10 @@ export const gameController = {
     soundFx.stopCrowd();
     socketService.clearListeners();
     document.getElementById('replay-overlay')?.classList.add('hidden');
+    
+    const gameChat = document.getElementById('game-chat-messages');
+    if (gameChat) gameChat.innerHTML = '';
+    
     window.removeEventListener('resize', () => this.resizeCanvasContainer());
   },
 
@@ -1593,7 +1643,27 @@ export const gameController = {
     
     // Players
     frame.players.forEach(p => {
-      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, p.name, p.badge, p.halo, p.inv, p.stun, p.has);
+      const currentP = this.players.find(x => x.id === p.id);
+      let name = p.name;
+      let badge = p.badge;
+      
+      if (!name) {
+        if (currentP) {
+          name = currentP.username;
+          badge = currentP.badge;
+        } else if (p.id === 'p1') {
+          name = menuController.profileData.username;
+          badge = menuController.profileData.badge || '🇧🇷';
+        } else if (p.id === 'cpu') {
+          name = 'CPU Bot';
+          badge = '⚙️';
+        } else {
+          name = 'Jogador';
+          badge = '🏳️';
+        }
+      }
+      
+      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, name, badge, p.halo, p.inv, p.stun, p.has);
     });
 
     // Replay text info
@@ -2081,46 +2151,47 @@ export const gameController = {
   // ==========================================================================
   // RANKINGS LOADER
   // ==========================================================================
-  async loadRanking(filter = 'wins') {
+  async loadRanking(filter = 'overall') {
     const tbody = document.getElementById('leaderboard-body');
     if (!tbody) return;
 
-    tbody.innerHTML = `<tr><td colspan="7" class="text-center">Carregando dados da tabela...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center">Carregando dados da tabela...</td></tr>`;
 
     // Filters active toggles
-    const btnWins = document.getElementById('rank-filter-wins');
-    const btnGoals = document.getElementById('rank-filter-goals');
-    const btnLvl = document.getElementById('rank-filter-level');
-
-    [btnWins, btnGoals, btnLvl].forEach(b => b?.classList.remove('active'));
-    if (filter === 'wins') btnWins?.classList.add('active');
-    if (filter === 'goals') btnGoals?.classList.add('active');
-    if (filter === 'level') btnLvl?.classList.add('active');
+    const filters = ['overall', 'wins', 'goals', 'level', 'played', 'dribbles', 'shots', 'mvps'];
+    filters.forEach(f => {
+      const btn = document.getElementById(`rank-filter-${f}`);
+      if (btn) {
+        if (f === filter) btn.classList.add('active');
+        else btn.classList.remove('active');
+      }
+    });
 
     try {
       const records = await firebaseService.getGlobalRanking(filter, 10);
       if (records.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center">Nenhum jogador registrado no ranking.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center">Nenhum jogador registrado no ranking.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = '';
       records.forEach((r, idx) => {
-        const winrate = (r.wins + r.losses) > 0 ? Math.round((r.wins / (r.wins + r.losses)) * 100) : 0;
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>#${idx + 1}</strong></td>
           <td><span>${r.badge}</span> <strong>${r.displayName || r.username}</strong></td>
           <td>${r.level || 1}</td>
-          <td class="text-success">${r.wins}</td>
-          <td class="text-danger">${r.losses}</td>
-          <td>${r.goals}</td>
-          <td>${winrate}%</td>
+          <td>${r.matchesPlayed || 0}</td>
+          <td class="text-success">${r.wins || 0}</td>
+          <td>${r.goals || 0}</td>
+          <td>${r.dribbles || 0}</td>
+          <td>${r.shots || 0}</td>
+          <td>${r.mvps || 0}</td>
         `;
         tbody.appendChild(tr);
       });
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Erro ao carregar dados do banco.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="9" class="text-center text-danger">Erro ao carregar dados do banco.</td></tr>`;
     }
   },
 
@@ -2130,19 +2201,67 @@ export const gameController = {
 
     if (modal.classList.contains('hidden')) {
       modal.classList.remove('hidden');
+
       if (this.mode === 'solo') {
         this.isPaused = true;
+      } else if (this.mode === 'online' && this.isHost) {
+        // Pause match for all guests
+        const paused = socketService.hostTogglePause();
+        if (paused) {
+          showToast('Partida pausada para todos os jogadores.', 'info');
+        }
       }
-      
+
       const hostCtrl = document.getElementById('host-controls');
       if (hostCtrl) {
         const isHost = this.mode === 'solo' || (this.mode === 'online' && this.isHost);
         hostCtrl.style.display = isHost ? 'block' : 'none';
       }
+
+      // Populate team reorganizer (multiplayer host only)
+      const reorganizerPanel = document.getElementById('host-team-reorganizer');
+      const reorganizerList = document.getElementById('reorganizer-list');
+      if (reorganizerPanel && reorganizerList && this.mode === 'online' && this.isHost) {
+        reorganizerPanel.classList.remove('hidden');
+        reorganizerList.innerHTML = '';
+        this.players.forEach(p => {
+          if (!p || !p.id) return;
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:11px;';
+          const teamColor = p.team === 'red' ? '#ef4444' : p.team === 'blue' ? '#3b82f6' : '#64748b';
+          row.innerHTML = `
+            <span style="flex:1;font-weight:600;color:${teamColor};">${p.badge || '🏳️'} ${p.username || p.name || p.id.slice(0,8)}</span>
+            <button style="padding:2px 6px;font-size:10px;background:#ef4444;border:none;border-radius:4px;color:#fff;cursor:pointer;" data-pid="${p.id}" data-team="red">🔴</button>
+            <button style="padding:2px 6px;font-size:10px;background:#3b82f6;border:none;border-radius:4px;color:#fff;cursor:pointer;" data-pid="${p.id}" data-team="blue">🔵</button>
+            <button style="padding:2px 6px;font-size:10px;background:#475569;border:none;border-radius:4px;color:#fff;cursor:pointer;" data-pid="${p.id}" data-team="spectator">👓</button>
+          `;
+          row.querySelectorAll('button').forEach(btn => {
+            btn.onclick = () => {
+              const pid = btn.dataset.pid;
+              const team = btn.dataset.team;
+              socketService.hostMovePlayerTeam(pid, team);
+              showToast(`Jogador movido para ${team === 'red' ? '🔴 Vermelho' : team === 'blue' ? '🔵 Azul' : '👓 Espectadores'}`, 'info');
+              // Refresh list
+              setTimeout(() => this.togglePauseMenu(), 100);
+              setTimeout(() => this.togglePauseMenu(), 200);
+            };
+          });
+          reorganizerList.appendChild(row);
+        });
+      } else if (reorganizerPanel) {
+        reorganizerPanel.classList.add('hidden');
+      }
+
     } else {
       modal.classList.add('hidden');
+
       if (this.mode === 'solo') {
         this.isPaused = false;
+      } else if (this.mode === 'online' && this.isHost) {
+        // Resume match for all guests if it was paused by user
+        if (socketService.serverRoom?.match?.isPausedByUser) {
+          socketService.hostTogglePause();
+        }
       }
     }
   },

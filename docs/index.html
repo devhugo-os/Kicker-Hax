@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-LwALbLka.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-C9p3msMF.css">
+  <script type="module" crossorigin src="./assets/index-CClo8MNK.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BLq3Be3Q.css">
 </head>
 <body>
 
@@ -150,9 +150,10 @@
             <div class="advanced-stats card-blur-dark">
               <h3>Detalhes Individuais</h3>
               <div class="adv-stat-row"><span>⚽ Gols Marcados</span> <strong id="stats-goals">0</strong></div>
-              <div class="adv-stat-row"><span>🤝 Assistências</span> <strong id="stats-assists">0</strong></div>
-              <div class="adv-stat-row"><span>🛡️ Defesas</span> <strong id="stats-saves">0</strong></div>
-              <div class="adv-stat-row"><span>⚡ Nível Atual</span> <strong id="stats-level">1</strong></div>
+              <div class="adv-stat-row"><span>⚡ Dribles</span> <strong id="stats-dribbles">0</strong></div>
+              <div class="adv-stat-row"><span>🎯 Chutes</span> <strong id="stats-shots">0</strong></div>
+              <div class="adv-stat-row"><span>🏆 MVPs</span> <strong id="stats-mvps">0</strong></div>
+              <div class="adv-stat-row"><span>🌟 Nível Atual</span> <strong id="stats-level">1</strong></div>
               <div class="adv-stat-row"><span>✨ Experiência (XP)</span> <strong id="stats-xp">0</strong></div>
             </div>
             
@@ -602,6 +603,14 @@
             <button class="btn btn-sm btn-success" id="pause-btn-apply-settings" style="flex: 1; font-size: 11px; padding: 6px;">Aplicar</button>
             <button class="btn btn-sm btn-warning" id="pause-btn-reset-match" style="flex: 1; font-size: 11px; padding: 6px;">Reiniciar</button>
           </div>
+
+          <!-- Reorganizar Times Panel (visible only for Host in multiplayer) -->
+          <div id="host-team-reorganizer" class="hidden" style="margin-top: 10px; padding: 10px; border-radius: 12px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08);">
+            <h4 style="margin: 0 0 8px 0; font-size: 11px; font-weight: 700; color: var(--color-success); text-transform: uppercase;">👥 Reorganizar Times</h4>
+            <div id="reorganizer-list" style="display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto;">
+              <!-- Populated dynamically via JS -->
+            </div>
+          </div>
         </div>
 
         <button class="btn btn-danger btn-block" id="pause-btn-exit-match" style="width: 100%; margin-top: 4px;">Sair ao Menu</button>
@@ -612,6 +621,7 @@
     <div id="post-game-screen" class="screen-view hidden">
       <div class="post-card card-blur text-center">
         <h2 class="text-glow">Partida Finalizada</h2>
+        <div id="post-winner-title" class="post-winner-title" style="font-size: 22px; font-weight: 800; margin: 12px 0; font-family: 'Outfit', sans-serif; text-transform: uppercase; letter-spacing: 1px;">—</div>
         <div class="post-teams-summary">
           <div class="team-result red-result">
             <div class="team-score" id="post-score-red">0</div>
@@ -628,7 +638,6 @@
           <h3>Estatísticas de Destaque</h3>
           <div class="adv-stat-row"><span>⭐ MVP da Partida</span> <strong id="post-mvp">—</strong></div>
           <div class="adv-stat-row"><span>📈 XP Ganho</span> <strong class="text-success" id="post-xp-gained">+0 XP</strong></div>
-          <div class="adv-stat-row"><span>⚽ Gols Totais</span> <strong id="post-total-goals">0</strong></div>
         </div>
 
         <button id="post-btn-continue" class="btn btn-primary btn-glow btn-lg w-full mt-4">Voltar ao Lobby</button>
@@ -643,10 +652,15 @@
           <h2>Ranking Global de Jogadores</h2>
         </div>
 
-        <div class="ranking-filters">
-          <button id="rank-filter-wins" class="btn btn-secondary active">Mais Vitórias</button>
+        <div class="ranking-filters" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 16px;">
+          <button id="rank-filter-overall" class="btn btn-secondary active">🏆 Melhor Overall</button>
+          <button id="rank-filter-wins" class="btn btn-secondary">Mais Vitórias</button>
           <button id="rank-filter-goals" class="btn btn-secondary">Mais Gols</button>
           <button id="rank-filter-level" class="btn btn-secondary">Maior Nível</button>
+          <button id="rank-filter-played" class="btn btn-secondary">Mais Jogos</button>
+          <button id="rank-filter-dribbles" class="btn btn-secondary">Mais Dribles</button>
+          <button id="rank-filter-shots" class="btn btn-secondary">Mais Chutes</button>
+          <button id="rank-filter-mvps" class="btn btn-secondary">Mais MVPs</button>
         </div>
 
         <div class="leaderboard-container">
@@ -656,15 +670,17 @@
                 <th>Posição</th>
                 <th>Jogador</th>
                 <th>Nível</th>
+                <th>Jogos</th>
                 <th>Vitórias</th>
-                <th>Derrotas</th>
                 <th>Gols</th>
-                <th>Taxa de Vitórias</th>
+                <th>Dribles</th>
+                <th>Chutes</th>
+                <th>MVPs</th>
               </tr>
             </thead>
             <tbody id="leaderboard-body">
               <tr>
-                <td colspan="7" class="text-center">Carregando dados da tabela...</td>
+                <td colspan="9" class="text-center">Carregando dados da tabela...</td>
               </tr>
             </tbody>
           </table>

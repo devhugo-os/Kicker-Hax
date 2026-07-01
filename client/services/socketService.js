@@ -497,6 +497,47 @@ class P2PSocketService {
     }
   }
 
+  /**
+   * Toggle pause state of the active match (host only).
+   * @returns {boolean} New pause state
+   */
+  hostTogglePause() {
+    if (!this.isHost || !this.serverRoom || !this.serverRoom.match) return false;
+    const match = this.serverRoom.match;
+    match.isPausedByUser = !match.isPausedByUser;
+    const status = match.isPausedByUser ? 'PAUSADA' : 'RETOMADA';
+    const msg = this.serverRoom.addChatMessage('Sistema', '', '📢', `⏸️ A partida foi ${status} pelo Host.`);
+    this.broadcast('chatMessage', msg);
+    return match.isPausedByUser;
+  }
+
+  /**
+   * Move a player to a different team during a pause (host only).
+   * @param {string} playerId Peer ID of target player
+   * @param {string} team 'red' | 'blue' | 'spectator'
+   */
+  hostMovePlayerTeam(playerId, team) {
+    if (!this.isHost || !this.serverRoom) return;
+    // 1) Update serverRoom roster
+    this.serverRoom.changeTeam(playerId, team);
+    // 2) If match is running, update physics player and trigger kickoff
+    if (this.serverRoom.match) {
+      const matchP = this.serverRoom.match.players.find(p => p.id === playerId);
+      if (matchP) {
+        matchP.team = team;
+        this.serverRoom.match.resetMatch(); // Kickoff repositions everyone
+      }
+    }
+    // 3) Broadcast lobby update
+    this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+    // 4) Chat notification
+    const playerObj = this.serverRoom.players.find(p => p.id === playerId);
+    const teamLabel = team === 'red' ? '🔴 Vermelho' : team === 'blue' ? '🔵 Azul' : '👓 Espectadores';
+    const msg = this.serverRoom.addChatMessage('Sistema', '', '📢',
+      `Host moveu ${playerObj ? playerObj.username : 'Jogador'} para ${teamLabel}.`);
+    this.broadcast('chatMessage', msg);
+  }
+
   hostChangeFieldSize(size) {
     if (this.isHost && this.serverRoom) {
       this.serverRoom.fieldSize = size;

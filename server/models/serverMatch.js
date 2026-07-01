@@ -26,6 +26,7 @@ export class ServerMatch {
     this.goalFreezeTimer = 0;
     this.endFreezeTimer = 0;
     this.isHostPaused = false;
+    this.isPausedByUser = false;
 
     // Initialize physical objects
     this.ball = {
@@ -181,20 +182,20 @@ export class ServerMatch {
 
   recordFrame() {
     const snap = this.players.map(p => ({
-      x: p.x,
-      y: p.y,
+      x: Math.round(p.x),
+      y: Math.round(p.y),
       dir: p.dir,
       team: p.team,
       has: (this.ball.owner === p.id),
-      name: p.name || '',
-      badge: p.badge || '',
+      name: '',
+      badge: '',
       inv: p.invuln || 0,
       stun: p.stun || 0,
       halo: p.shootHalo || 0
     }));
 
     const frame = {
-      ball: { x: this.ball.x, y: this.ball.y },
+      ball: { x: Math.round(this.ball.x), y: Math.round(this.ball.y) },
       players: snap,
       score: { ...this.score },
       sfx: [...this.soundEffects]
@@ -387,8 +388,8 @@ export class ServerMatch {
   tick() {
     this.soundEffects = [];
 
-    if (this.isHostPaused) {
-      // Just broadcast state with isHostPaused=true, do not simulate physics
+    if (this.isHostPaused || this.isPausedByUser) {
+      // Just broadcast state with isHostPaused/isPausedByUser = true, do not simulate physics
       const snap = {
         ball: {
           x: this.ball.x,
@@ -416,7 +417,8 @@ export class ServerMatch {
         status: this.status,
         countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
         soundEffects: [],
-        isHostPaused: true
+        isHostPaused: this.isHostPaused,
+        isPausedByUser: this.isPausedByUser
       };
       this.io.to(this.roomCode).emit('gameState', snap);
       return;
