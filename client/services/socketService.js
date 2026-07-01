@@ -14,18 +14,24 @@ export const socketService = {
     
     if (!isLocal) {
       connectUrl = 'https://kicker-hax-server.onrender.com';
+      // Wake up sleeping Render container on production
+      fetch(connectUrl).catch(() => {});
     } else if (url.includes(':3000') || url.includes(':5173')) {
       connectUrl = `http://${window.location.hostname}:8080`;
     }
     
+    const transports = isLocal ? ['polling', 'websocket'] : ['websocket'];
+
     socket = io(connectUrl, {
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 2000,
-      // Use polling first to wake up Render cold-start containers, then upgrade
-      transports: ['polling', 'websocket'],
-      upgrade: true,
+      timeout: 10000,
+      // GitHub Pages has hit CORS failures on Socket.IO polling. Production
+      // connects straight through WebSocket, while local dev keeps polling as a fallback.
+      transports,
+      upgrade: isLocal,
       withCredentials: false
     });
 
@@ -58,7 +64,7 @@ export const socketService = {
   // Emitters
   createRoom(name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay, profile) {
     if (!socket) return;
-    socket.emit('createRoom', { name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay, profile });
+    socket.emit('createRoom', { name, password, maxPlayers, duration, goalLimit, fieldSize, showReplay: true, profile });
   },
 
   joinRoom(code, password, profile) {
@@ -114,11 +120,6 @@ export const socketService = {
   sendGameInput(inputData) {
     if (!socket) return;
     socket.emit('gameInput', inputData);
-  },
-
-  skipReplay() {
-    if (!socket) return;
-    socket.emit('skipReplay');
   },
 
   // Event Listeners Registration

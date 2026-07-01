@@ -33,7 +33,7 @@ export function registerRoomHandlers(io, socket) {
       duration,
       goalLimit,
       fieldSize,
-      showReplay
+      showReplay: true
     });
 
     db.createRoom(code, room);

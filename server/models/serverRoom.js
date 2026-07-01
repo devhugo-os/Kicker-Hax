@@ -10,7 +10,7 @@ export class ServerRoom {
     this.duration = options.duration || 3; // minutes
     this.goalLimit = options.goalLimit || 3; // goals
     this.fieldSize = options.fieldSize || 'medium';
-    this.showReplay = options.showReplay !== undefined ? options.showReplay : true;
+    this.showReplay = true;
     this.players = []; // Array of lobby players
     this.chatHistory = [];
     this.status = 'lobby'; // 'lobby' | 'playing'
@@ -72,7 +72,7 @@ export class ServerRoom {
     if (settings.goalLimit) this.goalLimit = parseInt(settings.goalLimit, 10);
     if (settings.password !== undefined) this.password = settings.password || null;
     if (settings.fieldSize) this.fieldSize = settings.fieldSize;
-    if (settings.showReplay !== undefined) this.showReplay = settings.showReplay;
+    this.showReplay = true;
   }
 
   addChatMessage(username, avatar, badge, text) {

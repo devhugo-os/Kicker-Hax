@@ -12,19 +12,6 @@ export function registerGameHandlers(io, socket) {
     room.match.updateInput(socket.id, inputData);
   });
 
-  socket.on('skipReplay', () => {
-    const conn = db.getConnection(socket.id);
-    if (!conn) return;
-
-    const room = db.getRoom(conn.roomCode);
-    if (!room || room.status !== 'playing' || !room.match) return;
-
-    // Only host can skip replay
-    if (room.hostId === socket.id && room.match.status === 'replay') {
-      room.match.countdownTimer = 0; // instantly end replay cooldown
-    }
-  });
-
   socket.on('hostChangeFieldSize', ({ size }) => {
     const conn = db.getConnection(socket.id);
     if (!conn) return;
