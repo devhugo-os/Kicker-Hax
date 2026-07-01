@@ -716,8 +716,8 @@ export const gameController = {
               this.replayTimer = 0;
               document.getElementById('replay-overlay')?.classList.remove('hidden');
               MatchSim.status = 'replay';
-              // Set replay duration (accounting for 2x slow motion)
-              MatchSim.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2 * 2) + 60;
+              // Set replay duration (accounting for 3x slow motion)
+              MatchSim.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2 * 3) + 5;
               
               // Start local recording
               this.startLocalReplayRecording();
@@ -907,9 +907,11 @@ export const gameController = {
               }
 
               // Power Kick
-              if (input.power && p.power_cd <= 0 && p.stamina >= 0.98 && (localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 8)) {
-                p.stamina = 0;
-                p.staminaLock = C.STAMINA_LOCK_FRAMES;
+              if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && (localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 8)) {
+                p.stamina = Math.max(0, p.stamina - 0.50);
+                if (p.stamina === 0) {
+                  p.staminaLock = C.STAMINA_LOCK_FRAMES;
+                }
                 p.power_cd = C.POWER_KICK_CD;
                 p.cool = 12;
                 p.shootHalo = 22;
@@ -924,16 +926,12 @@ export const gameController = {
                 const nearBall = localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 14;
                 if (nearBall) {
                   const charge = Physics.clamp(p.kickCharge, 0, 1);
-                  const cost = Math.max(0.08, 0.40 * charge);
-                  if (p.staminaLock <= 0 && p.stamina >= cost) {
-                    p.stamina = Math.max(0, p.stamina - cost);
-                    p.cool = 14;
-                    p.shootHalo = 18;
-                    const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
-                    const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
-                    Physics.kickBall(p, localBallSim, ang, pow);
-                    frameSfx.push('kick');
-                  }
+                  p.cool = 14;
+                  p.shootHalo = 18;
+                  const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
+                  const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
+                  Physics.kickBall(p, localBallSim, ang, pow);
+                  frameSfx.push('kick');
                 }
                 p.kickCharge = 0;
               }
@@ -1569,11 +1567,14 @@ export const gameController = {
     if (this.replayFrames.length === 0) return;
 
     this.replayTimer++;
-    // Tick playback speed
-    if (this.replayTimer % 2 === 0) {
+    // Tick playback speed to 1/3 speed (slow motion)
+    if (this.replayTimer % 3 === 0) {
       this.replayFrameIdx++;
       if (this.replayFrameIdx >= this.replayFrames.length) {
         this.endReplayPlayback();
+        if (this.mode === 'solo' && this.localMatchSim) {
+          this.localMatchSim.countdownTimer = 0;
+        }
         return;
       }
     }
@@ -1581,8 +1582,8 @@ export const gameController = {
     const frame = this.replayFrames[Math.min(this.replayFrameIdx, this.replayFrames.length - 1)];
     if (!frame) return;
 
-    // Trigger local audio triggers
-    if (this.replayTimer % 2 === 0) {
+    // Trigger local audio triggers synced with frames
+    if (this.replayTimer % 3 === 0) {
       frame.sfx.forEach(sfx => soundFx.play(sfx));
     }
 

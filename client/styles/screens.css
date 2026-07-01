@@ -1108,3 +1108,17 @@
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.15);
 }
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(10px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+}

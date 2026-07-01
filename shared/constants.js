@@ -13,15 +13,15 @@ export const PLAYER_RADIUS = 16;
 
 export const FRICTION_FIELD = 0.955;
 export const FRICTION_PLAYER = 0.90;
-export const MAX_SPEED = 1.9;
+export const MAX_SPEED = 2.3;
 
 // Kick / Skills constants
 export const KICK_BASE = 3.2;
 export const KICK_CHARGE = 6.0;
 
 export const STAMINA_LOCK_FRAMES = 90;
-export const REGEN_IDLE = 0.0022;
-export const DRAIN_SPRINT = 0.0060;
+export const REGEN_IDLE = 0.0035;
+export const DRAIN_SPRINT = 0.0035;
 
 export const TACKLE_RANGE = 82;
 export const TACKLE_CD = 140;

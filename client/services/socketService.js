@@ -1,6 +1,7 @@
 // Kicker Hax - WebRTC Peer-to-Peer & Firebase RTDB Multiplayer Client Service
-import { rtdb } from './firebaseService.js';
-import { ref, set, remove, get, update, onValue, off } from 'firebase/database';
+import { rtdb, auth } from './firebaseService.js';
+import { onAuthStateChanged } from 'firebase/auth';
+import { ref, set, remove, get, update, onValue, off, onDisconnect } from 'firebase/database';
 import { ServerRoom } from '../../server/models/serverRoom.js';
 import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
@@ -13,6 +14,7 @@ class P2PSocketService {
     this.peer = null;
     this.isHost = false;
     this.roomCode = null;
+    this.presenceBound = false;
     
     // Peer connections
     this.connections = []; // guest WebRTC connections (if host)
@@ -29,6 +31,7 @@ class P2PSocketService {
     
     console.log(`[P2PSocket] Inicializado com ID do Cliente: ${this.clientId}`);
     this.listenToPublicRooms();
+    this.setupPresenceTracking();
     return this;
   }
 
@@ -566,6 +569,42 @@ class P2PSocketService {
   stopListeningToPublicRooms() {
     const roomsRef = ref(rtdb, 'multiplayerRooms');
     off(roomsRef);
+  }
+
+  setupPresenceTracking() {
+    if (this.presenceBound) return;
+    this.presenceBound = true;
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log(`[Presence] Usuário autenticado: ${user.uid}. Monitorando presença...`);
+        const connectedRef = ref(rtdb, '.info/connected');
+        const myPresenceRef = ref(rtdb, `presence/${user.uid}`);
+        
+        onValue(connectedRef, (snap) => {
+          if (snap.val() === true) {
+            set(myPresenceRef, {
+              uid: user.uid,
+              username: user.displayName || 'Jogador',
+              timestamp: Date.now()
+            });
+            onDisconnect(myPresenceRef).remove();
+          }
+        });
+
+        // Monitor global presence list to update count in real-time
+        const presenceRef = ref(rtdb, 'presence');
+        onValue(presenceRef, (snap) => {
+          const players = snap.val() || {};
+          const count = Object.keys(players).length;
+          const el = document.getElementById('online-users-count');
+          if (el) el.textContent = count;
+        });
+      } else {
+        const el = document.getElementById('online-users-count');
+        if (el) el.textContent = '...';
+      }
+    });
   }
 }
 

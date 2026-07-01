@@ -177,7 +177,7 @@ export class ServerPhysics {
     const slowMul = p.slowTimer > 0 ? 0.7 : 1;
     if (p.slowTimer > 0) p.slowTimer--;
 
-    const effMul = canSprint ? (1 + (1.30 - 1) * p.stamina) : 1;
+    const effMul = canSprint ? 1.50 : 1.0;
     const baseSpeed = C.MAX_SPEED * effMul * slowMul;
     const dashBoost = p.dash_time > 0 ? 1.7 : 1;
 
