@@ -193,8 +193,11 @@ export const settingsController = {
     const { playerNum, actionId, btn } = this.waitingRemap;
     btn.classList.remove('active');
 
+    const keyVal = e.key || '';
+    const keyLower = keyVal.toLowerCase();
+
     // Cancel on ESC
-    if (e.key === 'Escape') {
+    if (keyVal === 'Escape') {
       const val = playerNum === 1 ? this.CTRL_P1[actionId] : this.CTRL_P2[actionId];
       btn.textContent = this.getKeyLabel(val);
       this.waitingRemap = null;
@@ -202,7 +205,7 @@ export const settingsController = {
     }
 
     // Clear on Backspace
-    if (e.key === 'Backspace') {
+    if (keyVal === 'Backspace') {
       if (playerNum === 1) this.CTRL_P1[actionId] = '';
       else this.CTRL_P2[actionId] = '';
       this.saveControls();
@@ -212,7 +215,7 @@ export const settingsController = {
     }
 
     // Read input key value or code (for modifier shifts)
-    let selectedKey = e.key.toLowerCase();
+    let selectedKey = keyLower;
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'ControlLeft' || e.code === 'ControlRight') {
       selectedKey = e.code;
     }

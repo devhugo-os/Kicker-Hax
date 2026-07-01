@@ -992,3 +992,94 @@
   color: var(--text-secondary);
   line-height: 1.5;
 }
+
+/* ==========================================================================
+   11. PÓS-JOGO SCREEN (Match Results)
+   ========================================================================== */
+.post-card {
+  width: 580px;
+  max-width: 95vw;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.post-card h2 {
+  font-size: 32px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.post-teams-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 40px;
+  width: 100%;
+  margin: 10px 0;
+}
+
+.team-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+.team-score {
+  font-size: 64px;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
+}
+
+.red-result .team-score {
+  color: #ef4444;
+  text-shadow: 0 0 25px rgba(239, 68, 68, 0.3);
+}
+
+.blue-result .team-score {
+  color: #3b82f6;
+  text-shadow: 0 0 25px rgba(59, 130, 246, 0.3);
+}
+
+.team-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin-top: 8px;
+  letter-spacing: 0.5px;
+}
+
+.score-vs {
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--text-muted);
+  font-family: 'Outfit', sans-serif;
+}
+
+.post-stats {
+  width: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.post-stats h3 {
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}

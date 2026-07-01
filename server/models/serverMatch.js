@@ -22,9 +22,10 @@ export class ServerMatch {
     this.score = { red: 0, blue: 0 };
     this.matchTime = duration * 60;
     this.status = 'countdown'; // 'countdown' | 'playing' | 'freeze' | 'end-freeze' | 'ended'
-    this.countdownTimer = 150; // ~2.5s at 60Hz
+    this.countdownTimer = 300; // ~5s at 60Hz
     this.goalFreezeTimer = 0;
     this.endFreezeTimer = 0;
+    this.isHostPaused = false;
 
     // Initialize physical objects
     this.ball = {
@@ -386,6 +387,41 @@ export class ServerMatch {
   tick() {
     this.soundEffects = [];
 
+    if (this.isHostPaused) {
+      // Just broadcast state with isHostPaused=true, do not simulate physics
+      const snap = {
+        ball: {
+          x: this.ball.x,
+          y: this.ball.y,
+          vx: this.ball.vx,
+          vy: this.ball.vy,
+          owner: this.ball.owner
+        },
+        players: this.players.map(p => ({
+          id: p.id,
+          team: p.team,
+          x: p.x,
+          y: p.y,
+          dir: p.dir,
+          stamina: p.stamina,
+          staminaLock: p.staminaLock,
+          stun: p.stun,
+          shootHalo: p.shootHalo,
+          invuln: p.invuln,
+          badge: p.badge,
+          name: p.name
+        })),
+        score: this.score,
+        matchTime: this.matchTime,
+        status: this.status,
+        countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
+        soundEffects: [],
+        isHostPaused: true
+      };
+      this.io.to(this.roomCode).emit('gameState', snap);
+      return;
+    }
+
     // Dimensions setup based on dynamic sizes
     const gTop = (this.h - C.GOAL_W_INIT) / 2;
     const gBot = (this.h + C.GOAL_W_INIT) / 2;
@@ -424,7 +460,7 @@ export class ServerMatch {
           this.endFreezeTimer = C.END_FREEZE_FRAMES;
         } else {
           this.status = 'countdown';
-          this.countdownTimer = 150;
+          this.countdownTimer = 300;
           this.kickoff();
         }
       }
@@ -587,7 +623,8 @@ export class ServerMatch {
       matchTime: this.matchTime,
       status: this.status,
       countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
-      soundEffects: this.soundEffects
+      soundEffects: this.soundEffects,
+      isHostPaused: false
     };
 
     this.io.to(this.roomCode).emit('gameState', snap);
@@ -615,7 +652,7 @@ export class ServerMatch {
     this.score = { red: 0, blue: 0 };
     this.matchTime = this.duration * 60;
     this.status = 'countdown';
-    this.countdownTimer = 150;
+    this.countdownTimer = 300;
     // Center the ball
     this.ball.x = this.w / 2;
     this.ball.y = this.h / 2;

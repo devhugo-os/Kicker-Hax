@@ -44,4 +44,17 @@ export function registerGameHandlers(io, socket) {
 
     io.to(room.code).emit('matchReset');
   });
+
+  socket.on('hostFocusChanged', ({ focusLost }) => {
+    const conn = db.getConnection(socket.id);
+    if (!conn) return;
+
+    const room = db.getRoom(conn.roomCode);
+    if (!room || room.status !== 'playing' || !room.match) return;
+
+    // Only host can pause the game by changing focus
+    if (room.hostId === socket.id) {
+      room.match.isHostPaused = !!focusLost;
+    }
+  });
 }

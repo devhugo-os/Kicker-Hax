@@ -59,9 +59,14 @@ export const gameController = {
 
     // Input listeners
     window.addEventListener('keydown', (e) => {
-      const k = e.key.toLowerCase();
-      this.keys.set(k, true);
-      this.codes.set(e.code, true);
+      const keyVal = e.key || '';
+      const k = keyVal.toLowerCase();
+      if (k) {
+        this.keys.set(k, true);
+      }
+      if (e.code) {
+        this.codes.set(e.code, true);
+      }
 
       // Disable browser scrolling keys inside active match
       if (router.currentScreenId === 'match-screen') {
@@ -72,8 +77,14 @@ export const gameController = {
     });
 
     window.addEventListener('keyup', (e) => {
-      this.keys.set(e.key.toLowerCase(), false);
-      this.codes.set(e.code, false);
+      const keyVal = e.key || '';
+      const k = keyVal.toLowerCase();
+      if (k) {
+        this.keys.set(k, false);
+      }
+      if (e.code) {
+        this.codes.set(e.code, false);
+      }
     });
 
     // Auto Pausa on window blur
@@ -457,20 +468,30 @@ export const gameController = {
 
     // Focus lost event listener
     const focusLostBadge = document.getElementById('focus-lost-badge');
-    const onFocusChange = () => {
-      const lost = document.hidden || !document.hasFocus();
-      if (focusLostBadge) {
-        if (lost) focusLostBadge.classList.remove('hidden');
-        else focusLostBadge.classList.add('hidden');
+    const handleFocusLost = () => {
+      if (this.mode === 'solo') {
+        if (!this.isPaused && router.currentScreenId === 'match-screen') {
+          this.togglePauseMenu(); // Opens modal and pauses physics
+        }
+      } else if (this.mode === 'multiplayer' && this.isHost) {
+        const socket = socketService.getSocket();
+        if (socket) socket.emit('hostFocusChanged', { focusLost: true });
       }
     };
-    document.addEventListener('visibilitychange', onFocusChange);
-    window.addEventListener('blur', () => {
-      if (focusLostBadge) focusLostBadge.classList.remove('hidden');
+
+    const handleFocusRegained = () => {
+      if (this.mode === 'multiplayer' && this.isHost) {
+        const socket = socketService.getSocket();
+        if (socket) socket.emit('hostFocusChanged', { focusLost: false });
+      }
+    };
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) handleFocusLost();
+      else handleFocusRegained();
     });
-    window.addEventListener('focus', () => {
-      if (focusLostBadge) focusLostBadge.classList.add('hidden');
-    });
+    window.addEventListener('blur', handleFocusLost);
+    window.addEventListener('focus', handleFocusRegained);
 
     this.ball = new ClientBall();
     this.players = [];
@@ -526,8 +547,8 @@ export const gameController = {
     canvasW = Math.floor(canvasW);
     canvasH = Math.floor(canvasH);
 
-    stage.style.gridTemplateColumns = `56px ${canvasW}px 56px`;
-    stage.style.width = `${canvasW + 112 + 16}px`;
+    stage.style.gridTemplateColumns = `150px ${canvasW}px 150px`;
+    stage.style.width = `${canvasW + 300 + 16}px`;
     stage.style.height = `${canvasH}px`;
     
     this.canvas.style.width = `${canvasW}px`;
@@ -581,7 +602,7 @@ export const gameController = {
 
     // Simulate Match logic locally on the client!
     this.status = 'countdown';
-    this.countdown = 150;
+    this.countdown = 300;
     this.ball.x = this.canvas.width / 2;
     this.ball.y = this.canvas.height / 2;
     
@@ -590,11 +611,13 @@ export const gameController = {
       score: { red: 0, blue: 0 },
       matchTime: this.matchTime,
       status: 'countdown',
-      countdownTimer: 150,
+      countdownTimer: 300,
       goalFreezeTimer: 0,
       replayBuffer: [],
       replayIndex: 0
     };
+
+    this.localMatchSim = MatchSim;
 
     const redPlayer = {
       id: 'cpu',
@@ -631,6 +654,8 @@ export const gameController = {
       vx: 0, vy: 0, r: C.BALL_RADIUS, owner: null, lastTouch: null,
       strikeTimer: 0, lastStrikeType: null, noPickupFrames: 0, noPickupFrom: null
     };
+
+    this.localBallSim = localBallSim;
 
     // Load static physics modules directly on client tick
     (() => {
@@ -686,7 +711,7 @@ export const gameController = {
                 this.localMatchEnd(MatchSim.score);
               } else {
                 MatchSim.status = 'countdown';
-                MatchSim.countdownTimer = 150;
+                MatchSim.countdownTimer = 300;
                 resetFieldPositions();
               }
             }
@@ -933,7 +958,7 @@ export const gameController = {
                   } else {
                     // Bypass replay, restart directly
                     MatchSim.status = 'countdown';
-                    MatchSim.countdownTimer = 150;
+                    MatchSim.countdownTimer = 300;
                     resetFieldPositions();
                   }
                 }
@@ -1141,41 +1166,14 @@ export const gameController = {
     
     showToast('Fim de jogo!', 'info');
     
-    // Save to Firestore!
-    const isWin = score.blue > score.red;
-    const isLoss = score.red > score.blue;
-    const isDraw = score.red === score.blue;
-    const xpGained = isWin ? 50 : isDraw ? 20 : 10;
-
-    firebaseService.saveMatchResult(
-      this.currentUser.uid,
-      isWin, isLoss, isDraw,
-      this.goalsScored, this.assistsGained, this.savesDone,
-      xpGained
-    ).then(() => {
-      // Log match to history
-      const matchDoc = {
-        mode: 'solo',
-        date: new Date().toISOString(),
-        playerUids: [this.currentUser.uid],
-        playerTeams: { [this.currentUser.uid]: isWin ? C.Team.BLUE : isDraw ? -1 : C.Team.RED },
-        winner: isWin ? C.Team.BLUE : isDraw ? 'draw' : C.Team.RED,
-        scoreRed: score.red,
-        scoreBlue: score.blue
-      };
-      return firebaseService.addMatchToHistory(matchDoc);
-    }).then(() => {
-      // Display Post-match Screen
-      document.getElementById('post-score-red').textContent = score.red;
-      document.getElementById('post-score-blue').textContent = score.blue;
-       document.getElementById('post-mvp').textContent = score.blue >= score.red ? menuController.profileData.username : 'CPU Bot';
-      document.getElementById('post-xp-gained').textContent = `+${xpGained} XP`;
-      document.getElementById('post-total-goals').textContent = score.red + score.blue;
-      router.show('post-game-screen');
-    }).catch(err => {
-      console.error(err);
-      router.show('solo-screen');
-    });
+    // In Solo match, do NOT save stats or history to Firebase, and do not award XP.
+    // Display Post-match Screen directly
+    document.getElementById('post-score-red').textContent = score.red;
+    document.getElementById('post-score-blue').textContent = score.blue;
+    document.getElementById('post-mvp').textContent = score.blue >= score.red ? menuController.profileData.username : 'CPU Bot';
+    document.getElementById('post-xp-gained').textContent = `+0 XP (Modo Treino)`;
+    document.getElementById('post-total-goals').textContent = score.red + score.blue;
+    router.show('post-game-screen');
   },
 
   // ==========================================================================
@@ -1195,7 +1193,7 @@ export const gameController = {
     }
 
     this.status = 'countdown';
-    this.countdown = 150;
+    this.countdown = 300;
 
     // Apply dimensions to canvas from room fieldSize
     if (this.fieldSize === 'small') {
@@ -1215,6 +1213,17 @@ export const gameController = {
 
       // Play sound effects triggered on server
       state.soundEffects.forEach(sfx => soundFx.play(sfx));
+
+      // Update focusLostBadge based on server's host pause state
+      const badge = document.getElementById('focus-lost-badge');
+      if (badge) {
+        if (state.isHostPaused) {
+          badge.textContent = '⏸️ Pausado (Dono da sala fora da aba)';
+          badge.classList.remove('hidden');
+        } else {
+          badge.classList.add('hidden');
+        }
+      }
 
       // Update local physical components LERP targets
       this.ball.updateState(state.ball);
@@ -1450,7 +1459,7 @@ export const gameController = {
         this.drawCenterBanner(`Começa em ${this.countdown}...`, 'Prepare-se!');
       } else if (this.status === 'freeze') {
         const label = this.lastGoal.ownGoal ? `GOL CONTRA de ${this.lastGoal.scorerName}` : `GOL DE ${this.lastGoal.scorerName}!`;
-        this.drawCenterBanner(label, 'Revisando jogada...');
+        this.drawCenterBanner(label, 'Revisando jogada...', true);
       }
 
       this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
@@ -1800,7 +1809,7 @@ export const gameController = {
     cx.restore();
   },
 
-  drawCenterBanner(title, subtitle) {
+  drawCenterBanner(title, subtitle, isCelebration = false) {
     const w = this.canvas.width;
     const h = this.canvas.height;
     this.ctx.save();
@@ -1811,21 +1820,60 @@ export const gameController = {
     const x = w / 2 - bannerW / 2;
     const y = h * 0.25;
 
-    this.ctx.fillStyle = 'rgba(7, 11, 25, 0.9)';
-    this.ctx.fillRect(x, y, bannerW, bannerH);
-    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-    this.ctx.strokeRect(x + 0.5, y + 0.5, bannerW - 1, bannerH - 1);
+    if (isCelebration) {
+      // Golden/Orange glowing gradient for goal celebration!
+      const grad = this.ctx.createLinearGradient(x, y, x + bannerW, y);
+      grad.addColorStop(0, 'rgba(245, 158, 11, 0.95)'); // Amber
+      grad.addColorStop(0.5, 'rgba(239, 68, 68, 0.95)'); // Red
+      grad.addColorStop(1, 'rgba(245, 158, 11, 0.95)');
+      this.ctx.fillStyle = grad;
+      this.ctx.fillRect(x, y, bannerW, bannerH);
+      
+      this.ctx.strokeStyle = '#ffffff';
+      this.ctx.lineWidth = 3;
+      this.ctx.strokeRect(x + 0.5, y + 0.5, bannerW - 1, bannerH - 1);
+      
+      // Scaling pulse animation
+      const scale = 1.0 + Math.sin(Date.now() / 150) * 0.05;
+      this.ctx.translate(w / 2, y + 45);
+      this.ctx.scale(scale, scale);
+      
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.font = '900 32px Outfit';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      this.ctx.shadowBlur = 10;
+      this.ctx.fillText(title, 0, 0);
+      this.ctx.restore();
+      
+      // Draw subtitle
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.95;
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.font = '700 16px Inter';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(subtitle, w / 2, y + 95);
+      this.ctx.restore();
+    } else {
+      // Normal banner
+      this.ctx.fillStyle = 'rgba(7, 11, 25, 0.9)';
+      this.ctx.fillRect(x, y, bannerW, bannerH);
+      this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      this.ctx.strokeRect(x + 0.5, y + 0.5, bannerW - 1, bannerH - 1);
 
-    this.ctx.fillStyle = '#e2e8f0';
-    this.ctx.font = '800 24px Outfit';
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(title, w / 2, y + 50);
+      this.ctx.fillStyle = '#e2e8f0';
+      this.ctx.font = '800 24px Outfit';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(title, w / 2, y + 50);
 
-    this.ctx.font = '600 15px Inter';
-    this.ctx.fillStyle = '#60a5fa';
-    this.ctx.fillText(subtitle, w / 2, y + 90);
-    this.ctx.restore();
+      this.ctx.font = '600 15px Inter';
+      this.ctx.fillStyle = '#60a5fa';
+      this.ctx.fillText(subtitle, w / 2, y + 90);
+      this.ctx.restore();
+    }
   },
 
   // ==========================================================================
@@ -1904,6 +1952,7 @@ export const gameController = {
 
     const myId = socketService.getSocket().id;
     const isHost = room.hostId === myId;
+    this.isHost = isHost;
 
     // Toggle Host controls visibility
     const startBtn = document.getElementById('lobby-btn-start');
@@ -2121,7 +2170,7 @@ export const gameController = {
           if (this.localMatchSim) {
             this.localMatchSim.score = { red: 0, blue: 0 };
             this.localMatchSim.status = 'countdown';
-            this.localMatchSim.countdownTimer = 150;
+            this.localMatchSim.countdownTimer = 300;
             this.localBallSim.x = this.canvas.width / 2;
             this.localBallSim.y = this.canvas.height / 2;
             this.localBallSim.vx = 0;
