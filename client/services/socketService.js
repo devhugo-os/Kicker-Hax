@@ -148,6 +148,7 @@ class P2PSocketService {
         name,
         maxPlayers: parseInt(maxPlayers) || 10,
         password: password || '',
+        hasPassword: !!password,
         playersCount: 1,
         status: 'lobby',
         duration: parseInt(duration) || 3,
@@ -193,6 +194,10 @@ class P2PSocketService {
       }
 
       const roomData = snapshot.val();
+      if (roomData.status !== 'lobby') {
+        this.triggerLocalEvent('joinError', 'A partida desta sala já começou.');
+        return;
+      }
       if (roomData.password && roomData.password !== password) {
         this.triggerLocalEvent('joinError', 'Senha incorreta.');
         return;
@@ -336,8 +341,48 @@ class P2PSocketService {
     }
 
     else if (event === 'hostFocusChanged') {
-      if (this.serverRoom.match) {
+      if (socketId === this.serverRoom.hostId && this.serverRoom.match) {
         this.serverRoom.match.isHostPaused = !!data.focusLost;
+      }
+    }
+
+    else if (event === 'hostSetPaused') {
+      if (socketId === this.serverRoom.hostId && this.serverRoom.match) {
+        this.serverRoom.match.isHostPaused = !!data.paused;
+        const status = data.paused ? 'pausada' : 'retomada';
+        const msg = this.serverRoom.addChatMessage('Sistema', '', '📢', `A partida foi ${status} pelo host.`);
+        this.broadcast('chatMessage', msg);
+      }
+    }
+
+    else if (event === 'hostResetMatch') {
+      if (socketId === this.serverRoom.hostId && this.serverRoom.match) {
+        this.serverRoom.match.resetMatch();
+        this.broadcast('matchReset');
+      }
+    }
+
+    else if (event === 'hostAddTime') {
+      if (socketId === this.serverRoom.hostId && this.serverRoom.match) {
+        const seconds = Math.max(0, Math.min(600, Number(data.seconds) || 0));
+        this.serverRoom.match.addTime(seconds);
+        const msg = this.serverRoom.addChatMessage('Sistema', '', '📢', `O host adicionou ${Math.round(seconds / 60)} minuto(s) ao tempo.`);
+        this.broadcast('chatMessage', msg);
+      }
+    }
+
+    else if (event === 'hostChangeTeam') {
+      if (socketId !== this.serverRoom.hostId) return;
+      const changed = this.serverRoom.changeTeam(data.playerId, data.team);
+      if (changed) {
+        if (this.serverRoom.match) {
+          const phys = this.serverRoom.match.players.find(p => p.id === data.playerId);
+          if (phys) {
+            phys.team = data.team === 'red' ? C.Team.RED : C.Team.BLUE;
+            this.serverRoom.match.kickoff();
+          }
+        }
+        this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
       }
     }
   }
@@ -355,6 +400,11 @@ class P2PSocketService {
       if (removed) {
         const leaveMsg = this.serverRoom.addChatMessage('Sistema', '', '📢', `${removed.username} saiu da sala.`);
         this.broadcast('chatMessage', leaveMsg);
+        if (this.serverRoom.match) {
+          this.serverRoom.match.isHostPaused = true;
+          const pauseMsg = this.serverRoom.addChatMessage('Sistema', '', '📢', 'Partida pausada para o host reorganizar os times.');
+          this.broadcast('chatMessage', pauseMsg);
+        }
       }
 
       this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
@@ -438,8 +488,9 @@ class P2PSocketService {
   startGame() {
     if (!this.isHost || !this.serverRoom) return;
 
-    const redTeam = this.serverRoom.players.filter(p => p.team === 'red');
-    const blueTeam = this.serverRoom.players.filter(p => p.team === 'blue');
+    const activePlayers = this.serverRoom.players.filter(p => p.team !== 'spectator');
+    const redTeam = activePlayers.filter(p => p.team === 'red');
+    const blueTeam = activePlayers.filter(p => p.team === 'blue');
 
     if (redTeam.length === 0 || blueTeam.length === 0) {
       this.triggerLocalEvent('startError', 'Cada time precisa de pelo menos 1 jogador (ou bot).');
@@ -462,15 +513,16 @@ class P2PSocketService {
       this.roomCode,
       this.serverRoom.duration,
       this.serverRoom.goalLimit,
-      this.serverRoom.players,
+      activePlayers,
       mockIo,
-      (score) => {
+      (result) => {
         // Callback on match end
         this.serverRoom.status = 'lobby';
         this.serverRoom.players.forEach(p => p.ready = false);
         this.serverRoom.match = null;
+        this.serverRoom.chatHistory = [];
 
-        this.broadcast('matchEnded', score);
+        this.broadcast('matchEnded', result);
         this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
 
         // Update status in Firebase
@@ -491,61 +543,19 @@ class P2PSocketService {
   }
 
   hostResetMatch() {
-    if (this.isHost && this.serverRoom && this.serverRoom.match) {
-      this.serverRoom.match.resetMatch();
-      this.broadcast('matchReset');
-    }
+    this.emit('hostResetMatch');
   }
 
-  /**
-   * Toggle pause state of the active match (host only).
-   * @returns {boolean} New pause state
-   */
-  hostTogglePause() {
-    if (!this.isHost || !this.serverRoom || !this.serverRoom.match) return false;
-    const match = this.serverRoom.match;
-    match.isPausedByUser = !match.isPausedByUser;
-    const status = match.isPausedByUser ? 'PAUSADA' : 'RETOMADA';
-    const msg = this.serverRoom.addChatMessage('Sistema', '', '📢', `⏸️ A partida foi ${status} pelo Host.`);
-    this.broadcast('chatMessage', msg);
-    return match.isPausedByUser;
+  hostSetPaused(paused) {
+    this.emit('hostSetPaused', { paused });
   }
 
-  /**
-   * Move a player to a different team during a pause (host only).
-   * @param {string} playerId Peer ID of target player
-   * @param {string} team 'red' | 'blue' | 'spectator'
-   */
-  hostMovePlayerTeam(playerId, team) {
-    if (!this.isHost || !this.serverRoom) return;
-    // 1) Update serverRoom roster
-    this.serverRoom.changeTeam(playerId, team);
-    // 2) If match is running, update physics player and trigger kickoff
-    if (this.serverRoom.match) {
-      const matchP = this.serverRoom.match.players.find(p => p.id === playerId);
-      if (matchP) {
-        matchP.team = team;
-        this.serverRoom.match.resetMatch(); // Kickoff repositions everyone
-      }
-    }
-    // 3) Broadcast lobby update
-    this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
-    // 4) Chat notification
-    const playerObj = this.serverRoom.players.find(p => p.id === playerId);
-    const teamLabel = team === 'red' ? '🔴 Vermelho' : team === 'blue' ? '🔵 Azul' : '👓 Espectadores';
-    const msg = this.serverRoom.addChatMessage('Sistema', '', '📢',
-      `Host moveu ${playerObj ? playerObj.username : 'Jogador'} para ${teamLabel}.`);
-    this.broadcast('chatMessage', msg);
+  hostAddTime(seconds) {
+    this.emit('hostAddTime', { seconds });
   }
 
-  hostChangeFieldSize(size) {
-    if (this.isHost && this.serverRoom) {
-      this.serverRoom.fieldSize = size;
-      if (this.serverRoom.match) {
-        this.serverRoom.match.changeFieldSize(size);
-      }
-      this.broadcast('fieldSizeUpdated', { size });
-    }
+  hostChangeTeam(playerId, team) {
+    this.emit('hostChangeTeam', { playerId, team });
   }
 
   // --------------------------------------------------------------------------
@@ -602,7 +612,9 @@ class P2PSocketService {
     const roomsRef = ref(rtdb, 'multiplayerRooms');
     onValue(roomsRef, (snapshot) => {
       const data = snapshot.val() || {};
-      const list = Object.keys(data).map(key => data[key]);
+      const list = Object.keys(data)
+        .map(key => data[key])
+        .filter(room => room.status === 'lobby');
       this.triggerLocalEvent('publicRoomsList', list);
     });
   }

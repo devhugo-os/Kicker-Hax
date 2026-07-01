@@ -26,7 +26,6 @@ export class ServerMatch {
     this.goalFreezeTimer = 0;
     this.endFreezeTimer = 0;
     this.isHostPaused = false;
-    this.isPausedByUser = false;
 
     // Initialize physical objects
     this.ball = {
@@ -45,6 +44,7 @@ export class ServerMatch {
 
     // Load players into physical instances
     this.players = players.map(p => this.createPhysicalPlayer(p));
+    this.hasBots = this.players.some(p => p.cpu);
 
     // Queued client inputs: socketId -> inputObject
     this.inputs = new Map();
@@ -61,6 +61,21 @@ export class ServerMatch {
     this.replayBuffer = new Array(C.GOAL_FREEZE_FRAMES * 2);
     this.replayBufferIndex = 0;
     this.lastGoal = null;
+    this.playerStats = new Map();
+    this.players.forEach(p => {
+      if (!p.cpu && p.uid) {
+        this.playerStats.set(p.id, {
+          uid: p.uid,
+          username: p.name,
+          team: p.team,
+          goals: 0,
+          ownGoals: 0,
+          shots: 0,
+          dribbles: 0,
+          tackles: 0
+        });
+      }
+    });
 
     // Start physical tick loop (60Hz)
     this.tickInterval = setInterval(() => this.tick(), 1000 / 60);
@@ -182,20 +197,20 @@ export class ServerMatch {
 
   recordFrame() {
     const snap = this.players.map(p => ({
-      x: Math.round(p.x),
-      y: Math.round(p.y),
+      x: p.x,
+      y: p.y,
       dir: p.dir,
       team: p.team,
       has: (this.ball.owner === p.id),
-      name: '',
-      badge: '',
+      name: p.name || '',
+      badge: p.badge || '',
       inv: p.invuln || 0,
       stun: p.stun || 0,
       halo: p.shootHalo || 0
     }));
 
     const frame = {
-      ball: { x: Math.round(this.ball.x), y: Math.round(this.ball.y) },
+      ball: { x: this.ball.x, y: this.ball.y },
       players: snap,
       score: { ...this.score },
       sfx: [...this.soundEffects]
@@ -225,6 +240,12 @@ export class ServerMatch {
     const ownGoal = scorer ? (side === 'blue' && scorer.team === C.Team.RED) || (side === 'red' && scorer.team === C.Team.BLUE) : false;
 
     if (side === 'blue') this.score.blue++; else this.score.red++;
+
+    const scorerStats = this.playerStats.get(scorerId);
+    if (scorerStats) {
+      if (ownGoal) scorerStats.ownGoals++;
+      else scorerStats.goals++;
+    }
 
     this.lastGoal = {
       side,
@@ -388,15 +409,16 @@ export class ServerMatch {
   tick() {
     this.soundEffects = [];
 
-    if (this.isHostPaused || this.isPausedByUser) {
-      // Just broadcast state with isHostPaused/isPausedByUser = true, do not simulate physics
+    if (this.isHostPaused) {
+      // Just broadcast state with isHostPaused=true, do not simulate physics
       const snap = {
         ball: {
           x: this.ball.x,
           y: this.ball.y,
           vx: this.ball.vx,
           vy: this.ball.vy,
-          owner: this.ball.owner
+          owner: this.ball.owner,
+          lastTouch: this.ball.lastTouch
         },
         players: this.players.map(p => ({
           id: p.id,
@@ -408,6 +430,7 @@ export class ServerMatch {
           staminaLock: p.staminaLock,
           stun: p.stun,
           shootHalo: p.shootHalo,
+          kickCharge: p.kickCharge || 0,
           invuln: p.invuln,
           badge: p.badge,
           name: p.name
@@ -417,8 +440,7 @@ export class ServerMatch {
         status: this.status,
         countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
         soundEffects: [],
-        isHostPaused: this.isHostPaused,
-        isPausedByUser: this.isPausedByUser
+        isHostPaused: true
       };
       this.io.to(this.roomCode).emit('gameState', snap);
       return;
@@ -471,7 +493,7 @@ export class ServerMatch {
       this.recordFrame();
       if (this.endFreezeTimer <= 0) {
         this.status = 'ended';
-        this.onMatchEnd(this.score);
+        this.onMatchEnd(this.buildMatchResult());
         clearInterval(this.tickInterval);
       }
     } else if (this.status === 'playing') {
@@ -498,6 +520,8 @@ export class ServerMatch {
         if (p.stun <= 0) {
           // Tackle
           if (input.tackle && p.tackle_cd <= 0 && p.stamina >= C.TACKLE_STAM_COST) {
+            const stats = this.playerStats.get(p.id);
+            if (stats) stats.tackles++;
             p.stamina = Math.max(0, p.stamina - C.TACKLE_STAM_COST);
             p.tackle_cd = C.TACKLE_CD;
             p.tackleSuccess = false;
@@ -533,6 +557,8 @@ export class ServerMatch {
 
           // Dribble
           if (input.dribble && p.dribble_cd <= 0 && this.ball.owner === p.id && p.stamina >= C.DRIBBLE_STAM_COST) {
+            const stats = this.playerStats.get(p.id);
+            if (stats) stats.dribbles++;
             p.stamina = Math.max(0, p.stamina - C.DRIBBLE_STAM_COST);
             p.dash_time = C.DRIBBLE_TIME;
             p.invuln = C.DRIBBLE_INVULN;
@@ -544,6 +570,8 @@ export class ServerMatch {
 
           // Power Kick
           if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && (this.ball.owner === p.id || Math.hypot(p.x - this.ball.x, p.y - this.ball.y) < p.r + this.ball.r + 8)) {
+            const stats = this.playerStats.get(p.id);
+            if (stats) stats.shots++;
             p.stamina = Math.max(0, p.stamina - 0.50);
             if (p.stamina === 0) {
               p.staminaLock = C.STAMINA_LOCK_FRAMES;
@@ -566,6 +594,8 @@ export class ServerMatch {
               p.shootHalo = 18;
               const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
               const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
+              const stats = this.playerStats.get(p.id);
+              if (stats) stats.shots++;
               ServerPhysics.kickBall(p, this.ball, ang, pow);
               this.soundEffects.push('kick');
             }
@@ -606,7 +636,8 @@ export class ServerMatch {
         y: this.ball.y,
         vx: this.ball.vx,
         vy: this.ball.vy,
-        owner: this.ball.owner
+        owner: this.ball.owner,
+        lastTouch: this.ball.lastTouch
       },
       players: this.players.map(p => ({
         id: p.id,
@@ -618,6 +649,7 @@ export class ServerMatch {
         staminaLock: p.staminaLock,
         stun: p.stun,
         shootHalo: p.shootHalo,
+        kickCharge: p.kickCharge || 0,
         invuln: p.invuln,
         badge: p.badge,
         name: p.name
@@ -631,6 +663,32 @@ export class ServerMatch {
     };
 
     this.io.to(this.roomCode).emit('gameState', snap);
+  }
+
+  buildMatchResult() {
+    const playerStats = Array.from(this.playerStats.entries()).map(([playerId, data]) => ({
+      playerId,
+      ...data
+    }));
+    const winnerTeam = this.score.red === this.score.blue
+      ? 'draw'
+      : (this.score.blue > this.score.red ? C.Team.BLUE : C.Team.RED);
+
+    const mvp = playerStats
+      .filter(stats => winnerTeam !== 'draw' ? stats.team === winnerTeam : true)
+      .sort((a, b) => {
+        const ratingA = (a.goals * 6) + (a.shots * 2) + (a.dribbles * 2) + a.tackles - (a.ownGoals * 4);
+        const ratingB = (b.goals * 6) + (b.shots * 2) + (b.dribbles * 2) + b.tackles - (b.ownGoals * 4);
+        return ratingB - ratingA;
+      })[0] || null;
+
+    return {
+      score: { ...this.score },
+      winnerTeam,
+      mvp,
+      playerStats,
+      hasBots: this.hasBots
+    };
   }
 
   changeFieldSize(size) {
@@ -661,6 +719,10 @@ export class ServerMatch {
     this.ball.y = this.h / 2;
     this.ball.vx = 0;
     this.ball.vy = 0;
+  }
+
+  addTime(seconds) {
+    this.matchTime = Math.max(0, this.matchTime + seconds);
   }
 
   stop() {

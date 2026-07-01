@@ -83,8 +83,9 @@ export const firebaseService = {
         losses: 0,
         draws: 0,
         goals: 0,
-        dribbles: 0,
         shots: 0,
+        dribbles: 0,
+        ownGoals: 0,
         mvps: 0
       };
 
@@ -124,7 +125,7 @@ export const firebaseService = {
     return docSnap.exists() ? docSnap.data() : null;
   },
 
-  async saveMatchResult(uid, isWin, isLoss, isDraw, goals, dribbles, shots, mvps, xpGained) {
+  async saveMatchResult(uid, isWin, isLoss, isDraw, goals, shots, dribbles, ownGoals, isMvp, xpGained) {
     const statsRef = doc(db, 'stats', uid);
     const userRef = doc(db, 'users', uid);
 
@@ -146,9 +147,10 @@ export const firebaseService = {
         losses: (stats.losses || 0) + (isLoss ? 1 : 0),
         draws: (stats.draws || 0) + (isDraw ? 1 : 0),
         goals: (stats.goals || 0) + goals,
-        dribbles: (stats.dribbles || 0) + dribbles,
         shots: (stats.shots || 0) + shots,
-        mvps: (stats.mvps || 0) + mvps
+        dribbles: (stats.dribbles || 0) + dribbles,
+        ownGoals: (stats.ownGoals || 0) + ownGoals,
+        mvps: (stats.mvps || 0) + (isMvp ? 1 : 0)
       };
 
       // Update XP & level calculations
@@ -200,40 +202,24 @@ export const firebaseService = {
         const userData = userDoc.data();
         if (!userData.uid) continue;
         const statsData = await this.getUserStats(userData.uid) || {};
-        
-        const wins = statsData.wins || 0;
-        const losses = statsData.losses || 0;
-        const goals = statsData.goals || 0;
-        const dribbles = statsData.dribbles || 0;
-        const shots = statsData.shots || 0;
-        const mvps = statsData.mvps || 0;
-        const level = userData.level || 1;
-        const matchesPlayed = statsData.matchesPlayed || 0;
-        
-        // Calculate dynamic overall score for the overall ranking
-        const overallScore = (wins * 10) + (goals * 5) + (mvps * 8) + (dribbles * 2) + (shots * 1) + (level * 15);
-
         ranking.push({
           username: userData.username,
           displayName: userData.username,
           badge: userData.badge || '🏳️',
-          level,
-          matchesPlayed,
-          wins,
-          losses,
-          goals,
-          dribbles,
-          shots,
-          mvps,
-          overallScore,
+          level: userData.level || 1,
+          wins: statsData.wins || 0,
+          losses: statsData.losses || 0,
+          matchesPlayed: statsData.matchesPlayed || 0,
+          goals: statsData.goals || 0,
+          shots: statsData.shots || 0,
+          dribbles: statsData.dribbles || 0,
+          mvps: statsData.mvps || 0,
           xp: userData.xp || 0
         });
       }
 
       // Sort in-memory in Javascript
-      if (criteria === 'overall') {
-        ranking.sort((a, b) => b.overallScore - a.overallScore);
-      } else if (criteria === 'level') {
+      if (criteria === 'level') {
         ranking.sort((a, b) => {
           if (b.level !== a.level) return b.level - a.level;
           return b.xp - a.xp;
@@ -242,14 +228,20 @@ export const firebaseService = {
         ranking.sort((a, b) => b.wins - a.wins);
       } else if (criteria === 'goals') {
         ranking.sort((a, b) => b.goals - a.goals);
-      } else if (criteria === 'played') {
-        ranking.sort((a, b) => b.matchesPlayed - a.matchesPlayed);
-      } else if (criteria === 'dribbles') {
-        ranking.sort((a, b) => b.dribbles - a.dribbles);
       } else if (criteria === 'shots') {
         ranking.sort((a, b) => b.shots - a.shots);
+      } else if (criteria === 'dribbles') {
+        ranking.sort((a, b) => b.dribbles - a.dribbles);
+      } else if (criteria === 'matches') {
+        ranking.sort((a, b) => b.matchesPlayed - a.matchesPlayed);
       } else if (criteria === 'mvps') {
         ranking.sort((a, b) => b.mvps - a.mvps);
+      } else if (criteria === 'overall') {
+        ranking.sort((a, b) => {
+          const scoreA = (a.wins * 8) + (a.goals * 5) + (a.mvps * 10) + (a.dribbles * 2) + a.shots + (a.matchesPlayed * 0.5) - (a.losses * 2);
+          const scoreB = (b.wins * 8) + (b.goals * 5) + (b.mvps * 10) + (b.dribbles * 2) + b.shots + (b.matchesPlayed * 0.5) - (b.losses * 2);
+          return scoreB - scoreA;
+        });
       }
 
       return ranking.slice(0, maxCount);
@@ -280,12 +272,28 @@ export const firebaseService = {
       const twoHoursAgo = Date.now() - 7200000;
       const oldQuery = rtdbQuery(chatRef, orderByChild('timestamp'), endAt(twoHoursAgo));
       const snapshot = await get(oldQuery);
+      const allSnapshot = await get(chatRef);
       if (snapshot.exists()) {
         const updates = {};
         snapshot.forEach(child => {
           updates[child.key] = null;
         });
         await update(chatRef, updates);
+      }
+      if (allSnapshot.exists() && allSnapshot.size > 400) {
+        const messages = [];
+        allSnapshot.forEach(child => {
+          messages.push({ key: child.key, timestamp: child.val().timestamp || 0 });
+        });
+        messages.sort((a, b) => a.timestamp - b.timestamp);
+        const overflow = messages.slice(0, Math.max(0, messages.length - 300));
+        if (overflow.length) {
+          const updates = {};
+          overflow.forEach(msg => {
+            updates[msg.key] = null;
+          });
+          await update(chatRef, updates);
+        }
       }
     } catch (e) {
       console.warn("Pruning skipped or unauthorized:", e);

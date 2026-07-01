@@ -10,12 +10,14 @@ export class ClientBall {
     this.targetX = C.W / 2;
     this.targetY = C.H / 2;
     this.owner = null;
+    this.lastTouch = null;
   }
 
   updateState(serverBall) {
     this.targetX = serverBall.x;
     this.targetY = serverBall.y;
     this.owner = serverBall.owner;
+    this.lastTouch = serverBall.lastTouch || null;
   }
 
   // Smooth position interpolation

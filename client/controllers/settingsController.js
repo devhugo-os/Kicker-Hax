@@ -207,23 +207,7 @@ export const settingsController = {
     }
 
     const selfCtrl = playerNum === 1 ? this.CTRL_P1 : this.CTRL_P2;
-    const oppCtrl = playerNum === 1 ? this.CTRL_P2 : this.CTRL_P1;
-
-    // Block cross players duplicate key
-    const usedByOpponent = Object.values(oppCtrl).includes(selectedKey);
-    if (usedByOpponent && selectedKey) {
-      btn.classList.add('warn');
-      btn.textContent = 'Já em uso pelo outro jogador!';
-      setTimeout(() => {
-        btn.classList.remove('warn');
-        const val = playerNum === 1 ? this.CTRL_P1[actionId] : this.CTRL_P2[actionId];
-        btn.textContent = this.getKeyLabel(val);
-      }, 1000);
-      this.waitingRemap = null;
-      return;
-    }
-
-    // Self swap if key is already assigned inside same player
+    // Self swap if key is already assigned inside the same control profile.
     const prevAction = Object.keys(selfCtrl).find(key => selfCtrl[key] === selectedKey);
     if (prevAction && prevAction !== actionId) {
       // Swap key values

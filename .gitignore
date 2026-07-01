@@ -26,6 +26,7 @@ Thumbs.db
 AGENTS.md
 README.md
 firestore.rules
+database.rules.json
 
 # Local Custom Agent Skills
 skills/

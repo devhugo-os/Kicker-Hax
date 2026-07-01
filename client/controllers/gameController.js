@@ -1,4 +1,4 @@
-// Kicker Hax - Core Gameplay Controller (Solo vs CPU & Multiplayer Online)
+﻿// Kicker Hax - Core Gameplay Controller (Solo vs CPU & Multiplayer Online)
 import { router } from '../router.js';
 import { firebaseService } from '../services/firebaseService.js';
 import { socketService } from '../services/socketService.js';
@@ -13,7 +13,7 @@ import { ServerPhysics } from '../../server/models/serverPhysics.js';
 
 export const gameController = {
   currentUser: null,
-  
+
   // Game state
   mode: 'solo', // 'solo' | 'multiplayer'
   difficulty: 'medium',
@@ -22,7 +22,7 @@ export const gameController = {
   goalLimit: 3,
   status: 'lobby',
   countdown: 0,
-  
+
   // Socket Lobby
   activeRoom: null,
 
@@ -44,7 +44,7 @@ export const gameController = {
   mediaRecorder: null,
   recordedChunks: [],
   isRecording: false,
-  
+
   // Local Stats Track
   goalsScored: 0,
   assistsGained: 0,
@@ -160,11 +160,11 @@ export const gameController = {
         socketService.onLobbyUpdate((room) => this.updateLobbyView(room));
         socketService.onChat((msg) => this.appendChatMessage(msg));
         socketService.onMatchStarted(() => {
-          showToast('A partida está começando!', 'success');
+          showToast('A partida estÃ¡ comeÃ§ando!', 'success');
           router.show('match-screen');
         });
         socketService.onKicked(() => {
-          showToast('Você foi expulso do lobby pelo Host.', 'error');
+          showToast('VocÃª foi expulso do lobby pelo Host.', 'error');
           router.show('multiplayer-screen');
         });
       },
@@ -184,7 +184,7 @@ export const gameController = {
     });
 
     router.register('ranking-screen', {
-      onEnter: () => this.loadRanking('wins')
+      onEnter: () => this.loadRanking('overall')
     });
   },
 
@@ -203,8 +203,19 @@ export const gameController = {
     const btnSoloStart = document.getElementById('solo-btn-start');
     if (btnSoloStart) {
       btnSoloStart.onclick = () => {
+        this.practiceMode = false;
         this.goalLimit = parseInt(document.getElementById('solo-goals').value, 10);
         this.matchTime = parseInt(document.getElementById('solo-minutes').value, 10) * 60;
+        router.show('match-screen');
+      };
+    }
+
+    const btnSoloPractice = document.getElementById('solo-btn-practice');
+    if (btnSoloPractice) {
+      btnSoloPractice.onclick = () => {
+        this.practiceMode = true;
+        this.goalLimit = 0;
+        this.matchTime = 24 * 60 * 60;
         router.show('match-screen');
       };
     }
@@ -255,7 +266,7 @@ export const gameController = {
       btnCopyCode.onclick = () => {
         const codeText = document.getElementById('lobby-room-code').textContent;
         navigator.clipboard.writeText(codeText).then(() => {
-          showToast('Código copiado!', 'success');
+          showToast('CÃ³digo copiado!', 'success');
         });
       };
     }
@@ -299,11 +310,11 @@ export const gameController = {
         const profile = {
           uid: this.currentUser.uid,
           username: menuController.profileData.username,
-          badge: menuController.profileData.badge || '🏳️'
+          badge: menuController.profileData.badge || 'ðŸ³ï¸'
         };
 
         socketService.createRoom(name, pass, max, duration, goals, fieldSize, showReplay, profile);
-        
+
         const s = socketService.getSocket();
         if (s) {
           s.once('roomCreated', (code) => {
@@ -325,11 +336,11 @@ export const gameController = {
         const profile = {
           uid: this.currentUser.uid,
           username: menuController.profileData.username,
-          badge: menuController.profileData.badge || '🏳️'
+          badge: menuController.profileData.badge || 'ðŸ³ï¸'
         };
 
         socketService.joinRoom(code, pass, profile);
-        
+
         const s = socketService.getSocket();
         if (s) {
           s.once('joinSuccess', () => {
@@ -351,7 +362,7 @@ export const gameController = {
         if (confirm('Deseja realmente sair da partida?')) {
           if (this.localPhysicsTick) cancelAnimationFrame(this.localPhysicsTick);
           if (soundFx.stopCrowd) soundFx.stopCrowd();
-          
+
           if (this.mode === 'multiplayer') {
             socketService.leaveRoom();
             router.show('multiplayer-screen');
@@ -388,17 +399,8 @@ export const gameController = {
         e.preventDefault();
         const input = document.getElementById('game-chat-input');
         const txt = input.value.trim();
-        if (txt) {
-          if (this.mode === 'multiplayer') {
-            socketService.sendChatMessage(txt);
-          } else {
-            this.appendChatMessage({
-              time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-              username: menuController.profileData.displayName,
-              badge: menuController.profileData.badge,
-              text: txt
-            }, true);
-          }
+        if (txt && this.mode === 'multiplayer') {
+          socketService.sendChatMessage(txt);
           input.value = '';
         }
         // Blur
@@ -409,11 +411,21 @@ export const gameController = {
     }
 
     // Bind ranking screens selector filters
-    const filters = ['overall', 'wins', 'goals', 'level', 'played', 'dribbles', 'shots', 'mvps'];
-    filters.forEach(f => {
-      const btn = document.getElementById(`rank-filter-${f}`);
-      if (btn) btn.onclick = () => this.loadRanking(f);
-    });
+    const btnRankWins = document.getElementById('rank-filter-wins');
+    const btnRankGoals = document.getElementById('rank-filter-goals');
+    const btnRankShots = document.getElementById('rank-filter-shots');
+    const btnRankDribbles = document.getElementById('rank-filter-dribbles');
+    const btnRankMatches = document.getElementById('rank-filter-matches');
+    const btnRankMvps = document.getElementById('rank-filter-mvps');
+    const btnRankOverall = document.getElementById('rank-filter-overall');
+
+    if (btnRankWins) btnRankWins.onclick = () => this.loadRanking('wins');
+    if (btnRankGoals) btnRankGoals.onclick = () => this.loadRanking('goals');
+    if (btnRankShots) btnRankShots.onclick = () => this.loadRanking('shots');
+    if (btnRankDribbles) btnRankDribbles.onclick = () => this.loadRanking('dribbles');
+    if (btnRankMatches) btnRankMatches.onclick = () => this.loadRanking('matches');
+    if (btnRankMvps) btnRankMvps.onclick = () => this.loadRanking('mvps');
+    if (btnRankOverall) btnRankOverall.onclick = () => this.loadRanking('overall');
 
     // Post Game Screen Continue button
     const btnPostContinue = document.getElementById('post-btn-continue');
@@ -467,11 +479,7 @@ export const gameController = {
     // Focus lost event listener
     const focusLostBadge = document.getElementById('focus-lost-badge');
     const handleFocusLost = () => {
-      if (this.mode === 'solo') {
-        if (!this.isPaused && router.currentScreenId === 'match-screen') {
-          this.togglePauseMenu(); // Opens modal and pauses physics
-        }
-      } else if (this.mode === 'multiplayer' && this.isHost) {
+      if (this.mode === 'multiplayer' && this.isHost) {
         const socket = socketService.getSocket();
         if (socket) socket.emit('hostFocusChanged', { focusLost: true });
       }
@@ -494,13 +502,16 @@ export const gameController = {
     this.ball = new ClientBall();
     this.players = [];
 
+    const gameChat = document.getElementById('game-chat-overlay');
+    if (gameChat) gameChat.classList.toggle('hidden', this.mode !== 'multiplayer');
+
     // Initialize Pause Menu Event Handlers once
     this.setupPauseMenu();
 
     // Bind Escape/Enter/P keys in match to open transparent chat or pause
     window.addEventListener('keydown', (e) => {
       if (router.currentScreenId !== 'match-screen') return;
-      
+
       if (e.key === 'Enter') {
         const form = document.getElementById('game-chat-form');
         const input = document.getElementById('game-chat-input');
@@ -532,7 +543,7 @@ export const gameController = {
     const aspect = this.canvas.width / this.canvas.height;
     const availW = window.innerWidth - 80; // paddings and sidebars
     const availH = window.innerHeight - 110; // top HUD and paddings
-    
+
     let canvasH = availH;
     let canvasW = canvasH * aspect;
 
@@ -546,11 +557,17 @@ export const gameController = {
     canvasH = Math.floor(canvasH);
 
     const leftSidebar = document.getElementById('match-side-left');
-    if (leftSidebar) leftSidebar.style.display = 'none';
-    stage.style.gridTemplateColumns = `${canvasW}px 150px`;
-    stage.style.width = `${canvasW + 150 + 16}px`;
+    if (this.mode === 'solo') {
+      if (leftSidebar) leftSidebar.style.display = 'none';
+      stage.style.gridTemplateColumns = `${canvasW}px 150px`;
+      stage.style.width = `${canvasW + 150 + 16}px`;
+    } else {
+      if (leftSidebar) leftSidebar.style.display = 'flex';
+      stage.style.gridTemplateColumns = `150px ${canvasW}px 150px`;
+      stage.style.width = `${canvasW + 300 + 16}px`;
+    }
     stage.style.height = `${canvasH}px`;
-    
+
     this.canvas.style.width = `${canvasW}px`;
     this.canvas.style.height = `${canvasH}px`;
   },
@@ -567,8 +584,8 @@ export const gameController = {
 
     // Spawn local players
     const username = menuController.profileData.username;
-    const badge = menuController.profileData.badge || '🇧🇷';
-    
+    const badge = menuController.profileData.badge || 'ðŸ‡§ðŸ‡·';
+
     // Retrieve selected field size and replay settings
     const sizeSelect = document.getElementById('solo-field-size');
     const fieldSize = sizeSelect ? sizeSelect.value : 'medium';
@@ -586,7 +603,7 @@ export const gameController = {
     this.resizeCanvasContainer();
 
     const p1Lobby = { id: 'p1', uid: this.currentUser.uid, username, badge, team: 'blue', cpu: false };
-    const cpuLobby = { id: 'cpu', uid: '', username: 'CPU Bot', badge: '⚙️', team: 'red', cpu: true, difficulty: this.difficulty };
+    const cpuLobby = { id: 'cpu', uid: '', username: 'CPU Bot', badge: 'âš™ï¸', team: 'red', cpu: true, difficulty: this.difficulty };
 
     // Reset match statistics
     this.p1PossessionFrames = 0;
@@ -605,7 +622,7 @@ export const gameController = {
     this.countdown = 300;
     this.ball.x = this.canvas.width / 2;
     this.ball.y = this.canvas.height / 2;
-    
+
     // Import server physics simulation locally
     const MatchSim = {
       score: { red: 0, blue: 0 },
@@ -622,7 +639,7 @@ export const gameController = {
     const redPlayer = {
       id: 'cpu',
       name: 'CPU Bot',
-      badge: '⚙️',
+      badge: 'âš™ï¸',
       team: C.Team.RED,
       cpu: true,
       difficulty: this.difficulty,
@@ -648,9 +665,9 @@ export const gameController = {
       tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, shootHalo: 0
     };
 
-    const localPlayers = [redPlayer, bluePlayer];
+    const localPlayers = this.practiceMode ? [bluePlayer] : [redPlayer, bluePlayer];
     this.players = localPlayers.map(p => new ClientPlayer(p));
-    
+
     // Physical ball simulation
     const localBallSim = {
       x: this.canvas.width / 2,
@@ -672,7 +689,7 @@ export const gameController = {
       const tickLocalGame = (timestamp) => {
         if (router.currentScreenId !== 'match-screen') return;
         try {
-        
+
         if (typeof timestamp !== 'number') timestamp = performance.now();
         let dt = timestamp - lastTime;
         if (dt > 100) dt = 100; // Cap to avoid freeze spirals
@@ -710,7 +727,7 @@ export const gameController = {
               MatchSim.status = 'replay';
               // Set replay duration (accounting for 3x slow motion)
               MatchSim.countdownTimer = (C.GOAL_FREEZE_FRAMES * 2 * 3) + 5;
-              
+
               // Start local recording
               this.startLocalReplayRecording();
             }
@@ -743,7 +760,7 @@ export const gameController = {
             if (this.keys.get(keysCtrl.down)) inputP1.y += 1;
             if (this.keys.get(keysCtrl.left)) inputP1.x -= 1;
             if (this.keys.get(keysCtrl.right)) inputP1.x += 1;
-            
+
             if (keysCtrl.sprint.startsWith('Shift')) {
               inputP1.sprint = this.codes.get(keysCtrl.sprint);
             } else {
@@ -756,7 +773,7 @@ export const gameController = {
 
             // 2) AI bot decision making
             let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
-            if (redPlayer.stun <= 0) {
+            if (!this.practiceMode && redPlayer.stun <= 0) {
               const ballFuture = { x: localBallSim.x, y: localBallSim.y };
               if (!localBallSim.owner) {
                 let vx = localBallSim.vx;
@@ -770,13 +787,13 @@ export const gameController = {
               }
 
               const distBall = Math.hypot(ballFuture.x - redPlayer.x, ballFuture.y - redPlayer.y);
-              
+
               // Intelligent Roles setup
               let targetX = ballFuture.x;
               let targetY = ballFuture.y;
 
               const ballInOurHalf = localBallSim.x < w / 2;
-              
+
               if (localBallSim.owner === 'cpu') {
                 // attacking state
                 targetX = rightPostX;
@@ -835,7 +852,7 @@ export const gameController = {
 
               inputCPU.x = ax * speedFactor;
               inputCPU.y = ay * speedFactor;
-              
+
               const wantSprint = (localBallSim.owner === 'cpu' && Math.abs(rightPostX - redPlayer.x) > 200) ||
                                  (!localBallSim.owner && distBall > 120);
               inputCPU.sprint = wantSprint && redPlayer.staminaLock <= 0 && redPlayer.stamina > 0.30;
@@ -900,6 +917,7 @@ export const gameController = {
 
               // Power Kick
               if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && (localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 8)) {
+                if (p.id === 'p1') this.p1Shots = (this.p1Shots || 0) + 1;
                 p.stamina = Math.max(0, p.stamina - 0.50);
                 if (p.stamina === 0) {
                   p.staminaLock = C.STAMINA_LOCK_FRAMES;
@@ -922,6 +940,7 @@ export const gameController = {
                   p.shootHalo = 18;
                   const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
                   const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
+                  if (p.id === 'p1') this.p1Shots = (this.p1Shots || 0) + 1;
                   Physics.kickBall(p, localBallSim, ang, pow);
                   frameSfx.push('kick');
                 }
@@ -930,13 +949,13 @@ export const gameController = {
             };
 
             applySkills(bluePlayer, inputP1);
-            applySkills(redPlayer, inputCPU);
+            if (!this.practiceMode) applySkills(redPlayer, inputCPU);
 
             Physics.updatePlayerPhysics(bluePlayer, inputP1, localBallSim, (sfx) => frameSfx.push(sfx));
-            Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
+            if (!this.practiceMode) Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
 
             Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
-            Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
+            if (!this.practiceMode) Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
 
             Physics.resolvePlayerPlayer(localPlayers);
             Physics.resolvePlayerBall(localPlayers, localBallSim, () => {
@@ -945,26 +964,13 @@ export const gameController = {
               }
             });
 
-            // Track Shots on Goal (60Hz)
-            if (this.shotCooldown > 0) {
-              this.shotCooldown--;
-            }
-            const p1NearBall = Math.hypot(bluePlayer.x - localBallSim.x, bluePlayer.y - localBallSim.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 12;
-            if (p1NearBall && (inputP1.shoot || inputP1.power) && !this.shotCooldown) {
-              const ang = Math.atan2(localBallSim.y - bluePlayer.y, localBallSim.x - bluePlayer.x);
-              if (Math.cos(ang) > 0.2) {
-                this.p1Shots = (this.p1Shots || 0) + 1;
-                this.shotCooldown = 30;
-              }
-            }
-
             Physics.updateBallPhysics(
               localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, localPlayers,
               (sfx) => frameSfx.push(sfx),
               (side) => {
                 // Goal triggered offline
                 if (side === 'blue') MatchSim.score.blue++; else MatchSim.score.red++;
-                
+
                 // Set last goal detail
                 const scorerName = localBallSim.lastTouch === 'p1' ? username : 'CPU Bot';
                 const ownGoal = (side === 'blue' && localBallSim.lastTouch === 'cpu') || (side === 'red' && localBallSim.lastTouch === 'p1');
@@ -983,6 +989,7 @@ export const gameController = {
                     MatchSim.status = 'ended';
                     this.localMatchEnd(MatchSim.score);
                   } else {
+                    // Bypass replay, restart directly
                     MatchSim.status = 'countdown';
                     MatchSim.countdownTimer = 300;
                     resetFieldPositions();
@@ -1037,7 +1044,7 @@ export const gameController = {
         const s = Math.floor(MatchSim.matchTime % 60);
         const clockEl = document.getElementById('match-clock');
         const scoreEl = document.getElementById('match-score');
-        
+
         if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         if (scoreEl) scoreEl.textContent = `${MatchSim.score.red} : ${MatchSim.score.blue}`;
 
@@ -1067,8 +1074,6 @@ export const gameController = {
         this.totalPossessionFrames = (this.totalPossessionFrames || 0) + 1;
         const p1Poss = Math.round(((this.p1PossessionFrames || 0) / (this.totalPossessionFrames || 1)) * 100);
 
-
-
         // Track Tackles and Dribbles counts from state cooldown activations
         if (bluePlayer.tackle_cd > 0 && !this.p1TackleLock) {
           this.p1Tackles = (this.p1Tackles || 0) + 1;
@@ -1083,7 +1088,7 @@ export const gameController = {
           this.p1DribbleLock = false;
         }
 
-        // Render counts on HUD (Você / P1 only)
+        // Render counts on HUD (VocÃª / P1 only)
         const rightPossEl = document.getElementById('right-stat-possession');
         const rightShotsEl = document.getElementById('right-stat-shots');
         const rightTacklesEl = document.getElementById('right-stat-tackles');
@@ -1097,7 +1102,7 @@ export const gameController = {
         // Render Countdown Banners
         if (MatchSim.status === 'countdown') {
           const bannerSecs = Math.max(0, Math.ceil(MatchSim.countdownTimer / 60));
-          this.drawCenterBanner(`Começa em ${bannerSecs}...`, 'Prepare-se!');
+          this.drawCenterBanner(`ComeÃ§a em ${bannerSecs}...`, 'Prepare-se!');
         } else if (MatchSim.status === 'freeze') {
           const label = (this.lastGoal && this.lastGoal.ownGoal) ? `GOL CONTRA de ${this.lastGoal.scorerName}` : `GOL DE ${(this.lastGoal && this.lastGoal.scorerName) || '???'}!`;
           this.drawCenterBanner(label, 'Revisando jogada...');
@@ -1149,7 +1154,7 @@ export const gameController = {
           team: p.team,
           has: (localBallSim.owner === p.id),
           name: p.id === 'p1' ? username : 'CPU Bot',
-          badge: p.id === 'p1' ? badge : '⚙️',
+          badge: p.id === 'p1' ? badge : 'âš™ï¸',
           inv: p.invuln || 0,
           stun: p.stun || 0,
           halo: p.shootHalo || 0
@@ -1177,33 +1182,71 @@ export const gameController = {
   localMatchEnd(score) {
     cancelAnimationFrame(this.localPhysicsTick);
     this.stopLocalReplayRecording();
-    
+
     // Stop background crowd noise to prevent audio leak to menu
     soundFx.stopCrowd();
-    
+
     showToast('Fim de jogo!', 'info');
-    
+
     // In Solo match, do NOT save stats or history to Firebase, and do not award XP.
     // Display Post-match Screen directly
+    const resultTitle = score.red === score.blue ? 'Empate' : (score.blue > score.red ? 'Vitoria' : 'Derrota');
+    document.getElementById('post-result-title').textContent = resultTitle;
     document.getElementById('post-score-red').textContent = score.red;
     document.getElementById('post-score-blue').textContent = score.blue;
     document.getElementById('post-mvp').textContent = score.blue >= score.red ? menuController.profileData.username : 'CPU Bot';
     document.getElementById('post-xp-gained').textContent = `+0 XP (Modo Treino)`;
-    
-    const winTitle = document.getElementById('post-winner-title');
-    if (winTitle) {
-      if (score.blue === score.red) {
-        winTitle.textContent = 'Empate!';
-        winTitle.style.color = '#94a3b8'; // text-muted style slate
-      } else if (score.blue > score.red) {
-        winTitle.textContent = 'Time Azul Ganhou!';
-        winTitle.style.color = '#3b82f6'; // blue
-      } else {
-        winTitle.textContent = 'Time Vermelho Ganhou!';
-        winTitle.style.color = '#ef4444'; // red
-      }
+    router.show('post-game-screen');
+  },
+
+  showOnlineMatchEnd(result) {
+    showToast('Partida finalizada!', 'info');
+    this.stopLocalReplayRecording();
+
+    const score = result?.score || result || { red: 0, blue: 0 };
+    const myId = socketService.getSocket().id;
+    const localP = this.players.find(p => p.id === myId);
+    const isSpec = !localP || localP.team === 'spectator';
+    const winnerTeam = result?.winnerTeam || (score.red === score.blue ? 'draw' : (score.blue > score.red ? C.Team.BLUE : C.Team.RED));
+    const isDraw = winnerTeam === 'draw';
+    const isWin = !isSpec && localP.team === winnerTeam && !isDraw;
+    const isLoss = !isSpec && localP.team !== winnerTeam && !isDraw;
+    const playerStats = result?.playerStats?.find(stats => stats.playerId === myId) || {};
+    const isMvp = !!result?.mvp && result.mvp.playerId === myId;
+    const xpGained = isSpec ? 0 : isWin ? 80 : isDraw ? 30 : 15;
+
+    if (!isSpec && !result?.hasBots) {
+      firebaseService.saveMatchResult(
+        this.currentUser.uid,
+        isWin,
+        isLoss,
+        isDraw,
+        playerStats.goals || 0,
+        playerStats.shots || this.p1Shots || 0,
+        playerStats.dribbles || this.p1Dribbles || 0,
+        playerStats.ownGoals || 0,
+        isMvp,
+        xpGained
+      ).then(() => {
+        const matchDoc = {
+          mode: 'multiplayer',
+          date: new Date().toISOString(),
+          playerUids: [this.currentUser.uid],
+          playerTeams: { [this.currentUser.uid]: localP.team },
+          winner: winnerTeam,
+          scoreRed: score.red,
+          scoreBlue: score.blue
+        };
+        return firebaseService.addMatchToHistory(matchDoc);
+      }).catch(err => console.warn('[Kicker Stats] Falha ao salvar resultado:', err));
     }
-    
+
+    const resultTitle = isDraw ? 'Empate' : `Vitoria do Time ${winnerTeam === C.Team.BLUE ? 'Azul' : 'Vermelho'}`;
+    document.getElementById('post-result-title').textContent = resultTitle;
+    document.getElementById('post-score-red').textContent = score.red;
+    document.getElementById('post-score-blue').textContent = score.blue;
+    document.getElementById('post-mvp').textContent = result?.mvp?.username || (winnerTeam === C.Team.BLUE ? 'Time Azul' : winnerTeam === C.Team.RED ? 'Time Vermelho' : 'Empate');
+    document.getElementById('post-xp-gained').textContent = isSpec ? 'Espectador' : (result?.hasBots ? '+0 XP (com bot)' : `+${xpGained} XP`);
     router.show('post-game-screen');
   },
 
@@ -1248,11 +1291,8 @@ export const gameController = {
       // Update focusLostBadge based on server's host pause state
       const badge = document.getElementById('focus-lost-badge');
       if (badge) {
-        if (state.isPausedByUser) {
-          badge.textContent = '⏸️ Partida Pausada pelo Host';
-          badge.classList.remove('hidden');
-        } else if (state.isHostPaused) {
-          badge.textContent = '⏸️ Pausado (Dono da sala fora da aba)';
+        if (state.isHostPaused) {
+          badge.textContent = 'â¸ï¸ Pausado (Dono da sala fora da aba)';
           badge.classList.remove('hidden');
         } else {
           badge.classList.add('hidden');
@@ -1296,15 +1336,16 @@ export const gameController = {
     });
 
     socketService.onPlayReplay(({ replayFrames, goalInfo }) => {
+      if (!replayFrames || replayFrames.length === 0) {
+        this.lastGoal = goalInfo;
+        this.endReplayPlayback();
+        return;
+      }
       this.inReplay = true;
       this.replayFrames = replayFrames;
       this.replayFrameIdx = 0;
       this.replayTimer = 0;
       this.lastGoal = goalInfo;
-
-      if (goalInfo && goalInfo.scorerId === socketService.getSocket().id && !goalInfo.ownGoal) {
-        this.goalsScored = (this.goalsScored || 0) + 1;
-      }
 
       document.getElementById('replay-overlay')?.classList.remove('hidden');
 
@@ -1312,85 +1353,12 @@ export const gameController = {
       this.startLocalReplayRecording();
     });
 
-    socketService.onMatchEnded((score) => {
-      showToast('Partida finalizada!', 'info');
-      this.stopLocalReplayRecording();
-      
-      const localId = socketService.getSocket().id;
-      const localP = this.players.find(p => p.id === localId);
-      const isSpec = !localP || localP.team === 'spectator';
-      
-      let isWin = false;
-      let isLoss = false;
-      let isDraw = score.red === score.blue;
-
-      if (!isSpec && localP) {
-        const winTeam = score.blue > score.red ? C.Team.BLUE : C.Team.RED;
-        isWin = localP.team === winTeam && !isDraw;
-        isLoss = localP.team !== winTeam && !isDraw;
+    socketService.onMatchEnded((result) => {
+      if (this.inReplay) {
+        this.pendingMatchResult = result;
+        return;
       }
-
-      // Determine MVP
-      const winTeam = score.blue > score.red ? C.Team.BLUE : C.Team.RED;
-      const winningPlayers = this.players.filter(p => p.team === winTeam);
-      let mvpName = 'Nenhum';
-      let mvpId = '';
-      if (winningPlayers.length > 0) {
-        // Fallback to first winning player or local if local won
-        const localWin = winningPlayers.find(p => p.id === localId);
-        const mvpP = localWin || winningPlayers[0];
-        mvpName = mvpP.username || 'Jogador';
-        mvpId = mvpP.id;
-      }
-
-      const isMvp = !isSpec && isWin && (mvpId === localId);
-      const xpGained = isSpec ? 0 : isWin ? 80 : isDraw ? 30 : 15;
-
-      if (!isSpec) {
-        // Save stats to firestore
-        firebaseService.saveMatchResult(
-          this.currentUser.uid,
-          isWin, isLoss, isDraw,
-          this.goalsScored || 0,
-          this.p1Dribbles || 0,
-          this.p1Shots || 0,
-          isMvp ? 1 : 0,
-          xpGained
-        ).then(() => {
-          const matchDoc = {
-            mode: 'multiplayer',
-            date: new Date().toISOString(),
-            playerUids: [this.currentUser.uid],
-            playerTeams: { [this.currentUser.uid]: localP.team },
-            winner: score.blue > score.red ? C.Team.BLUE : isDraw ? 'draw' : C.Team.RED,
-            scoreRed: score.red,
-            scoreBlue: score.blue
-          };
-          return firebaseService.addMatchToHistory(matchDoc);
-        });
-      }
-
-      // Show results
-      document.getElementById('post-score-red').textContent = score.red;
-      document.getElementById('post-score-blue').textContent = score.blue;
-      document.getElementById('post-mvp').textContent = mvpName;
-      document.getElementById('post-xp-gained').textContent = isSpec ? 'Espectador' : `+${xpGained} XP`;
-      
-      const winTitle = document.getElementById('post-winner-title');
-      if (winTitle) {
-        if (score.blue === score.red) {
-          winTitle.textContent = 'Empate!';
-          winTitle.style.color = '#94a3b8'; // text-muted style slate
-        } else if (score.blue > score.red) {
-          winTitle.textContent = 'Time Azul Ganhou!';
-          winTitle.style.color = '#3b82f6'; // blue
-        } else {
-          winTitle.textContent = 'Time Vermelho Ganhou!';
-          winTitle.style.color = '#ef4444'; // red
-        }
-      }
-      
-      router.show('post-game-screen');
+      this.showOnlineMatchEnd(result);
     });
 
     // High frequency client tick loop (60Hz animation loop)
@@ -1404,7 +1372,7 @@ export const gameController = {
       if (this.keys.get(keysCtrl.down)) input.y += 1;
       if (this.keys.get(keysCtrl.left)) input.x -= 1;
       if (this.keys.get(keysCtrl.right)) input.x += 1;
-      
+
       if (keysCtrl.sprint.startsWith('Shift')) {
         input.sprint = this.codes.get(keysCtrl.sprint);
       } else {
@@ -1442,7 +1410,7 @@ export const gameController = {
       const s = Math.floor(this.matchTime % 60);
       const clockEl = document.getElementById('match-clock');
       const scoreEl = document.getElementById('match-score');
-      
+
       if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       if (scoreEl) scoreEl.textContent = `${this.score.red} : ${this.score.blue}`;
 
@@ -1450,12 +1418,12 @@ export const gameController = {
       const myId = socketService.getSocket().id;
       const me = this.players.find(p => p.id === myId);
       const opp = this.players.find(p => p.id !== myId && p.team !== 'spectator');
-      
+
       if (me) {
         const myStam = document.getElementById('right-stam-fill');
         const myPow = document.getElementById('right-pow-fill');
         if (myStam) myStam.style.height = `${me.stamina * 100}%`;
-        
+
         // Read local kick charge if shoot held
         let localCharge = 0;
         if (input.shoot) localCharge = 1; // display simple kick glow
@@ -1526,7 +1494,7 @@ export const gameController = {
 
       // Render countdown banner
       if (this.status === 'countdown') {
-        this.drawCenterBanner(`Começa em ${this.countdown}...`, 'Prepare-se!');
+        this.drawCenterBanner(`ComeÃ§a em ${this.countdown}...`, 'Prepare-se!');
       } else if (this.status === 'freeze') {
         const label = this.lastGoal.ownGoal ? `GOL CONTRA de ${this.lastGoal.scorerName}` : `GOL DE ${this.lastGoal.scorerName}!`;
         this.drawCenterBanner(label, 'Revisando jogada...', true);
@@ -1544,10 +1512,6 @@ export const gameController = {
     soundFx.stopCrowd();
     socketService.clearListeners();
     document.getElementById('replay-overlay')?.classList.add('hidden');
-    
-    const gameChat = document.getElementById('game-chat-messages');
-    if (gameChat) gameChat.innerHTML = '';
-    
     window.removeEventListener('resize', () => this.resizeCanvasContainer());
   },
 
@@ -1556,10 +1520,10 @@ export const gameController = {
   // ==========================================================================
   startLocalReplayRecording() {
     if (!this.canvas || this.isRecording) return;
-    
+
     try {
       const stream = this.canvas.captureStream(30); // 30 FPS stream
-      
+
       // Get Web Audio API mixed stream
       const audioDest = soundFx.getRecordingStreamDestination();
       if (audioDest) {
@@ -1569,7 +1533,7 @@ export const gameController = {
 
       this.recordedChunks = [];
       this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
-      
+
       this.mediaRecorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
           this.recordedChunks.push(e.data);
@@ -1579,7 +1543,7 @@ export const gameController = {
       this.mediaRecorder.onstop = () => {
         this.replayBlob = new Blob(this.recordedChunks, { type: 'video/webm' });
         this.isRecording = false;
-        
+
         // Show save button
         const saveBtn = document.getElementById('btn-save-replay');
         if (saveBtn) saveBtn.style.display = 'inline-block';
@@ -1640,30 +1604,10 @@ export const gameController = {
     // Render replay frame directly
     // Ball
     ctxBallDraw(this.ctx, frame.ball.x, frame.ball.y);
-    
+
     // Players
     frame.players.forEach(p => {
-      const currentP = this.players.find(x => x.id === p.id);
-      let name = p.name;
-      let badge = p.badge;
-      
-      if (!name) {
-        if (currentP) {
-          name = currentP.username;
-          badge = currentP.badge;
-        } else if (p.id === 'p1') {
-          name = menuController.profileData.username;
-          badge = menuController.profileData.badge || '🇧🇷';
-        } else if (p.id === 'cpu') {
-          name = 'CPU Bot';
-          badge = '⚙️';
-        } else {
-          name = 'Jogador';
-          badge = '🏳️';
-        }
-      }
-      
-      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, name, badge, p.halo, p.inv, p.stun, p.has);
+      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, p.name, p.badge, p.halo, p.inv, p.stun, p.has);
     });
 
     // Replay text info
@@ -1681,9 +1625,15 @@ export const gameController = {
     document.getElementById('replay-overlay')?.classList.add('hidden');
     const captionEl = document.getElementById('replay-caption');
     if (captionEl) captionEl.style.display = 'none';
-    
+
     // Resume persistent stadium audio
     soundFx.ensureAudio();
+
+    if (this.pendingMatchResult) {
+      const pending = this.pendingMatchResult;
+      this.pendingMatchResult = null;
+      this.showOnlineMatchEnd(pending);
+    }
   },
 
   // ==========================================================================
@@ -1886,7 +1836,7 @@ export const gameController = {
     cx.strokeStyle = 'rgba(255,255,255,.18)';
     cx.lineWidth = 1;
     cx.beginPath();
-    
+
     // Draw net lines left
     for (let x = C.BORDER - C.POST_T - C.GOAL_DEPTH; x <= C.BORDER - C.POST_T; x += 10) {
       cx.moveTo(x, gTop); cx.lineTo(x, gBot);
@@ -1911,7 +1861,7 @@ export const gameController = {
     const h = this.canvas.height;
     this.ctx.save();
     this.ctx.globalAlpha = 0.95;
-    
+
     const bannerW = 640;
     const bannerH = 140;
     const x = w / 2 - bannerW / 2;
@@ -1925,16 +1875,16 @@ export const gameController = {
       grad.addColorStop(1, 'rgba(245, 158, 11, 0.95)');
       this.ctx.fillStyle = grad;
       this.ctx.fillRect(x, y, bannerW, bannerH);
-      
+
       this.ctx.strokeStyle = '#ffffff';
       this.ctx.lineWidth = 3;
       this.ctx.strokeRect(x + 0.5, y + 0.5, bannerW - 1, bannerH - 1);
-      
+
       // Scaling pulse animation
       const scale = 1.0 + Math.sin(Date.now() / 150) * 0.05;
       this.ctx.translate(w / 2, y + 45);
       this.ctx.scale(scale, scale);
-      
+
       this.ctx.fillStyle = '#ffffff';
       this.ctx.font = '900 32px Outfit';
       this.ctx.textAlign = 'center';
@@ -1943,7 +1893,7 @@ export const gameController = {
       this.ctx.shadowBlur = 10;
       this.ctx.fillText(title, 0, 0);
       this.ctx.restore();
-      
+
       // Draw subtitle
       this.ctx.save();
       this.ctx.globalAlpha = 0.95;
@@ -1980,6 +1930,8 @@ export const gameController = {
     const tbody = document.getElementById('rooms-list-body');
     if (!tbody) return;
 
+    rooms = rooms.filter(room => room.status === 'lobby');
+
     if (rooms.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center">Nenhuma sala criada no momento. Seja o primeiro!</td></tr>`;
       return;
@@ -1988,8 +1940,8 @@ export const gameController = {
     tbody.innerHTML = '';
     rooms.forEach(r => {
       const tr = document.createElement('tr');
-      const security = r.hasPassword ? '🔒 Senha' : '🔓 Pública';
-      
+      const security = (r.hasPassword || r.password) ? 'Senha' : 'Publica';
+
       tr.innerHTML = `
         <td><strong>${r.name}</strong></td>
         <td>${r.playersCount}/${r.maxPlayers}</td>
@@ -2003,7 +1955,7 @@ export const gameController = {
       const joinBtn = document.getElementById(`join-btn-${r.code}`);
       if (joinBtn) {
         joinBtn.onclick = () => {
-          if (r.hasPassword) {
+          if (r.hasPassword || r.password) {
             const pass = prompt('Digite a senha da sala:');
             if (pass !== null) this.joinRoomWithCode(r.code, pass);
           } else {
@@ -2018,7 +1970,7 @@ export const gameController = {
     const profile = {
       uid: this.currentUser.uid,
       username: menuController.profileData.username,
-      badge: menuController.profileData.badge || '🏳️'
+      badge: menuController.profileData.badge || 'ðŸ³ï¸'
     };
     socketService.joinRoom(code, password, profile);
     socketService.getSocket().once('joinSuccess', () => {
@@ -2032,6 +1984,7 @@ export const gameController = {
 
   updateLobbyView(room) {
     if (!room) return;
+    this.activeRoom = room;
     this.fieldSize = room.fieldSize || 'medium';
     this.showReplay = room.showReplay !== undefined ? room.showReplay : true;
 
@@ -2039,13 +1992,13 @@ export const gameController = {
     document.getElementById('lobby-room-code').textContent = room.code;
     document.getElementById('lobby-setting-time').textContent = `${room.duration}m`;
     document.getElementById('lobby-setting-goals').textContent = room.goalLimit === 0 ? 'Sem Limite' : room.goalLimit;
-    
-    const sizeMap = { small: 'Pequeno', medium: 'Médio', large: 'Grande' };
+
+    const sizeMap = { small: 'Pequeno', medium: 'MÃ©dio', large: 'Grande' };
     const sizeEl = document.getElementById('lobby-setting-size');
-    if (sizeEl) sizeEl.textContent = sizeMap[this.fieldSize] || 'Médio';
-    
+    if (sizeEl) sizeEl.textContent = sizeMap[this.fieldSize] || 'MÃ©dio';
+
     const replayEl = document.getElementById('lobby-setting-replay');
-    if (replayEl) replayEl.textContent = this.showReplay ? 'Sim' : 'Não';
+    if (replayEl) replayEl.textContent = this.showReplay ? 'Sim' : 'NÃ£o';
 
     const myId = socketService.getSocket().id;
     const isHost = room.hostId === myId;
@@ -2054,7 +2007,7 @@ export const gameController = {
     // Toggle Host controls visibility
     const startBtn = document.getElementById('lobby-btn-start');
     const botControls = document.getElementById('lobby-host-bot-controls');
-    
+
     if (startBtn) startBtn.classList.toggle('hidden', !isHost);
     if (botControls) botControls.classList.toggle('hidden', !isHost);
 
@@ -2070,11 +2023,11 @@ export const gameController = {
     room.players.forEach(p => {
       const row = document.createElement('div');
       row.className = 'lobby-player-row';
-      
+
       const isSpec = p.team === 'spectator';
       const readyBadge = isSpec ? '' : `<span class="ready-badge ${p.ready ? 'ready' : ''}">${p.ready ? 'Pronto' : 'Aguardando'}</span>`;
-      const kickAction = isHost && p.id !== myId && !p.cpu ? `<button class="kick-btn" id="kick-btn-${p.id}">❌</button>` : '';
-      const removeBotAction = isHost && p.cpu ? `<button class="kick-btn" id="remove-bot-btn-${p.id}">❌</button>` : '';
+      const kickAction = isHost && p.id !== myId && !p.cpu ? `<button class="kick-btn" id="kick-btn-${p.id}">âŒ</button>` : '';
+      const removeBotAction = isHost && p.cpu ? `<button class="kick-btn" id="remove-bot-btn-${p.id}">âŒ</button>` : '';
 
       row.innerHTML = `
         <span class="lobby-player-name"><span>${p.badge}</span> <span>${p.username}</span></span>
@@ -2123,18 +2076,11 @@ export const gameController = {
       if (!chatList) return;
 
       const isLobby = chatList.id === 'lobby-chat-messages';
-      
-      // Auto fade overlay in match
-      if (!isLobby) {
-        chatList.classList.remove('inactive');
-        clearTimeout(chatList._fadeTimer);
-        chatList._fadeTimer = setTimeout(() => chatList.classList.add('inactive'), 4000);
-      }
 
       const el = document.createElement('div');
       const isSystem = msg.username === 'Sistema';
       el.className = `chat-msg ${isSystem ? 'system' : ''}`;
-      
+
       const badgeText = msg.badge ? `<span>${msg.badge}</span> ` : '';
       el.innerHTML = `
         <span class="msg-time">[${msg.time}]</span>
@@ -2158,14 +2104,22 @@ export const gameController = {
     tbody.innerHTML = `<tr><td colspan="9" class="text-center">Carregando dados da tabela...</td></tr>`;
 
     // Filters active toggles
-    const filters = ['overall', 'wins', 'goals', 'level', 'played', 'dribbles', 'shots', 'mvps'];
-    filters.forEach(f => {
-      const btn = document.getElementById(`rank-filter-${f}`);
-      if (btn) {
-        if (f === filter) btn.classList.add('active');
-        else btn.classList.remove('active');
-      }
-    });
+    const btnWins = document.getElementById('rank-filter-wins');
+    const btnGoals = document.getElementById('rank-filter-goals');
+    const btnShots = document.getElementById('rank-filter-shots');
+    const btnDribbles = document.getElementById('rank-filter-dribbles');
+    const btnMatches = document.getElementById('rank-filter-matches');
+    const btnMvps = document.getElementById('rank-filter-mvps');
+    const btnOverall = document.getElementById('rank-filter-overall');
+
+    [btnWins, btnGoals, btnShots, btnDribbles, btnMatches, btnMvps, btnOverall].forEach(b => b?.classList.remove('active'));
+    if (filter === 'wins') btnWins?.classList.add('active');
+    if (filter === 'goals') btnGoals?.classList.add('active');
+    if (filter === 'shots') btnShots?.classList.add('active');
+    if (filter === 'dribbles') btnDribbles?.classList.add('active');
+    if (filter === 'matches') btnMatches?.classList.add('active');
+    if (filter === 'mvps') btnMvps?.classList.add('active');
+    if (filter === 'overall') btnOverall?.classList.add('active');
 
     try {
       const records = await firebaseService.getGlobalRanking(filter, 10);
@@ -2176,17 +2130,18 @@ export const gameController = {
 
       tbody.innerHTML = '';
       records.forEach((r, idx) => {
+        const winrate = (r.wins + r.losses) > 0 ? Math.round((r.wins / (r.wins + r.losses)) * 100) : 0;
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>#${idx + 1}</strong></td>
           <td><span>${r.badge}</span> <strong>${r.displayName || r.username}</strong></td>
-          <td>${r.level || 1}</td>
           <td>${r.matchesPlayed || 0}</td>
-          <td class="text-success">${r.wins || 0}</td>
-          <td>${r.goals || 0}</td>
-          <td>${r.dribbles || 0}</td>
+          <td class="text-success">${r.wins}</td>
+          <td>${r.goals}</td>
           <td>${r.shots || 0}</td>
+          <td>${r.dribbles || 0}</td>
           <td>${r.mvps || 0}</td>
+          <td>${winrate}%</td>
         `;
         tbody.appendChild(tr);
       });
@@ -2201,69 +2156,90 @@ export const gameController = {
 
     if (modal.classList.contains('hidden')) {
       modal.classList.remove('hidden');
-
       if (this.mode === 'solo') {
         this.isPaused = true;
-      } else if (this.mode === 'online' && this.isHost) {
-        // Pause match for all guests
-        const paused = socketService.hostTogglePause();
-        if (paused) {
-          showToast('Partida pausada para todos os jogadores.', 'info');
-        }
+      } else if (this.mode === 'multiplayer' && this.isHost) {
+        socketService.hostSetPaused(true);
       }
 
       const hostCtrl = document.getElementById('host-controls');
       if (hostCtrl) {
-        const isHost = this.mode === 'solo' || (this.mode === 'online' && this.isHost);
-        hostCtrl.style.display = isHost ? 'block' : 'none';
+        const canSeePanel = this.mode === 'solo' || this.mode === 'multiplayer';
+        hostCtrl.style.display = canSeePanel ? 'block' : 'none';
+        this.populateHostControls(this.mode === 'solo' || this.isHost);
       }
-
-      // Populate team reorganizer (multiplayer host only)
-      const reorganizerPanel = document.getElementById('host-team-reorganizer');
-      const reorganizerList = document.getElementById('reorganizer-list');
-      if (reorganizerPanel && reorganizerList && this.mode === 'online' && this.isHost) {
-        reorganizerPanel.classList.remove('hidden');
-        reorganizerList.innerHTML = '';
-        this.players.forEach(p => {
-          if (!p || !p.id) return;
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:11px;';
-          const teamColor = p.team === 'red' ? '#ef4444' : p.team === 'blue' ? '#3b82f6' : '#64748b';
-          row.innerHTML = `
-            <span style="flex:1;font-weight:600;color:${teamColor};">${p.badge || '🏳️'} ${p.username || p.name || p.id.slice(0,8)}</span>
-            <button style="padding:2px 6px;font-size:10px;background:#ef4444;border:none;border-radius:4px;color:#fff;cursor:pointer;" data-pid="${p.id}" data-team="red">🔴</button>
-            <button style="padding:2px 6px;font-size:10px;background:#3b82f6;border:none;border-radius:4px;color:#fff;cursor:pointer;" data-pid="${p.id}" data-team="blue">🔵</button>
-            <button style="padding:2px 6px;font-size:10px;background:#475569;border:none;border-radius:4px;color:#fff;cursor:pointer;" data-pid="${p.id}" data-team="spectator">👓</button>
-          `;
-          row.querySelectorAll('button').forEach(btn => {
-            btn.onclick = () => {
-              const pid = btn.dataset.pid;
-              const team = btn.dataset.team;
-              socketService.hostMovePlayerTeam(pid, team);
-              showToast(`Jogador movido para ${team === 'red' ? '🔴 Vermelho' : team === 'blue' ? '🔵 Azul' : '👓 Espectadores'}`, 'info');
-              // Refresh list
-              setTimeout(() => this.togglePauseMenu(), 100);
-              setTimeout(() => this.togglePauseMenu(), 200);
-            };
-          });
-          reorganizerList.appendChild(row);
-        });
-      } else if (reorganizerPanel) {
-        reorganizerPanel.classList.add('hidden');
-      }
-
     } else {
       modal.classList.add('hidden');
-
       if (this.mode === 'solo') {
         this.isPaused = false;
-      } else if (this.mode === 'online' && this.isHost) {
-        // Resume match for all guests if it was paused by user
-        if (socketService.serverRoom?.match?.isPausedByUser) {
-          socketService.hostTogglePause();
-        }
+      } else if (this.mode === 'multiplayer' && this.isHost) {
+        socketService.hostSetPaused(false);
       }
     }
+  },
+
+  populateHostControls(canControl) {
+    const note = document.getElementById('host-controls-note');
+    const resetBtn = document.getElementById('pause-btn-reset-match');
+    const addOneBtn = document.getElementById('pause-btn-add-1m');
+    const addThreeBtn = document.getElementById('pause-btn-add-3m');
+    const panel = document.getElementById('host-team-panel');
+
+    if (note) {
+      note.textContent = canControl
+        ? 'Gerencie tempo, reinicio e times da partida.'
+        : 'Somente o host pode alterar esta partida.';
+    }
+    if (resetBtn) resetBtn.disabled = !canControl;
+    [addOneBtn, addThreeBtn].forEach(btn => {
+      if (btn) btn.disabled = !canControl || this.mode !== 'multiplayer';
+    });
+
+    if (addOneBtn) addOneBtn.onclick = () => canControl && this.mode === 'multiplayer' && socketService.hostAddTime(60);
+    if (addThreeBtn) addThreeBtn.onclick = () => canControl && this.mode === 'multiplayer' && socketService.hostAddTime(180);
+    if (!panel) return;
+
+    panel.innerHTML = '';
+    if (this.mode !== 'multiplayer') {
+      panel.style.display = 'none';
+      return;
+    }
+
+    panel.style.display = 'flex';
+    const roster = this.activeRoom?.players?.length
+      ? this.activeRoom.players
+      : this.players.map(p => ({
+        id: p.id,
+        username: p.username || p.name || 'Jogador',
+        badge: p.badge || '',
+        team: p.team === C.Team.RED ? 'red' : 'blue',
+        cpu: !!p.cpu
+      }));
+
+    roster.filter(p => p.team !== 'spectator').forEach(player => {
+      const row = document.createElement('div');
+      row.className = 'host-player-row';
+      row.innerHTML = `
+        <span class="host-player-name">${player.badge || ''} ${player.username}</span>
+        <button class="btn btn-sm btn-danger" data-team="red">Vermelho</button>
+        <button class="btn btn-sm btn-primary" data-team="blue">Azul</button>
+        <button class="btn btn-sm btn-secondary" data-kick="true">Expulsar</button>
+      `;
+
+      row.querySelectorAll('button').forEach(btn => {
+        btn.disabled = !canControl || player.cpu;
+        btn.onclick = () => {
+          if (!canControl) return;
+          if (btn.dataset.kick) {
+            socketService.kickPlayer(player.id);
+            return;
+          }
+          socketService.hostChangeTeam(player.id, btn.dataset.team);
+        };
+      });
+
+      panel.appendChild(row);
+    });
   },
 
   setupPauseMenu() {
@@ -2283,28 +2259,6 @@ export const gameController = {
       };
     }
 
-    const applyBtn = document.getElementById('pause-btn-apply-settings');
-    const sizeSelect = document.getElementById('pause-field-size');
-    if (applyBtn && sizeSelect) {
-      applyBtn.onclick = () => {
-        const size = sizeSelect.value;
-        if (this.mode === 'solo') {
-          if (size === 'small') {
-            this.canvas.width = 896; this.canvas.height = 560;
-          } else if (size === 'large') {
-            this.canvas.width = 1280; this.canvas.height = 768;
-          } else {
-            this.canvas.width = 1024; this.canvas.height = 640;
-          }
-          this.resizeCanvasContainer();
-          showToast('Tamanho do campo alterado!', 'success');
-        } else if (this.mode === 'online') {
-          socketService.getSocket().emit('hostChangeFieldSize', { size });
-        }
-        this.togglePauseMenu();
-      };
-    }
-
     const resetBtn = document.getElementById('pause-btn-reset-match');
     if (resetBtn) {
       resetBtn.onclick = () => {
@@ -2312,7 +2266,7 @@ export const gameController = {
           this.score = { red: 0, blue: 0 };
           this.p1Tackles = 0; this.p1Dribbles = 0;
           this.p2Tackles = 0; this.p2Dribbles = 0;
-          
+
           if (this.localMatchSim) {
             this.localMatchSim.score = { red: 0, blue: 0 };
             this.localMatchSim.status = 'countdown';
@@ -2323,7 +2277,7 @@ export const gameController = {
             this.localBallSim.vy = 0;
           }
           showToast('Partida reiniciada!', 'success');
-        } else if (this.mode === 'online') {
+        } else if (this.mode === 'multiplayer') {
           socketService.getSocket().emit('hostResetMatch');
         }
         this.togglePauseMenu();

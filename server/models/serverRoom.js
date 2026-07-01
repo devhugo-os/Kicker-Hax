@@ -29,7 +29,9 @@ export class ServerRoom {
       badge: playerProfile.badge || '🏳️',
       team: team, // 'red' | 'blue' | 'spectator'
       ready: false,
-      ping: 0
+      ping: 0,
+      cpu: !!playerProfile.cpu,
+      difficulty: playerProfile.difficulty || 'medium'
     };
     this.players.push(newPlayer);
     return newPlayer;

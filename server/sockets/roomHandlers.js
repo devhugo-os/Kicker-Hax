@@ -3,7 +3,6 @@ import { db } from '../database/memoryDb.js';
 import { ServerRoom } from '../models/serverRoom.js';
 import { ServerMatch } from '../models/serverMatch.js';
 
-// Simple helper to generate unique 6-digit room codes
 function generateRoomCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let code = '';
@@ -13,8 +12,17 @@ function generateRoomCode() {
   return code;
 }
 
+function getPublicLobbyRooms() {
+  return db.getAllRooms()
+    .filter(room => room.status === 'lobby')
+    .map(room => room.getPublicInfo());
+}
+
+function broadcastLobbyList(io) {
+  io.emit('publicRoomsList', getPublicLobbyRooms());
+}
+
 export function registerRoomHandlers(io, socket) {
-  // Heartbeat ping/pong for latency measurement
   socket.on('ping', () => {
     socket.emit('pong');
   });
@@ -33,15 +41,12 @@ export function registerRoomHandlers(io, socket) {
       duration,
       goalLimit,
       fieldSize,
-      showReplay: true
+      showReplay
     });
 
     db.createRoom(code, room);
-    
-    // Add host to room
     room.addPlayer(socket.id, profile, 'spectator');
 
-    // Register user in database connections
     db.addConnection(socket.id, {
       uid: profile.uid,
       username: profile.username,
@@ -50,22 +55,21 @@ export function registerRoomHandlers(io, socket) {
 
     socket.join(code);
     socket.emit('roomCreated', code);
-    
-    // Broadcast public rooms update to lobby clients
-    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+    broadcastLobbyList(io);
     io.to(code).emit('lobbyUpdate', room.getLobbyInfo());
   });
 
   socket.on('joinRoom', ({ roomCode, password, profile }) => {
     const room = db.getRoom(roomCode);
     if (!room) {
-      return socket.emit('joinError', 'Sala não encontrada.');
+      return socket.emit('joinError', 'Sala nao encontrada.');
     }
-
+    if (room.status !== 'lobby') {
+      return socket.emit('joinError', 'A partida desta sala ja comecou.');
+    }
     if (room.players.length >= room.maxPlayers) {
       return socket.emit('joinError', 'Sala cheia.');
     }
-
     if (room.password && room.password !== password) {
       return socket.emit('joinError', 'Senha incorreta.');
     }
@@ -79,15 +83,11 @@ export function registerRoomHandlers(io, socket) {
 
     socket.join(room.code);
     socket.emit('joinSuccess', room.code);
-
     io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
-    
-    // Inform other players
-    const joinMsg = room.addChatMessage('Sistema', '', '📢', `${profile.username} entrou na sala.`);
-    io.to(room.code).emit('chatMessage', joinMsg);
 
-    // Refresh public rooms list counts
-    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+    const joinMsg = room.addChatMessage('Sistema', '', '', `${profile.username} entrou na sala.`);
+    io.to(room.code).emit('chatMessage', joinMsg);
+    broadcastLobbyList(io);
   });
 
   socket.on('changeTeam', (team) => {
@@ -116,7 +116,6 @@ export function registerRoomHandlers(io, socket) {
     io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
   });
 
-  // Antispam mechanism for chat messages
   let lastMessageTime = 0;
   socket.on('chatMessage', (text) => {
     const now = Date.now();
@@ -134,7 +133,6 @@ export function registerRoomHandlers(io, socket) {
     const player = room.players.find(p => p.id === socket.id);
     const username = player ? player.username : conn.username;
     const badge = player ? player.badge : '';
-
     const msg = room.addChatMessage(username, '', badge, text);
     io.to(room.code).emit('chatMessage', msg);
   });
@@ -150,7 +148,7 @@ export function registerRoomHandlers(io, socket) {
     const botProfile = {
       uid: '',
       username: `Bot ${team === 'red' ? 'Vermelho' : 'Azul'} (CPU)`,
-      badge: '⚙️',
+      badge: '',
       cpu: true,
       difficulty: 'medium'
     };
@@ -175,23 +173,24 @@ export function registerRoomHandlers(io, socket) {
     if (!conn) return;
 
     const room = db.getRoom(conn.roomCode);
-    if (!room || room.status !== 'lobby' || room.hostId !== socket.id) return;
+    if (!room || room.hostId !== socket.id) return;
 
     const targetPlayer = room.players.find(p => p.id === targetSocketId);
-    if (targetPlayer) {
-      room.removePlayer(targetSocketId);
-      io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
+    if (!targetPlayer) return;
 
-      const kickMsg = room.addChatMessage('Sistema', '', '📢', `${targetPlayer.username} foi expulso da sala.`);
-      io.to(room.code).emit('chatMessage', kickMsg);
+    room.removePlayer(targetSocketId);
+    io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
 
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) {
-        targetSocket.emit('kicked');
-        targetSocket.leave(room.code);
-        db.removeConnection(targetSocketId);
-      }
+    const kickMsg = room.addChatMessage('Sistema', '', '', `${targetPlayer.username} foi expulso da sala.`);
+    io.to(room.code).emit('chatMessage', kickMsg);
+
+    const targetSocket = io.sockets.sockets.get(targetSocketId);
+    if (targetSocket) {
+      targetSocket.emit('kicked');
+      targetSocket.leave(room.code);
+      db.removeConnection(targetSocketId);
     }
+    broadcastLobbyList(io);
   });
 
   socket.on('updateRoomSettings', (settings) => {
@@ -203,7 +202,7 @@ export function registerRoomHandlers(io, socket) {
 
     room.updateSettings(settings);
     io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
-    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+    broadcastLobbyList(io);
   });
 
   socket.on('startGame', () => {
@@ -213,36 +212,35 @@ export function registerRoomHandlers(io, socket) {
     const room = db.getRoom(conn.roomCode);
     if (!room || room.status !== 'lobby' || room.hostId !== socket.id) return;
 
-    const redTeam = room.players.filter(p => p.team === 'red');
-    const blueTeam = room.players.filter(p => p.team === 'blue');
+    const activePlayers = room.players.filter(p => p.team !== 'spectator');
+    const redTeam = activePlayers.filter(p => p.team === 'red');
+    const blueTeam = activePlayers.filter(p => p.team === 'blue');
 
     if (redTeam.length === 0 || blueTeam.length === 0) {
       return socket.emit('startError', 'Cada time precisa de pelo menos 1 jogador (ou bot).');
     }
 
     room.status = 'playing';
-    
-    // Start game tick simulation
     room.match = new ServerMatch(
       room.code,
       room.duration,
       room.goalLimit,
-      room.players,
+      activePlayers,
       io,
-      (score) => {
-        // Callback on match end
+      (result) => {
         room.status = 'lobby';
-        room.players.forEach(p => p.ready = false);
+        room.players.forEach(p => { p.ready = false; });
         room.match = null;
-        io.to(room.code).emit('matchEnded', score);
+        room.chatHistory = [];
+        io.to(room.code).emit('matchEnded', result);
         io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
-        io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+        broadcastLobbyList(io);
       },
       room.fieldSize
     );
 
     io.to(room.code).emit('matchStarted');
-    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+    broadcastLobbyList(io);
   });
 
   socket.on('leaveRoom', () => {
@@ -259,25 +257,31 @@ function handleDisconnect(io, socket) {
   if (!conn) return;
 
   const room = db.getRoom(conn.roomCode);
-  if (room) {
-    const removed = room.removePlayer(socket.id);
-    db.removeConnection(socket.id);
-    socket.leave(room.code);
+  if (!room) return;
 
-    if (room.players.length === 0) {
-      if (room.match) {
-        room.match.stop();
-      }
-      db.deleteRoom(room.code);
-    } else {
-      if (removed) {
-        const leaveMsg = room.addChatMessage('Sistema', '', '📢', `${removed.username} saiu da sala.`);
-        io.to(room.code).emit('chatMessage', leaveMsg);
-      }
-      io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
+  const removed = room.removePlayer(socket.id);
+  db.removeConnection(socket.id);
+  socket.leave(room.code);
+
+  if (room.players.length === 0) {
+    if (room.match) {
+      room.match.stop();
     }
-
-    // Refresh public rooms list
-    io.emit('publicRoomsList', db.getAllRooms().map(r => r.getPublicInfo()));
+    db.deleteRoom(room.code);
+    broadcastLobbyList(io);
+    return;
   }
+
+  if (removed) {
+    const leaveMsg = room.addChatMessage('Sistema', '', '', `${removed.username} saiu da sala.`);
+    io.to(room.code).emit('chatMessage', leaveMsg);
+    if (room.match) {
+      room.match.isHostPaused = true;
+      const pauseMsg = room.addChatMessage('Sistema', '', '', 'Partida pausada para o host reorganizar os times.');
+      io.to(room.code).emit('chatMessage', pauseMsg);
+    }
+  }
+
+  io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
+  broadcastLobbyList(io);
 }
