@@ -1,0 +1,25 @@
+{
+  "name": "kicker-hax",
+  "version": "21.0.0",
+  "description": "Kicker Hax - Reestruturado com Multiplayer Socket.IO e Firebase",
+  "main": "server/server.js",
+  "type": "module",
+  "scripts": {
+    "preclient:build": "node scripts/sync-native-version.mjs",
+    "server": "node server/server.js",
+    "client:dev": "vite client --port 3000",
+    "client:build": "vite build",
+    "dev": "concurrently \"npm run server\" \"npm run client:dev\"",
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase": "^12.16.0",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "vite": "^8.1.4"
+  }
+}

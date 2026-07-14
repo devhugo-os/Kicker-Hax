@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Kicker Hax - Next Gen Multiplayer</title>
+  <link rel="icon" href="./assets/kicker-hax-favicon-D0E5WRXz.png" type="image/png" />
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
+  <!-- Stylesheets -->
+  <script type="module" crossorigin src="./assets/index-DVXNtSG2.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/firebase-Djc139qG.js">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-DvKWgG-l.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-D1B7UsVw.css">
+</head>
+<body>
+
+    <!-- APP CONTAINER -->
+  <div id="app">
+
+    <!-- 1. SPLASH SCREEN -->
+    <div id="splash-screen" class="screen-view active">
+      <div class="splash-content">
+        <div class="logo-container">
+          <img class="brand-mark splash-brand-mark" src="./assets/kicker-hax-favicon-D0E5WRXz.png" alt="Kicker Hax" draggable="false" />
+          <h1 class="logo-text">KICKER<span>HAX</span></h1>
+          <p class="logo-subtext">Online Arena</p>
+        </div>
+        <div class="loading-spinner"></div>
+        <p id="splash-status" class="status-text">Inicializando conexões...</p>
+      </div>
+    </div>
+
+    <div id="mobile-orientation-lock" class="mobile-orientation-lock hidden">
+      <div>
+        <h2>Gire o dispositivo</h2>
+        <p>Use o Kicker Hax na horizontal para jogar e navegar melhor.</p>
+      </div>
+    </div>
+
+    <!-- 2. LOGIN SCREEN -->
+    <div id="login-screen" class="screen-view hidden">
+      <div class="auth-card card-blur">
+        <h2>Entrar na Arena</h2>
+        <p class="auth-subtitle">Conecte-se para salvar estatísticas e jogar online</p>
+        <div class="auth-form">
+          <button id="btn-google-login" class="btn btn-primary" style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+            <svg style="width: 24px; height: 24px;" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+            Entrar com Google
+          </button>
+        </div>
+      </div>
+    </div>
+
+
+
+    <!-- 5. MAIN MENU SCREEN -->
+    <div id="menu-screen" class="screen-view hidden">
+      <div class="menu-layout">
+        <div class="menu-logo">
+          <img class="menu-title-logo" src="./assets/kicker-hax-title-CD6EhrQC.png" alt="Kicker Hax" draggable="false" />
+          <div class="menu-online-indicator">
+            <span class="pulse-dot"></span> <span id="online-users-count">...</span> jogadores online
+          </div>
+        </div>
+
+        <div class="menu-options">
+          <button id="menu-btn-play" class="menu-btn btn-glow">JOGAR</button>
+          <button id="menu-btn-profile" class="menu-btn">PERFIL DO JOGADOR</button>
+          <button id="menu-btn-market" class="menu-btn market-menu-btn">MERCADO DE SKINS</button>
+          <button id="menu-btn-ranking" class="menu-btn">RANKING GLOBAL</button>
+          <button id="menu-btn-settings" class="menu-btn">CONFIGURAÇÕES</button>
+          <button id="menu-btn-controls" class="menu-btn">CONTROLES</button>
+          <button id="menu-btn-credits" class="menu-btn">CRÉDITOS</button>
+          <a id="menu-btn-download-app" class="menu-btn menu-btn-download hidden" href="./downloads/kicker-hax.apk" download>BAIXAR APP</a>
+          <button id="menu-btn-logout" class="menu-btn btn-danger">SAIR DA CONTA</button>
+        </div>
+
+        <!-- Perfil rápido no canto superior -->
+        <div class="quick-profile card-blur" id="menu-quick-profile">
+          <div class="quick-avatar" id="quick-avatar-char">👤</div>
+          <div class="quick-details">
+            <div class="quick-name"><span id="quick-profile-flag">🇧🇷</span> <span id="quick-profile-name">Carregando...</span></div>
+            <div class="quick-level">Nível <span id="quick-profile-level">1</span></div>
+            <div class="quick-xp-bar"><div class="quick-xp-fill" style="width: 10%"></div></div>
+          </div>
+        </div>
+        <button id="menu-btn-rules" class="game-rules-trigger" type="button" aria-label="Abrir regras do jogo" title="Regras do jogo">?</button>
+      </div>
+    </div>
+
+    <!-- 6. PROFILE SCREEN -->
+    <div id="profile-screen" class="screen-view hidden">
+      <div class="profile-layout card-blur">
+        <div class="profile-header">
+          <button id="profile-btn-back" class="btn btn-secondary btn-icon">⬅️ Voltar</button>
+          <h2>Perfil do Jogador</h2>
+                  <button id="profile-btn-logout" class="btn btn-danger btn-sm">Sair da Conta</button>
+        </div>
+
+        <div class="profile-grid">
+          <!-- Editor de Perfil -->
+          <div class="profile-edit-section">
+            <div class="avatar-editor">
+              <div class="avatar-preview" id="profile-avatar-display">👤</div>
+              <div class="avatar-inputs" id="profile-badge-controls">
+                <label for="profile-badge-select">Emoji / Badge</label>
+                <select id="profile-badge-select" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                  <option value="⚽">Futebol ⚽</option>
+                  <option value="🏆">Troféu 🏆</option>
+                  <option value="🤖">Robô 🤖</option>
+                  <option value="🦁">Leão 🦁</option>
+                  <option value="👑">Coroa 👑</option>
+                  <option value="⚡">Raio ⚡</option>
+                  <option value="🌟">Estrela 🌟</option>
+                  <option value="🔥">Fogo 🔥</option>
+                  <option value="💀">Caveira 💀</option>
+                  <option value="🎮">Controle 🎮</option>
+                  <option value="👤">Padrão 👤</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="profile-username-input">Nome de Usuário (Apenas letras, números e sublinhado)</label>
+              <input type="text" id="profile-username-input" maxlength="15" placeholder="Escolha seu apelido" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            </div>
+
+            <div class="input-group">
+              <label for="profile-bio-input">Biografia (opcional)</label>
+              <textarea id="profile-bio-input" maxlength="60" placeholder="Fale um pouco sobre você..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea>
+            </div>
+
+            <button id="profile-btn-save" class="btn btn-primary">Salvar Alterações</button>
+            <div class="profile-wallet card-blur-dark">
+              <span>KX Coins</span>
+              <strong id="profile-coins">0</strong>
+            </div>
+            <button id="profile-btn-inventory" class="btn btn-secondary w-full" type="button">Abrir inventário de skins</button>
+          </div>
+
+          <!-- Estatísticas -->
+          <div class="profile-stats-section">
+            <div class="stats-cards-grid">
+              <div class="stat-card">
+                <div class="stat-num" id="stats-played">0</div>
+                <div class="stat-lbl">Partidas</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num text-success" id="stats-wins">0</div>
+                <div class="stat-lbl">Vitórias</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num text-danger" id="stats-losses">0</div>
+                <div class="stat-lbl">Derrotas</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-num" id="stats-winrate">0%</div>
+                <div class="stat-lbl">Winrate</div>
+              </div>
+            </div>
+
+            <div class="advanced-stats card-blur-dark">
+              <h3>Detalhes Individuais</h3>
+              <div class="adv-stat-row"><span>Gols Marcados</span> <strong id="stats-goals">0</strong></div>
+              <div class="adv-stat-row"><span>Chutes</span> <strong id="stats-shots">0</strong></div>
+              <div class="adv-stat-row"><span>Dribles</span> <strong id="stats-dribbles">0</strong></div>
+              <div class="adv-stat-row"><span>Desarmes</span> <strong id="stats-tackles">0</strong></div>
+              <div class="adv-stat-row"><span>Empates</span> <strong id="stats-draws">0</strong></div>
+              <div class="adv-stat-row"><span>Posse Média</span> <strong id="stats-possession">0%</strong></div>
+              <div class="adv-stat-row"><span>Gols Contra</span> <strong id="stats-own-goals">0</strong></div>
+              <div class="adv-stat-row"><span>MVPs</span> <strong id="stats-mvps">0</strong></div>
+              <div class="adv-stat-row"><span>⚡ Nível Atual</span> <strong id="stats-level">1</strong></div>
+              <div class="adv-stat-row"><span>✨ Experiência (XP)</span> <strong id="stats-xp">0</strong></div>
+            </div>
+
+            <div class="history-section">
+              <h3>Histórico Recente</h3>
+              <button id="profile-btn-history-modal" class="btn btn-secondary w-full">Abrir histórico de partidas</button>
+              <div id="profile-match-history" class="history-list hidden">
+                <div class="subtext">Nenhuma partida registrada ainda.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="public-profile-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="public-profile-title">
+      <div class="public-profile-card card-blur">
+        <button id="public-profile-close" class="modal-close-btn" type="button" aria-label="Fechar perfil">x</button>
+        <header class="public-profile-header">
+          <div id="public-profile-avatar" class="avatar-preview">👤</div>
+          <div>
+            <span class="market-eyebrow">Perfil público</span>
+            <h2 id="public-profile-title">Jogador</h2>
+            <p id="public-profile-bio">Sem biografia.</p>
+          </div>
+          <div class="public-profile-level"><span>Nível</span><strong id="public-profile-level">1</strong></div>
+        </header>
+        <div class="public-profile-stats">
+          <div><strong id="public-stats-played">0</strong><span>Jogos</span></div>
+          <div><strong id="public-stats-wins">0</strong><span>Vitórias</span><small id="public-stats-winrate">Winrate: 0%</small></div>
+          <div><strong id="public-stats-losses">0</strong><span>Derrotas</span></div>
+          <div><strong id="public-stats-draws">0</strong><span>Empates</span></div>
+          <div><strong id="public-stats-goals">0</strong><span>Gols</span></div>
+          <div><strong id="public-stats-shots">0</strong><span>Chutes</span></div>
+          <div><strong id="public-stats-dribbles">0</strong><span>Dribles</span></div>
+          <div><strong id="public-stats-tackles">0</strong><span>Desarmes</span></div>
+          <div><strong id="public-stats-mvps">0</strong><span>MVPs</span></div>
+          <div><strong id="public-stats-possession">0%</strong><span>Posse média</span></div>
+          <div><strong id="public-stats-coins">0</strong><span>KX Coins</span></div>
+          <div><strong id="public-stats-skins">0</strong><span>Skins</span></div>
+        </div>
+        <div class="public-profile-actions">
+          <button id="public-profile-history-open" class="btn btn-secondary" type="button">Ver histórico de partidas</button>
+          <button id="public-profile-inventory-open" class="btn btn-secondary" type="button">Ver inventário de skins</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="public-profile-history-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="public-profile-history-title">
+      <div class="public-profile-detail-card card-blur">
+        <button id="public-profile-history-close" class="modal-close-btn" type="button" aria-label="Fechar histórico">x</button>
+        <h2 id="public-profile-history-title">Histórico de partidas</h2>
+        <div id="public-profile-history-list" class="history-list modal-history-list"></div>
+      </div>
+    </div>
+
+    <div id="public-profile-inventory-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="public-profile-inventory-title">
+      <div class="public-profile-detail-card card-blur">
+        <button id="public-profile-inventory-close" class="modal-close-btn" type="button" aria-label="Fechar inventário">x</button>
+        <h2 id="public-profile-inventory-title">Inventário de skins</h2>
+        <div id="public-profile-inventory" class="public-profile-inventory"></div>
+      </div>
+    </div>
+
+    <!-- SKIN INVENTORY SCREEN -->
+    <div id="inventory-screen" class="screen-view hidden">
+      <div class="inventory-layout card-blur">
+        <header class="inventory-header">
+          <button id="inventory-btn-back" class="btn btn-secondary">Voltar ao perfil</button>
+          <div><span class="market-eyebrow">Coleção pessoal</span><h2>Inventário de Skins</h2></div>
+          <div class="market-wallet"><span>KX Coins</span><strong id="inventory-coins">0</strong></div>
+        </header>
+        <div class="inventory-toolbar">
+          <div class="inventory-filter-group" role="group" aria-label="Filtrar por raridade">
+            <button class="inventory-filter active" data-inventory-rarity="all" type="button">Todas</button>
+            <button class="inventory-filter" data-inventory-rarity="common" type="button">Comuns</button>
+            <button class="inventory-filter" data-inventory-rarity="rare" type="button">Raras</button>
+            <button class="inventory-filter" data-inventory-rarity="epic" type="button">Épicas</button>
+            <button class="inventory-filter" data-inventory-rarity="legendary" type="button">Lendárias</button>
+            <button class="inventory-filter" data-inventory-rarity="custom" type="button">Comunidade</button>
+          </div>
+          <select id="inventory-sort" aria-label="Ordenar skins">
+            <option value="rarity">Ordenar por raridade</option>
+            <option value="price-asc">Menor valor</option>
+            <option value="price-desc">Maior valor</option>
+            <option value="name">Nome</option>
+          </select>
+        </div>
+        <div id="inventory-grid" class="inventory-grid"></div>
+      </div>
+    </div>
+
+    <!-- SKIN MARKET SCREEN -->
+    <div id="market-screen" class="screen-view hidden">
+      <div class="market-layout card-blur">
+        <header class="market-header">
+          <button id="market-btn-back" class="btn btn-secondary">Voltar</button>
+          <div><span class="market-eyebrow">Colecionáveis</span><h2>Mercado de Skins</h2></div>
+          <div class="market-wallet"><span>KX Coins</span><strong id="market-coins">0</strong></div>
+        </header>
+        <div class="market-tabs" role="tablist">
+          <button class="market-tab active" data-market-tab="chests" type="button">Baús</button>
+          <button class="market-tab" data-market-tab="daily" type="button">Destaques</button>
+          <button class="market-tab" data-market-tab="request" type="button">Solicitar skin</button>
+        </div>
+        <section id="market-panel-chests" class="market-panel active"><div id="market-chest-grid" class="market-chest-grid"></div></section>
+        <section id="market-panel-daily" class="market-panel hidden"><div id="market-daily-content" class="market-daily-content"></div></section>
+        <section id="market-panel-request" class="market-panel hidden">
+          <div class="skin-request-shell">
+            <header class="skin-request-heading">
+              <span class="market-eyebrow">Oficina da comunidade</span>
+              <h3>Crie uma skin para as vitrines</h3>
+              <p>Um envio por dia participa dos sorteios diário, semanal e mensal.</p>
+            </header>
+            <div class="skin-request-grid">
+            <div class="skin-crop-workspace request-panel">
+              <div class="request-step"><span>1</span><div><strong>Escolha e enquadre</strong><small>Arraste sem deixar espaços fora da imagem</small></div></div>
+              <div id="skin-crop-viewport" class="skin-crop-viewport">
+                <img id="skin-crop-image" alt="Prévia da skin" draggable="false" />
+                <div class="skin-crop-ring"></div>
+              </div>
+              <label class="skin-file-button" for="skin-request-file">Selecionar imagem</label>
+              <input id="skin-request-file" class="visually-hidden" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" />
+              <div class="skin-zoom-control"><label for="skin-crop-zoom">Zoom</label><input id="skin-crop-zoom" type="range" min="1" max="3" step="0.05" value="1" /></div>
+            </div>
+            <div class="skin-request-info request-panel">
+              <div class="request-step"><span>2</span><div><strong>Confira o resultado</strong><small>A prévia é exatamente o arquivo enviado</small></div></div>
+              <label class="skin-request-name" for="skin-request-name">Nome da skin<input id="skin-request-name" type="text" minlength="3" maxlength="15" placeholder="Ex.: Fúria Azul" /></label>
+              <div class="skin-request-preview"><canvas id="skin-request-preview" width="256" height="256"></canvas></div>
+              <button id="skin-request-submit" class="btn btn-primary" type="button" disabled>Enviar solicitação</button>
+              <span id="skin-request-status" class="subtext" role="status" aria-live="polite"></span>
+            </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div id="chest-roulette-modal" class="modal-overlay hidden">
+        <div class="chest-roulette-card card-blur">
+          <button id="chest-roulette-close" class="modal-close-btn" type="button">x</button>
+          <span class="market-eyebrow">Abrindo baú</span><h2 id="chest-roulette-title">Boa sorte!</h2>
+          <div class="roulette-window"><div id="chest-roulette-track" class="roulette-track"></div><div class="roulette-marker"></div></div>
+          <div id="chest-result" class="chest-result hidden"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 7. CONFIGURAÇÕES SCREEN -->
+    <div id="settings-screen" class="screen-view hidden">
+      <div class="settings-card card-blur">
+        <div class="screen-header">
+          <button id="settings-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurações do Jogo</h2>
+        </div>
+
+        <div class="settings-body">
+          <div class="input-group">
+            <label for="settings-volume">Volume de Efeitos Sonoros</label>
+            <input type="range" id="settings-volume" min="0" max="100" value="80" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <span class="subtext" id="volume-val-display">80%</span>
+          </div>
+          <div class="input-group">
+            <label for="settings-music-volume">Volume da Música</label>
+            <input type="range" id="settings-music-volume" min="0" max="100" value="55" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <span class="subtext" id="music-volume-val-display">55%</span>
+          </div>
+          <button id="settings-btn-fullscreen" class="btn btn-secondary w-full" type="button">Tela cheia</button>
+
+
+        </div>
+      </div>
+    </div>
+
+    <!-- 8. CONTROLES SCREEN -->
+    <div id="controls-screen" class="screen-view hidden">
+      <div class="controls-card card-blur">
+        <div class="screen-header">
+          <button id="controls-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurar Controles</h2>
+          <button id="controls-btn-reset" class="btn btn-secondary btn-sm">Restaurar Padrões</button>
+        </div>
+
+        <p class="subtext">Clique em uma ação para remapear a tecla correspondente. Pressione ESC para cancelar ou BACKSPACE para limpar.</p>
+        <span id="controls-restart-warning" class="warning-banner hidden">As alterações de tamanho serão aplicadas na próxima partida.</span>
+        <div id="mobile-hud-settings" class="mobile-hud-settings hidden">
+          <h3>HUD Mobile</h3>
+          <p class="subtext">No celular, ajuste tudo dentro de um treino livre próprio para o HUD.</p>
+          <input type="hidden" id="mobile-stick-x" value="7" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <input type="hidden" id="mobile-stick-y" value="18" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <input type="hidden" id="mobile-actions-x" value="82" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <input type="hidden" id="mobile-actions-y" value="18" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <button id="mobile-hud-edit-match" class="btn btn-primary w-full" type="button">Editar HUD na partida</button>
+          <button id="mobile-hud-save-layout" class="btn btn-secondary w-full hidden" type="button">Confirmar HUD Mobile</button>
+        </div>
+
+        <!-- Layout de Jogadores -->
+        <div class="controls-grid">
+          <div class="controls-column">
+            <h3>🎮 Controles do Usuário</h3>
+            <div class="map-grid" id="grid-controls-p1">
+              <!-- JS Injected Controls -->
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+    </div>
+
+    <!-- 9. CREDITS SCREEN -->
+    <div id="credits-screen" class="screen-view hidden">
+      <div class="credits-card card-blur text-center">
+        <h2>Créditos</h2>
+        <p class="logo-text">KICKER<span>HAX</span></p>
+        <p>Desenvolvido com carinho para a melhor jogabilidade retrô em tempo real.</p>
+
+        <div class="credits-list">
+          <div class="credits-role">Desenvolvedor Principal</div>
+          <div class="credits-name">Hugo</div>
+          <div class="credits-role">Influenciador Oficial</div>
+          <div class="credits-name">Rhuan</div>
+          <div class="credits-role">Engine de Física & Multiplayer</div>
+          <div class="credits-name">Socket.IO & Web Canvas</div>
+          <div class="credits-role">Trilha Sonora & Sintetizadores</div>
+          <div class="credits-name">Web Audio API</div>
+        </div>
+
+        <button id="credits-btn-back" class="btn btn-primary">Voltar ao Menu</button>
+      </div>
+    </div>
+
+    <!-- 10. GAME MODE SELECTION -->
+    <div id="mode-select-screen" class="screen-view hidden">
+      <div class="mode-select-layout">
+        <button id="mode-btn-back" class="btn btn-secondary select-back">⬅️ Voltar</button>
+        <h2 class="text-center select-title">Selecione o Modo</h2>
+
+        <div class="modes-container">
+          <div class="mode-card card-blur btn-hover" id="mode-card-solo">
+            <div class="mode-icon">👤</div>
+            <h3>Jogar Sozinho</h3>
+            <p>Jogue uma partida local contra o Bot do Kicker Hax com inteligência aprimorada.</p>
+          </div>
+          <div class="mode-card card-blur btn-hover" id="mode-card-practice">
+            <div class="mode-icon">⚽</div>
+            <h3>Treino Livre</h3>
+            <p>Entre direto em campo com tempo infinito para praticar movimentação, chute e drible.</p>
+          </div>
+          <div class="mode-card card-blur btn-hover" id="mode-card-multiplayer">
+            <div class="mode-icon">🌐</div>
+            <h3>Multiplayer Online</h3>
+            <p>Participe de salas, convide amigos ou enfrente jogadores de todo o mundo via WebSockets.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 11. SOLO MATCH CONFIG SCREEN -->
+    <div id="solo-screen" class="screen-view hidden">
+      <div class="solo-card card-blur">
+        <div class="screen-header">
+          <button id="solo-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurar Partida Solo</h2>
+        </div>
+
+        <div class="solo-settings-body">
+          <div class="input-group">
+            <label>Dificuldade da Inteligência Artificial (Bot)</label>
+            <div class="btn-group" id="solo-ai-difficulty">
+              <button data-diff="easy" class="btn btn-secondary">Fácil</button>
+              <button data-diff="medium" class="btn btn-secondary active">Médio</button>
+              <button data-diff="hard" class="btn btn-secondary">Difícil</button>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="solo-minutes">Duração da Partida</label>
+            <select id="solo-minutes" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="1">1 Minuto</option>
+              <option value="3" selected>3 Minutos</option>
+              <option value="5">5 Minutos</option>
+              <option value="10">10 Minutos</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label for="solo-goals">Limite de Gols</label>
+            <select id="solo-goals" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="1">1 Gol</option>
+              <option value="3" selected>3 Gols</option>
+              <option value="5">5 Gols</option>
+              <option value="0">Sem Limite</option>
+            </select>
+          </div>
+
+          <div class="input-group">
+            <label for="solo-field-size">Tamanho do Campo</label>
+            <select id="solo-field-size" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="small">Pequeno (896x560)</option>
+              <option value="medium" selected>Médio (1024x640)</option>
+              <option value="large">Grande (1280x768)</option>
+            </select>
+          </div>
+
+          <button id="solo-btn-start" class="btn btn-primary btn-glow btn-lg">Iniciar Partida</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 12. MULTIPLAYER SCREEN -->
+    <div id="multiplayer-screen" class="screen-view hidden">
+      <div class="multiplayer-layout card-blur">
+        <div class="multiplayer-header">
+          <button id="multiplayer-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Arena Multiplayer</h2>
+          <div class="multiplayer-actions">
+            <button id="multi-btn-create-room" class="btn btn-primary">Criar Sala</button>
+            <button id="multi-btn-join-code" class="btn btn-secondary">Entrar por Código</button>
+            <button id="multi-btn-rejoin-match" class="btn btn-success hidden">Voltar para Partida</button>
+            <button id="multi-btn-refresh-rooms" class="btn btn-secondary">Atualizar</button>
+          </div>
+        </div>
+
+        <div class="rooms-section">
+          <h3>Salas Disponíveis</h3>
+          <div class="room-search-bar">
+            <input id="room-search-input" data-room-filter="name" placeholder="Pesquisar sala por nome" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <div class="rooms-table-container">
+            <table class="rooms-table">
+              <thead>
+                <tr>
+                  <th>Nome da Sala</th>
+                  <th>Host</th>
+                  <th>Jogadores</th>
+                  <th>Duração</th>
+                  <th>Gols</th>
+                  <th>Segurança</th>
+                  <th>Tipo</th>
+                  <th>Ação</th>
+                </tr>
+                <tr class="rooms-filter-row">
+                  <th><input data-room-filter="name" placeholder="Filtrar nome" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /></th>
+                  <th><input data-room-filter="hostUsername" placeholder="Host" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /></th>
+                  <th><input data-room-filter="players" placeholder="Jogadores" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /></th>
+                  <th><input data-room-filter="duration" placeholder="Duração" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /></th>
+                  <th><input data-room-filter="goalLimit" placeholder="Gols" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /></th>
+                  <th>
+                    <select data-room-filter="security" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                      <option value="">Tudo</option>
+                      <option value="publica">Pública</option>
+                      <option value="senha">Senha</option>
+                    </select>
+                  </th>
+                  <th>
+                    <select data-room-filter="type" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                      <option value="">Tudo</option>
+                      <option value="casual">Casual</option>
+                      <option value="competitiva">Competitiva</option>
+                    </select>
+                  </th>
+                  <th><input data-room-filter="action" placeholder="Ação" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /></th>
+                </tr>
+              </thead>
+              <tbody id="rooms-list-body">
+                <tr>
+                  <td colspan="8" class="text-center">Procurando por salas ativas...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 13. CRIAR SALA MODAL / SCREEN -->
+    <div id="create-room-screen" class="screen-view hidden">
+      <div class="solo-card card-blur">
+        <div class="screen-header">
+          <button id="create-room-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Configurar Nova Sala</h2>
+        </div>
+        <form autocomplete="off" id="create-room-form">
+          <div class="input-group">
+            <label for="room-name-input">Nome da Sala</label>
+            <input type="text" id="room-name-input" maxlength="15" required placeholder="Arena de Haxball" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <div class="input-group">
+            <label for="room-password-input">Senha de Acesso (opcional)</label>
+            <input type="password" id="room-password-input" maxlength="8" placeholder="Deixe em branco para pública" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <div class="check-group competitive-toggle">
+            <label><input type="checkbox" id="room-competitive-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" /> Partida competitiva pública</label>
+          </div>
+          <div class="input-group">
+            <label for="room-max-players">Limite de Jogadores</label>
+            <select id="room-max-players" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="2">2 Jogadores</option>
+              <option value="4">4 Jogadores</option>
+              <option value="6">6 Jogadores</option>
+              <option value="10" selected>10 Jogadores</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="room-duration">Tempo de Partida</label>
+            <select id="room-duration" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="1">1 Minuto</option>
+              <option value="3" selected>3 Minutos</option>
+              <option value="5">5 Minutos</option>
+              <option value="10">10 Minutos</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="room-goals">Limite de Gols</label>
+            <select id="room-goals" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="1">1 Gol</option>
+              <option value="3" selected>3 Gols</option>
+              <option value="5">5 Gols</option>
+              <option value="0">Sem Limite</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="room-field-size">Tamanho do Campo</label>
+            <select id="room-field-size" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+              <option value="small">Pequeno (896x560)</option>
+              <option value="medium" selected>Médio (1024x640)</option>
+              <option value="large">Grande (1280x768)</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-glow btn-lg">Criar Sala e Ir ao Lobby</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- 14. ENTRAR POR CÓDIGO SCREEN -->
+    <div id="join-code-screen" class="screen-view hidden">
+      <div class="auth-card card-blur">
+        <h2>Entrar por Código</h2>
+        <p class="auth-subtitle">Digite o código de 6 dígitos fornecido pelo host</p>
+        <form autocomplete="off" id="join-code-form">
+          <div class="input-group">
+            <input type="text" id="join-code-input" class="text-center uppercase" required minlength="6" maxlength="6" placeholder="XXXXXX" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <div class="input-group" id="join-password-container">
+            <label for="join-password-input">Senha da Sala</label>
+            <input type="password" id="join-password-input" maxlength="8" placeholder="Digite a senha" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          </div>
+          <button type="submit" class="btn btn-primary">Entrar na Sala</button>
+        </form>
+        <div class="auth-footer">
+          <button id="join-code-btn-back" class="btn-link">Voltar ao Multiplayer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 15. LOBBY SCREEN -->
+    <div id="lobby-screen" class="screen-view hidden">
+      <div class="lobby-layout card-blur">
+        <!-- Header -->
+        <div class="lobby-header">
+          <div class="lobby-info">
+            <h2 id="lobby-room-name">Nome do Lobby</h2>
+            <p>Código da Sala: <strong id="lobby-room-code" class="text-glow">XXXXXX</strong> <button id="btn-copy-code" class="btn btn-sm">📋 Copiar</button></p>
+          </div>
+          <button id="lobby-btn-leave" class="btn btn-secondary">Sair da Sala</button>
+        </div>
+
+        <div class="lobby-grid">
+          <!-- Players Teams lists -->
+          <div class="lobby-teams">
+            <!-- Team Red -->
+            <div class="lobby-team-box red-team">
+              <h3>🔴 Time Vermelho</h3>
+              <div class="lobby-team-list" id="lobby-red-players">
+                <!-- Injected via JS -->
+              </div>
+              <button id="lobby-btn-join-red" class="btn btn-sm btn-danger w-full mt-2">Entrar no Vermelho</button>
+            </div>
+
+            <!-- Team Blue -->
+            <div class="lobby-team-box blue-team">
+              <h3>🔵 Time Azul</h3>
+              <div class="lobby-team-list" id="lobby-blue-players">
+                <!-- Injected via JS -->
+              </div>
+              <button id="lobby-btn-join-blue" class="btn btn-sm btn-primary w-full mt-2">Entrar no Azul</button>
+            </div>
+
+            <!-- Spectators -->
+            <div class="lobby-team-box spec-team">
+              <h3>👓 Espectadores</h3>
+              <div class="lobby-team-list" id="lobby-spec-players">
+                <!-- Injected via JS -->
+              </div>
+              <button id="lobby-btn-join-spec" class="btn btn-sm btn-secondary w-full mt-2">Espectar</button>
+            </div>
+          </div>
+
+          <!-- Chat and Start Settings -->
+          <div class="lobby-chat-settings">
+            <!-- Room Chat -->
+            <div class="lobby-chat card-blur-dark">
+              <div class="lobby-chat-messages" id="lobby-chat-messages">
+                <!-- Messages Injected -->
+              </div>
+              <form autocomplete="off" id="lobby-chat-form" class="lobby-chat-form">
+                <input type="text" id="lobby-chat-input" maxlength="255" placeholder="Escreva uma mensagem..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                <button type="submit" class="btn">Enviar</button>
+              </form>
+            </div>
+
+            <!-- Controls and settings -->
+            <div class="lobby-ready-section">
+              <div class="lobby-settings-summary card-blur-dark">
+                <div>⏱️ Tempo: <strong id="lobby-setting-time">3m</strong></div>
+                <div>⚽ Gols: <strong id="lobby-setting-goals">3</strong></div>
+                <div>📐 Campo: <strong id="lobby-setting-size">Médio</strong></div>
+                <div>🎬 Replays: <strong id="lobby-setting-replay">Sim</strong></div>
+                <div>🏆 Tipo: <strong id="lobby-setting-competitive">Casual</strong></div>
+              </div>
+              <form id="lobby-host-settings" class="card-blur-dark hidden" autocomplete="off">
+                <div class="input-group">
+                  <label for="lobby-password-input">Senha da sala</label>
+                  <input type="password" id="lobby-password-input" maxlength="8" placeholder="Vazio = pública" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+                </div>
+                <button id="lobby-btn-save-settings" type="button" class="btn btn-secondary btn-sm w-full">Salvar senha da sala</button>
+              </form>
+              <div class="lobby-actions flex-row gap-2">
+                <button id="lobby-btn-ready" class="btn btn-secondary w-full btn-lg">Marcar como Pronto</button>
+                <button id="lobby-btn-random-teams" class="btn btn-secondary w-full btn-lg hidden">Aleatorizar Times</button>
+                <button id="lobby-btn-start" class="btn btn-primary btn-glow w-full btn-lg hidden">Iniciar Jogo</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 16. MATCH SCREEN (O JOGO REAL) -->
+    <div id="match-screen" class="screen-view hidden">
+      <!-- HUD superior -->
+      <div class="match-hud">
+        <div class="hud-pill hud-score" id="match-score">0 : 0</div>
+        <div class="hud-pill"><span class="hud-label">Tempo</span> <span id="match-clock">00:00</span></div>
+        <div class="hud-pill flex-row gap-2">
+          <button id="match-btn-fullscreen" class="btn btn-sm" aria-label="Tela cheia">Fullscreen</button>
+        </div>
+      </div>
+
+      <!-- Stage -->
+      <div class="match-wrap">
+        <div class="match-stage" id="match-stage">
+          <!-- Lateral Esquerda P2 -->
+          <aside class="match-side side-left" id="match-side-left">
+            <div class="side-title">CPU / P2</div>
+            <div class="side-bars-container">
+              <div class="side-vbar"><div class="side-vlabel">ST</div><i id="left-stam-fill"></i></div>
+              <div class="side-vbar"><div class="side-vlabel">PW</div><i id="left-pow-fill"></i></div>
+            </div>
+          </aside>
+
+          <!-- Canvas -->
+          <canvas id="match-canvas" width="1024" height="640" tabindex="0"></canvas>
+
+          <!-- Lateral Direita P1 -->
+          <aside class="match-side side-right" id="match-side-right">
+            <div class="side-title">Você (P1)</div>
+            <div class="side-bars-container">
+              <div class="side-vbar"><div class="side-vlabel">ST</div><i id="right-stam-fill"></i></div>
+              <div class="side-vbar"><div class="side-vlabel">PW</div><i id="right-pow-fill"></i></div>
+            </div>
+            <div class="side-stats-pill">
+              <div class="stat-row">
+                <span class="stat-label">📊 Posse</span>
+                <span class="stat-value" id="right-stat-possession">50%</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">🎯 Chutes</span>
+                <span class="stat-value" id="right-stat-shots">0</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">🛡️ Desarmes</span>
+                <span class="stat-value" id="right-stat-tackles">0</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-label">⚡ Dribles</span>
+                <span class="stat-value" id="right-stat-dribbles">0</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+
+      <!-- Chat In-game transparente -->
+      <div class="game-chat-overlay hidden" id="game-chat-overlay">
+        <div class="game-chat-messages" id="game-chat-messages"></div>
+        <form autocomplete="off" id="game-chat-form">
+          <input type="text" id="game-chat-input" maxlength="255" placeholder="Aperte Enter para falar..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <button type="submit" id="game-chat-send" class="btn btn-primary btn-sm">Enviar</button>
+        </form>
+      </div>
+
+      <!-- Overlay de Replay -->
+      <div class="replay-overlay hidden" id="replay-overlay">
+        <div class="replay-hud">
+          <div class="pill">REPLAY DO GOL</div>
+          <button id="replay-vote-skip-btn" class="btn btn-secondary btn-sm" type="button">Pular replay (0/0)</button>
+        </div>
+        <div class="replay-caption" id="replay-caption"></div>
+      </div>
+
+      <!-- Ping Overlay -->
+      <div id="ping-indicator" class="ping-badge">Ping: 0ms</div>
+      <button id="mobile-stats-toggle" class="mobile-stats-toggle hidden" type="button">⚽</button>
+      <button id="mobile-chat-toggle" class="mobile-chat-toggle hidden" type="button">💬</button>
+      <button id="mobile-pause-toggle" class="mobile-pause-toggle hidden" type="button">⏸️</button>
+      <div class="mobile-controls hidden" id="mobile-controls">
+        <div class="mobile-stick">
+          <div class="mobile-stick-base" id="mobile-stick">
+            <div class="mobile-stick-knob" id="mobile-stick-knob">🕹️</div>
+          </div>
+          <button data-mobile-dir="up">▲</button>
+          <button data-mobile-dir="left">◀</button>
+          <button data-mobile-dir="down">▼</button>
+          <button data-mobile-dir="right">▶</button>
+        </div>
+        <div class="mobile-actions">
+          <button data-mobile-action="sprint" aria-label="Correr">⚡</button>
+          <button data-mobile-action="shoot" aria-label="Chutar">🥾</button>
+          <button data-mobile-action="dribble" aria-label="Driblar">✨</button>
+          <button data-mobile-action="tackle" aria-label="Desarme">🛡️</button>
+          <button data-mobile-action="power" aria-label="Chute forte">🔥</button>
+        </div>
+      </div>
+      <div class="paused-badge hidden" id="focus-lost-badge">⏸️ Pausado (fora da aba)</div>
+      <button id="disconnect-continue-btn" class="btn btn-secondary btn-sm hidden" type="button">Continuar sem jogador</button>
+
+      <!-- Custom Pause / Admin Menu Overlay -->
+      <div class="paused-badge pause-modal hidden" id="pause-modal" role="dialog" aria-modal="true" aria-labelledby="pause-modal-title" style="display: flex; flex-direction: column; gap: 12px; min-width: 260px; text-align: center; border-radius: 16px; padding: 20px;">
+        <h3 id="pause-modal-title" style="margin: 0; font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 800; color: #fff;">⏸️ Jogo Pausado</h3>
+
+        <button class="btn btn-success btn-block" id="pause-btn-resume" style="width: 100%;">Retomar Jogo</button>
+
+        <!-- Host Controls (visible only for Host or Solo) -->
+        <div id="host-controls" class="pause-host-controls" style="padding: 12px; border-radius: 12px; font-size: 12px; margin-top: 6px; text-align: left; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.08);">
+          <h4 style="margin: 0 0 10px 0; font-size: 13px; font-weight: 800; color: var(--color-warning); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 4px;">Controles do Host</h4>
+          <div id="host-controls-note" class="subtext" style="margin-bottom: 8px;">Apenas o host pode controlar esta partida.</div>
+          <div class="flex-row gap-2 pause-host-actions" style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-warning" id="pause-btn-reset-match" style="flex: 1; font-size: 11px; padding: 6px;">Reiniciar</button>
+            <button class="btn btn-sm btn-secondary" id="pause-btn-add-1m" style="flex: 1; font-size: 11px; padding: 6px;">+1 min</button>
+            <button class="btn btn-sm btn-secondary" id="pause-btn-add-3m" style="flex: 1; font-size: 11px; padding: 6px;">+3 min</button>
+            <button class="btn btn-sm btn-secondary" id="pause-btn-sub-1m" style="flex: 1; font-size: 11px; padding: 6px;">-1 min</button>
+            <button class="btn btn-sm btn-secondary" id="pause-btn-sub-3m" style="flex: 1; font-size: 11px; padding: 6px;">-3 min</button>
+          </div>
+          <button class="btn btn-sm btn-danger" id="pause-btn-end-lobby" style="width: 100%; margin-top: 8px; font-size: 11px; padding: 7px;">Encerrar e voltar ao lobby</button>
+          <div id="host-team-panel" style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;"></div>
+        </div>
+
+        <button class="btn btn-danger btn-block" id="pause-btn-exit-match" style="width: 100%; margin-top: 4px;">Sair ao Menu</button>
+      </div>
+    </div>
+
+    <!-- 17. PÓS-JOGO SCREEN -->
+    <div id="post-game-screen" class="screen-view hidden">
+      <div class="post-card card-blur text-center">
+        <h2 class="text-glow" id="post-result-title">Partida Finalizada</h2>
+        <div class="post-teams-summary">
+          <div class="team-result red-result">
+            <div class="team-score" id="post-score-red">0</div>
+            <div class="team-name">Time Vermelho</div>
+          </div>
+          <div class="score-vs">:</div>
+          <div class="team-result blue-result">
+            <div class="team-score" id="post-score-blue">0</div>
+            <div class="team-name">Time Azul</div>
+          </div>
+        </div>
+
+        <div class="post-stats card-blur-dark">
+          <h3>Estatísticas de Destaque</h3>
+          <div class="adv-stat-row"><span>⭐ MVP da Partida</span> <strong id="post-mvp">—</strong></div>
+          <div class="adv-stat-row"><span>📈 XP Ganho</span> <strong class="text-success" id="post-xp-gained">+0 XP</strong></div>
+          <div class="adv-stat-row"><span>KX Coins ganhos</span> <strong class="text-warning" id="post-coins-gained">+0</strong></div>
+        </div>
+
+        <button id="post-btn-continue" class="btn btn-primary btn-glow btn-lg w-full mt-4">Voltar ao Lobby</button>
+      </div>
+    </div>
+
+    <!-- 18. LEADERBOARD / RANKING SCREEN -->
+    <div id="ranking-screen" class="screen-view hidden">
+      <div class="ranking-card card-blur">
+        <div class="screen-header">
+          <button id="ranking-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
+          <h2>Ranking Global de Jogadores</h2>
+        </div>
+
+        <div class="ranking-filters">
+          <button id="rank-filter-general" class="btn btn-secondary active">Geral</button>
+          <button id="rank-filter-overall" class="btn btn-secondary">Overall</button>
+          <button id="rank-filter-level" class="btn btn-secondary">Nível</button>
+          <button id="rank-filter-wins" class="btn btn-secondary">Vitórias</button>
+          <button id="rank-filter-losses" class="btn btn-secondary">Derrotas</button>
+          <button id="rank-filter-draws" class="btn btn-secondary">Empates</button>
+          <button id="rank-filter-goals" class="btn btn-secondary">Gols</button>
+          <button id="rank-filter-own-goals" class="btn btn-secondary">Gols Contra</button>
+          <button id="rank-filter-shots" class="btn btn-secondary">Chutes</button>
+          <button id="rank-filter-dribbles" class="btn btn-secondary">Dribles</button>
+          <button id="rank-filter-tackles" class="btn btn-secondary">Desarmes</button>
+          <button id="rank-filter-possession" class="btn btn-secondary">Posse Média</button>
+          <button id="rank-filter-matches" class="btn btn-secondary">Jogos</button>
+          <button id="rank-filter-mvps" class="btn btn-secondary">MVPs</button>
+          <button id="rank-filter-coins" class="btn btn-secondary">KX Coins</button>
+          <button id="rank-filter-skins" class="btn btn-secondary">Skins</button>
+        </div>
+
+        <div class="leaderboard-container">
+          <table class="leaderboard-table">
+            <thead>
+              <tr id="leaderboard-head-row">
+                <th>Posição</th>
+                <th>Jogador</th>
+                <th>Nível</th>
+                <th>Jogos</th>
+                <th>Vitórias</th>
+                <th>Gols</th>
+                <th>Chutes</th>
+                <th>Dribles</th>
+                <th>MVPs</th>
+                <th>Winrate</th>
+              </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+              <tr>
+                <td colspan="10" class="text-center">Carregando dados da tabela...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="profile-history-modal" class="modal-overlay hidden">
+      <div class="modal-card card-blur profile-history-modal">
+        <button id="profile-history-btn-close" class="modal-close-btn" aria-label="Fechar">×</button>
+        <h2 class="text-glow">Histórico de Partidas</h2>
+        <div id="profile-match-history-modal-list" class="history-list modal-history-list">
+          <div class="subtext">Nenhuma partida registrada ainda.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GLOBAL CHAT WIDGET -->
+    <div id="global-chat-container" class="global-chat minimized">
+      <div class="global-chat-header" id="global-chat-toggle">
+        <span class="chat-title">💬 Chat Global</span>
+        <span class="chat-toggle-icon">▲</span>
+      </div>
+      <div class="global-chat-body">
+        <div id="global-chat-messages" class="global-chat-messages"></div>
+        <form autocomplete="off" id="global-chat-form" class="global-chat-input-area">
+          <input type="text" id="global-chat-input" placeholder="Digite uma mensagem..." autocomplete="off" maxlength="255" autocorrect="off" autocapitalize="off" spellcheck="false" />
+          <button type="submit" class="btn btn-primary">Enviar</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- VERSION BADGE & CHANGELOG MODAL -->
+    <div id="game-version-badge" class="version-badge hidden">v20.5</div>
+
+    <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
+      <div class="modal-card card-blur game-rules-card">
+        <button id="game-rules-close" class="modal-close-btn" type="button" aria-label="Fechar regras">x</button>
+        <header class="game-rules-header">
+          <span class="market-eyebrow">Manual oficial</span>
+          <h2 id="game-rules-title">Regras do Kicker Hax</h2>
+          <p>Modos, resultados, progresso e critérios competitivos.</p>
+        </header>
+        <div class="game-rules-content">
+          <section><h3>Treino Livre</h3><p>Tempo e gols são ilimitados. Serve para praticar movimentação, chute, drible e desarme. Não concede XP, KX Coins, estatísticas, ranking ou histórico.</p></section>
+          <section><h3>Jogar Sozinho</h3><p>Partida local contra CPU com dificuldade configurável. Replay é obrigatório após gols. Partidas com bot não concedem XP, KX Coins, estatísticas, ranking ou histórico online.</p></section>
+          <section><h3>Multiplayer Casual</h3><p>O host organiza os times e pode usar o painel administrativo. Todos precisam estar prontos antes do início. Concede XP e entra no histórico casual, mas não altera estatísticas competitivas, ranking ou KX Coins.</p></section>
+          <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
+          <section><h3>Premiação Online</h3><ul><li>Vitória: 80 XP e, no competitivo, 30 KX Coins.</li><li>Empate: 30 XP e, no competitivo, 18 KX Coins.</li><li>Derrota: 15 XP e, no competitivo, 10 KX Coins.</li><li>Casual concede somente XP. Treino e partidas com CPU não concedem progresso.</li></ul></section>
+          <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, chutes, dribles, desarmes, gols contra, posse média e MVP. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
+          <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
+          <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
+          <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
+          <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
+          <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
+          <section><h3>Vitrines e Solicitações</h3><p>Skins da comunidade custam 150 na vitrine diária, 300 na semanal e 600 na mensal. Cada conta pode solicitar uma skin por dia. O recorte enviado participa das seleções e a vitrine mantém a skin atual quando não existe nova candidata válida para o período.</p></section>
+        </div>
+      </div>
+    </div>
+
+    <div id="changelog-modal" class="modal-overlay hidden">
+      <div class="modal-card card-blur changelog-card compact-changelog-card">
+        <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
+        <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
+        <div class="compact-changelog-list">
+          <section>
+            <h4>v20.5 - HUD Mobile Renovado</h4>
+            <p>O HUD padr&atilde;o do celular agora distribui melhor os bot&otilde;es de a&ccedil;&atilde;o, amplia o anal&oacute;gico e usa 60% de opacidade. As notifica&ccedil;&otilde;es Android tamb&eacute;m receberam textos corrigidos e uma chamada mais divertida.</p>
+          </section>
+          <section>
+            <h4>v20.0 - A Chegada do Kicker Hax</h4>
+            <p>Os nomes dos jogadores agora exibem a cor do time durante a partida e no replay. O atualizador Android remove o APK tempor&aacute;rio depois que a instala&ccedil;&atilde;o termina, e Rhuan passa a integrar os cr&eacute;ditos como Influenciador Oficial.</p>
+          </section>
+          <section>
+            <h4>v16.0 - Limites Vis&iacute;veis</h4>
+            <p>Campos de perfil, skins, salas, senhas e chats agora avisam imediatamente quando uma tentativa ultrapassa o limite permitido. O Mercado tamb&eacute;m confirma claramente quando uma skin entra na fila para aparecer nas vitrines.</p>
+          </section>
+          <section>
+            <h4>v15.0 - Limites e Skins Otimizadas</h4>
+            <p>Perfis, salas, senhas, nomes de skins e mensagens agora possuem limites consistentes. Envios comunit&aacute;rios aceitam somente PNG ou JPG, s&atilde;o comprimidos para at&eacute; 500 KB e ocupam quase todo o jogador mantendo uma borda fina com a cor do time.</p>
+          </section>
+          <section>
+            <h4>v14.0 - Perfil e Salas Limpas</h4>
+            <p>O emblema agora aparece somente com a skin Novato. Duplicatas de ba&uacute;s interrompidos preservam o reembolso de 25%, e salas encerradas removem seus chats de lobby e partida no mesmo processo para n&atilde;o deixar dados &oacute;rf&atilde;os.</p>
+          </section>
+          <section>
+            <h4>v13.0 - Mercado Seguro</h4>
+            <p>Compras passaram a pedir confirma&ccedil;&atilde;o. Ba&uacute;s interrompidos s&atilde;o retomados sem cobran&ccedil;a duplicada, o resultado permite abrir novamente e skins comunit&aacute;rias recebem nomes pr&oacute;prios.</p>
+          </section>
+          <section>
+            <h4>v12.0 - Mercado e Ranking</h4>
+            <p>O resultado do ba&uacute; ganhou a op&ccedil;&atilde;o de abrir novamente quando existe saldo, e os avisos informam exatamente quantos KX Coins faltam. O ranking reconcilia estat&iacute;sticas competitivas pendentes e perfis p&uacute;blicos exibem winrate.</p>
+          </section>
+          <section>
+            <h4>v11.0 - Roleta Precisa</h4>
+            <p>A roleta dos ba&uacute;s agora gira por cinco segundos, desacelera e mede a posi&ccedil;&atilde;o real da skin vencedora para parar exatamente no pr&ecirc;mio entregue. Perfis p&uacute;blicos exibem KX Coins e quantidade de skins, e o ranking de moedas usa o saldo real do Firestore.</p>
+          </section>
+          <section>
+            <h4>v10.0 - Perfil Sob Controle</h4>
+            <p>Nome, biografia, emblema e skin agora formam um &uacute;nico rascunho e s&oacute; chegam ao perfil depois de Salvar altera&ccedil;&otilde;es. Ao sair com mudan&ccedil;as pendentes, o jogo pede confirma&ccedil;&atilde;o antes de descart&aacute;-las. As cole&ccedil;&otilde;es foram reiniciadas e a skin Novato deixou de possuir valor.</p>
+          </section>
+          <section>
+            <h4>v9.7 - Nova Temporada</h4>
+            <p>Mercado e roleta foram reconstru&iacute;dos, vitrines ficaram mais acess&iacute;veis, fila de skins ganhou limpeza autom&aacute;tica e o ranking agora inclui KX Coins e cole&ccedil;&atilde;o. A temporada reinicia progress&atilde;o e skins, perfis p&uacute;blicos separam hist&oacute;ricos, seguran&ccedil;a e desempenho receberam uma revis&atilde;o ampla e o app notifica cada atualiza&ccedil;&atilde;o apenas uma vez.</p>
+          </section>
+          <section>
+            <h4>v9.6 - Perfis Organizados</h4>
+            <p>Perfis p&uacute;blicos agora abrem hist&oacute;rico e invent&aacute;rio em telas separadas, o perfil pr&oacute;prio mant&eacute;m seus controles dentro da caixa e a experi&ecirc;ncia mobile do navegador acompanha o aplicativo. Sess&otilde;es duplicadas em celulares tamb&eacute;m permanecem detect&aacute;veis durante pausas do navegador.</p>
+          </section>
+          <section>
+            <h4>v9.5 - Identidade em Campo</h4>
+            <p>Chat e ranking agora exibem skins e abrem perfis p&uacute;blicos completos. Estat&iacute;sticas competitivas pendentes s&atilde;o reconstru&iacute;das pelo hist&oacute;rico, vitrines n&atilde;o repetem solicita&ccedil;&otilde;es enquanto houver fila e o menu mobile ganhou espa&ccedil;amento est&aacute;vel.</p>
+          </section>
+          <section>
+            <h4>v9.4 - Resultado Garantido</h4>
+            <p>Site e aplicativo agora s&atilde;o publicados juntos somente depois do APK pronto. W.O. competitivo ganhou recupera&ccedil;&atilde;o mais robusta, a temporada foi reiniciada, o invent&aacute;rio troca skins sem estado vazio e o Android verifica atualiza&ccedil;&otilde;es em segundo plano.</p>
+          </section>
+          <section>
+            <h4>v9.3 - Sess&atilde;o Est&aacute;vel</h4>
+            <p>Atualiza&ccedil;&otilde;es n&atilde;o deixam mais sess&otilde;es antigas bloqueando o computador. O bot&atilde;o Usar nesta tela assume a conta corretamente, e falhas tempor&aacute;rias de permiss&atilde;o nas estat&iacute;sticas n&atilde;o impedem o login.</p>
+          </section>
+          <section>
+            <h4>v9.2 - Competitivo Confiável</h4>
+            <p>Reconexões competitivas reaparecem na arena pelo tempo correto, times só são sorteados depois que todos marcam pronto e resultados recuperam estatísticas, histórico, XP e KX Coins mesmo após desconexões. A lista mostra partidas sem limite de gols e o menu principal ganhou um guia completo de regras.</p>
+          </section>
+          <section>
+            <h4>v9.1 - Nova Temporada</h4>
+            <p>Progressão, estatísticas, histórico, moedas e coleção foram reiniciados, mantendo apenas a skin Novato. O inventário agora permite jogar sem skin, e resultados competitivos gravam estatísticas e histórico do próprio jogador como uma única operação recuperável.</p>
+          </section>
+          <section>
+            <h4>v9.0 - Arena Competitiva Consistente</h4>
+            <p>O campo agora mantém a mesma geometria no desktop, mobile e após reconexões. Partidas competitivas permitem abrir o menu sem congelar os demais jogadores, recebem desistência com W.O. ou votação do time e contabilizam corretamente vitórias de qualquer lado. Inventário, proporção das skins e oficina de solicitações também foram refinados.</p>
+          </section>
+          <section>
+            <h4>v8.1 - Inventário e Oficina de Skins</h4>
+            <p>O inventário ganhou uma tela própria com filtros por raridade, valor e nome. As skins agora preservam a borda da cor do time, a oficina limita o recorte ao conteúdo real da imagem e exibe uma prévia fiel. Os baús foram redesenhados, a moeda passou a se chamar KX Coins e pular o replay não elimina mais a contagem de reinício.</p>
+          </section>
+          <section>
+            <h4>v8.0 - Mercado de Skins</h4>
+            <p>Chegam moedas competitivas, três baús com raridades, inventário e skins equipáveis. Solicitações com recorte circular alimentam as vitrines diária, semanal e mensal da comunidade.</p>
+          </section>
+          <section>
+            <h4>v7.1 - Arena Mais Fluida</h4>
+            <p>Multiplayer recebe snapshots mais frequentes, bot ganha perfis variáveis e fuga real das paredes, desarme mobile aponta para a bola em movimento e expulsões usam votação sem vitória gratuita.</p>
+          </section>
+          <section>
+            <h4>v7.0 - Nova Temporada</h4>
+            <p>Ranking, níveis, estatísticas e histórico reiniciados. Rede multiplayer mais leve, chat por horário real e assistência de desarme para mobile.</p>
+          </section>
+          <section>
+            <h4>v6.0.3 - Espectador Estável</h4>
+            <p>Espectadores não pausam, votam ou enviam comandos. O tráfego da partida ficou mais leve, expulsões não exibem resultado e atualizações aguardam o fim da partida online.</p>
+          </section>
+          <section>
+            <h4>v6.0.2 - Reconexão e Controles</h4>
+            <p>Reconexões agora terminam em votação ou W.O. sem loop, replay local pode ser pulado, controles de PC acompanham o perfil e a IA escapa melhor das quinas.</p>
+          </section>
+          <section>
+            <h4>v6.0.1 - Início Online</h4>
+            <p>Remove um erro no ciclo do servidor que parava a partida no primeiro quadro. Jogadores, relógio e contagem inicial voltam a sincronizar normalmente.</p>
+          </section>
+          <section>
+            <h4>v6.0 - Partida Estável</h4>
+            <p>Corrige o ciclo multiplayer que podia travar ao iniciar, resultados identificam corretamente cada jogador, histórico mantém até dez partidas casuais e dez competitivas por perfil, e o app recebe a identidade visual final.</p>
+          </section>
+          <section>
+            <h4>v5.7 - Campo e Histórico</h4>
+            <p>Campo mobile preenche a tela sem cortar as traves, rede mantém gramado, chat do lobby fica rígido e histórico guarda até dez partidas por categoria.</p>
+          </section>
+          <section>
+            <h4>v5.6 - Marca e Tela Cheia</h4>
+            <p>Nova marca transparente fica centralizada no menu. O campo mobile respeita a área visível sem cortar traves, o exterior é preto e o app avisa pelo sistema quando uma atualização estiver pronta.</p>
+          </section>
+          <section>
+            <h4>v5.5 - Arena Estável</h4>
+            <p>Replay inicia sem espera entre aparelhos, chats usam rolagem interna, a pausa manual não bloqueia reconexão e o campo mobile passa a reconhecer melhor telas compactas. Nova identidade visual incluída.</p>
+          </section>
+          <section>
+            <h4>v5.4 - Publicação Coordenada</h4>
+            <p>O site só recebe uma versão quando o APK correspondente estiver pronto. O campo mobile usa a área visível real do aparelho, o host pode trocar o próprio lado e a terceira saída abre votação de 30 segundos para o time continuar.</p>
+          </section>
+          <section>
+            <h4>v5.3 - Presen&ccedil;a Est&aacute;vel</h4>
+            <p>O app s&oacute; exige atualiza&ccedil;&atilde;o depois que o APK correspondente existe. Retornos bloqueados deixam de aparecer, a detec&ccedil;&atilde;o usa ping e o host recupera a simula&ccedil;&atilde;o ao trocar de aba.</p>
+          </section>
+          <section>
+            <h4>v5.2 - Replay e Retorno</h4>
+            <p>Replay multiplayer agora pode ser pulado por maioria. Reconex&otilde;es usam ping para evitar alarmes falsos, a terceira sa&iacute;da encerra a partida e a arena mobile ganha enquadramento sem cortes.</p>
+          </section>
+          <section>
+            <h4>v5.1 - Arena Confi&aacute;vel</h4>
+            <p>Atualizador Android usa o download nativo do sistema. Campo mobile preenche toda a largura, retorno &eacute; limitado a duas tentativas e times podem votar para continuar sem jogador desconectado ap&oacute;s 1 minuto e 30 segundos.</p>
+          </section>
+          <section>
+            <h4>v5.0</h4>
+            <p>Campo mobile ocupa toda a tela, editor de HUD não vaza para partidas e atualizador Android valida o APK antes de instalar.</p>
+          </section>
+          <section>
+            <h4>v4.0.7</h4>
+            <p>Corrige o empacotamento do atualizador Android para o APK instalar normalmente.</p>
+          </section>
+          <section>
+            <h4>v4.0.6</h4>
+            <p>Atualizador Android instala por cima do app e convidados entram no lobby com o estado sincronizado.</p>
+          </section>
+          <section>
+            <h4>v4.0.5</h4>
+            <p>Criação de sala abre o lobby do host corretamente e evita tentativas WebRTC duplicadas.</p>
+          </section>
+          <section>
+            <h4>v4.0.4</h4>
+            <p>Atualização nativa baixa pelo app, sessão é restaurada, chats de salas são limpos e abandono do host encerra com resultado.</p>
+          </section>
+          <section>
+            <h4>v4.0.3</h4>
+            <p>Salas detectam queda do host, chat da partida fica limitado e a presença online aparece em todas as telas.</p>
+          </section>
+          <section>
+            <h4>v4.0.2</h4>
+            <p>Atualização obrigatória compara a versão nativa do aplicativo e o site publicado. Áudio é interrompido ao deixar o jogo em segundo plano.</p>
+          </section>
+          <section>
+            <h4>v4.0.1</h4>
+            <p>Encerramento por saida do host agora concede vitoria ao rival, lobby retorna por jogador e chat da partida permanece compacto.</p>
+          </section>
+          <section>
+            <h4>v4.0</h4>
+            <p>Login simultâneo com reconexão de sessão, desarmar apenas sem bola, desativação de tela cheia no celular e rankings filtrados.</p>
+          </section>
+          <section>
+            <h4>v3.2.24</h4>
+            <p>Login do aplicativo refeito com Google nativo, sem abrir navegador externo.</p>
+          </section>
+          <section>
+            <h4>v3.2.23</h4>
+            <p>Chat global mobile corrigido com mensagens vis&iacute;veis e rolagem em todas as telas.</p>
+          </section>
+          <section>
+            <h4>v3.2.22</h4>
+            <p>Chat mobile vis&iacute;vel, retorno autenticado ao app e prote&ccedil;&atilde;o de tela cheia no PC.</p>
+          </section>
+          <section>
+            <h4>v3.2.21</h4>
+            <p>Login mobile estabilizado, ping real, estat&iacute;sticas online completas e HUD ajust&aacute;vel.</p>
+          </section>
+          <section>
+            <h4>v3.2.20</h4>
+            <p>Desarme corrigido, pain&eacute;is mobile compactos e login Google redirecionado pelo navegador seguro.</p>
+          </section>
+          <section>
+            <h4>v3.2.19</h4>
+            <p>APK abre o jogo no navegador do sistema sem for&ccedil;ar modo Cordova.</p>
+          </section>
+          <section>
+            <h4>v3.2.18</h4>
+            <p>Corre&ccedil;&otilde;es no bot&atilde;o do chat global e remo&ccedil;&atilde;o do bot&atilde;o Fechar.</p>
+          </section>
+          <section>
+            <h4>v3.2.17</h4>
+            <p>Corre&ccedil;&otilde;es de abas mobile, login/cadastro e chat da partida.</p>
+          </section>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- PeerJS WebRTC P2P Support -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- Javascript Modules Client -->
+</body>
+</html>

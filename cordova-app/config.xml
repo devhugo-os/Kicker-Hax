@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.kickerhax.app" version="21.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://apache.org/cordova/ns/1.0">
+  <name>Kicker Hax</name>
+  <description>Kicker Hax mobile shell that always loads the current GitHub Pages release.</description>
+  <author email="devhugo.os@gmail.com" href="https://devhugo-os.github.io/Kicker-Hax/">Kicker Hax</author>
+  <content src="index.html" />
+  <allow-intent href="http://*/*" />
+  <allow-intent href="https://*/*" />
+  <access origin="*" />
+  <allow-intent href="http://*/*" />
+  <allow-intent href="https://*/*" />
+  <allow-navigation href="*" />
+  <allow-navigation href="https://devhugo-os.github.io/Kicker-Hax/*" />
+  <preference name="Fullscreen" value="true" />
+  <preference name="Orientation" value="sensorLandscape" />
+  <preference name="AppendUserAgent" value="KickerHaxApp" />
+  <preference name="AndroidLaunchMode" value="singleTask" />
+  <preference name="DisallowOverscroll" value="true" />
+  <preference name="KeepRunning" value="true" />
+  <preference name="LoadUrlTimeoutValue" value="7000" />
+  <preference name="EnableWebViewDebugging" value="false" />
+  <preference name="SplashScreenDelay" value="0" />
+  <preference name="FadeSplashScreenDuration" value="0" />
+  <preference name="AndroidXEnabled" value="true" />
+  <preference name="StatusBarOverlaysWebView" value="true" />
+  <icon src="res/icon/android/icon.png" />
+  <platform name="android">
+    <resource-file src="google-services.json" target="app/google-services.json" />
+  </platform>
+</widget>

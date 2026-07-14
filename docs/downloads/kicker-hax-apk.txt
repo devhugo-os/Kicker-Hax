@@ -1,0 +1,5 @@
+Kicker Hax APK
+Version: 20.5.0
+Built: 2026-07-13T17:10:16Z
+Commit: 3a0c1db34fdc7dd8aacfbf98586c67aaf689fe4c
+Native Google SHA-1: 39e8c94a4b0828f6c03ed654c6b6883e52829255

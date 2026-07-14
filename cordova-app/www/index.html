@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+	<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://www.googletagmanager.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src * data: blob: gap: https://ssl.gstatic.com 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; media-src * data: blob:; img-src * data: blob:; connect-src * https://devhugo-os.github.io https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com;" />
+    <title>Kicker Hax</title>
+    <style>
+      html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #07101f;
+      }
+
+      .launcher {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        padding: 24px;
+        box-sizing: border-box;
+        text-align: center;
+        color: #fff;
+        font-family: system-ui, sans-serif;
+      }
+
+      .launcher strong {
+        font-size: clamp(28px, 8vw, 42px);
+        letter-spacing: -0.04em;
+      }
+
+      .launcher span {
+        max-width: 420px;
+        color: #b8c3d8;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      .launcher button {
+        border: 0;
+        border-radius: 14px;
+        background: #3b82f6;
+        color: #fff;
+        min-height: 44px;
+        padding: 0 22px;
+        font-weight: 800;
+        box-shadow: 0 12px 28px rgba(59, 130, 246, 0.28);
+      }
+
+      #game-frame {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: none;
+        background: #07101f;
+      }
+
+      #launcher-status {
+        min-height: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="cordova.js"></script>
+    <div class="launcher">
+      <strong>Kicker Hax</strong>
+      <span>Entre com sua conta Google para jogar diretamente no aplicativo.</span>
+      <button id="open-game" type="button">Entrar com Google</button>
+      <span id="launcher-status" aria-live="polite"></span>
+    </div>
+    <iframe id="game-frame" title="Kicker Hax" allow="autoplay; fullscreen"></iframe>
+    <script>
+      const gameUrl = 'https://devhugo-os.github.io/Kicker-Hax/';
+      const launcher = document.querySelector('.launcher');
+      const loginButton = document.getElementById('open-game');
+      const launcherStatus = document.getElementById('launcher-status');
+      const gameFrame = document.getElementById('game-frame');
+      const nativeTokenKey = 'kicker_hax_native_access_token';
+      let nativeAccessToken = localStorage.getItem(nativeTokenKey) || '';
+      let frameReady = false;
+      let silentLoginPending = true;
+      let interactiveLoginPending = false;
+      let pendingLoginRequest = false;
+
+      function setStatus(message) {
+        launcherStatus.textContent = message || '';
+      }
+
+      function buildGameUrl() {
+        const url = new URL(gameUrl);
+        url.searchParams.set('app', '1');
+        url.searchParams.set('native', '1');
+        url.searchParams.set('nativeAppVersion', '21.0.0');
+        // Always request the latest document; Vite assets stay cacheable by hash.
+        url.searchParams.set('build', String(Date.now()));
+        return url.toString();
+      }
+
+      function sendNativeToken() {
+        if (!frameReady || !nativeAccessToken || !gameFrame.contentWindow) return;
+        gameFrame.contentWindow.postMessage({
+          type: 'KICKER_HAX_NATIVE_GOOGLE',
+          accessToken: nativeAccessToken
+        }, 'https://devhugo-os.github.io');
+      }
+
+      function openGameWithToken(accessToken) {
+        nativeAccessToken = accessToken;
+        localStorage.setItem(nativeTokenKey, accessToken);
+        frameReady = false;
+        launcher.style.display = 'none';
+        gameFrame.style.display = 'block';
+        gameFrame.src = buildGameUrl();
+      }
+
+      function resumeSavedGame() {
+        // Keep the private app token across APK updates. The silent Google
+        // refresh below replaces it when available, while this prevents an
+        // iframe reload from needlessly showing the login screen first.
+        if (nativeAccessToken) {
+          openGameWithToken(nativeAccessToken);
+          return;
+        }
+        launcher.style.display = 'none';
+        gameFrame.style.display = 'block';
+        gameFrame.src = buildGameUrl();
+      }
+
+      function loginWithNativeGoogle() {
+        if (interactiveLoginPending) return;
+        const googlePlus = window.plugins?.googleplus;
+        if (!googlePlus) {
+          setStatus('O login nativo ainda está carregando. Tente novamente.');
+          return;
+        }
+        interactiveLoginPending = true;
+        loginButton.disabled = true;
+        setStatus('Abrindo contas Google...');
+        googlePlus.login({
+          scopes: 'profile email',
+          webClientId: '337598465170-72lndpnrleeg1lu9v48fhk54jffmvesc.apps.googleusercontent.com',
+          offline: true
+        }, result => {
+          interactiveLoginPending = false;
+          loginButton.disabled = false;
+          if (!result?.accessToken) {
+            setStatus('O Google não retornou o token de acesso.');
+            return;
+          }
+          openGameWithToken(result.accessToken);
+        }, error => {
+          interactiveLoginPending = false;
+          loginButton.disabled = false;
+          setStatus(`Não foi possível entrar: ${String(error || 'erro desconhecido')}`);
+        });
+      }
+
+      gameFrame.addEventListener('load', () => {
+        frameReady = true;
+        sendNativeToken();
+      });
+
+      window.addEventListener('message', event => {
+        if (event.origin !== 'https://devhugo-os.github.io') return;
+        if (event.data?.type === 'KICKER_HAX_NATIVE_READY') {
+          if (nativeAccessToken) sendNativeToken();
+          return;
+        }
+        if (event.data?.type === 'KICKER_HAX_NATIVE_LOGIN_REQUEST') {
+          if (nativeAccessToken) sendNativeToken();
+          else if (silentLoginPending) pendingLoginRequest = true;
+          else loginWithNativeGoogle();
+          return;
+        }
+        if (event.data?.type === 'KICKER_HAX_NATIVE_AUTH_FAILED') {
+          nativeAccessToken = '';
+          localStorage.removeItem(nativeTokenKey);
+          loginWithNativeGoogle();
+          return;
+        }
+        if (event.data?.type === 'KICKER_HAX_DOWNLOAD_UPDATE') {
+          const url = String(event.data.url || 'https://devhugo-os.github.io/Kicker-Hax/downloads/kicker-hax.apk');
+          const updater = window.cordova?.plugins?.KickerHaxUpdater;
+          if (updater) {
+            updater.downloadAndInstall(url, () => {
+              setStatus('Instalador Android aberto. Confirme a atualizaÃ§Ã£o para concluir.');
+            }, error => {
+              setStatus(`NÃ£o foi possÃ­vel atualizar: ${String(error || 'erro desconhecido')}`);
+            });
+            return;
+          }
+          const openExternal = window.cordova?.InAppBrowser?.open || window.open;
+          openExternal(url, '_system', 'location=yes');
+        }
+        if (event.data?.type === 'KICKER_HAX_UPDATE_AVAILABLE') {
+          const updater = window.cordova?.plugins?.KickerHaxUpdater;
+          updater?.notifyUpdate?.(String(event.data.version || ''), () => {}, () => {});
+        }
+      });
+
+      loginButton.addEventListener('click', loginWithNativeGoogle);
+      document.addEventListener('deviceready', () => {
+        window.cordova?.plugins?.KickerHaxUpdater?.prepareNotifications?.(() => {}, () => {});
+        const googlePlus = window.plugins?.googleplus;
+        resumeSavedGame();
+        if (!googlePlus) {
+          silentLoginPending = false;
+          return;
+        }
+        googlePlus.trySilentLogin({
+          scopes: 'profile email',
+          webClientId: '337598465170-72lndpnrleeg1lu9v48fhk54jffmvesc.apps.googleusercontent.com',
+          offline: true
+        }, result => {
+          silentLoginPending = false;
+          if (result?.accessToken) openGameWithToken(result.accessToken);
+          else if (pendingLoginRequest) loginWithNativeGoogle();
+        }, () => {
+          silentLoginPending = false;
+          if (pendingLoginRequest) loginWithNativeGoogle();
+        });
+      }, { once: true });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,43 @@
+# Node dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Development config
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build artifacts
+dist/
+build/
+client/dist/
+cordova-app/node_modules/
+cordova-app/platforms/
+cordova-app/plugins/
+cordova-app/www/downloads/
+cordova-app/google-services.json
+cordova-app/kicker-hax.keystore
+cordova-app/keystore_base64.txt
+
+# Editor / OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local Dev Rules (from prompt rules)
+AGENTS.md
+README.md
+firestore.rules
+database.rules.json
+firebase.json
+.firebaserc
+
+# Local Custom Agent Skills
+skills/
+.agents/
+.codex/

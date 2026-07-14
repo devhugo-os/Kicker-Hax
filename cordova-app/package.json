@@ -1,0 +1,25 @@
+{
+  "devDependencies": {
+    "com.kickerhax.updater": "file:cordova-plugins/kicker-hax-updater",
+    "cordova": "^13.0.0",
+    "cordova-android": "^13.0.0",
+    "cordova-plugin-inappbrowser": "^6.0.0"
+  },
+  "cordova": {
+    "platforms": [
+      "android"
+    ],
+    "plugins": {
+      "cordova-plugin-inappbrowser": {},
+      "cordova-plugin-googleplus": {
+        "PLAY_SERVICES_VERSION": "15.0.1"
+      },
+      "com.kickerhax.updater": {}
+    }
+  },
+  "version": "5.3.0",
+  "name": "kicker-hax-cordova",
+  "dependencies": {
+    "cordova-plugin-googleplus": "^8.5.2"
+  }
+}

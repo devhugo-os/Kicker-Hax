@@ -1,0 +1,9 @@
+{
+  "name": "com.kickerhax.updater",
+  "version": "1.0.0",
+  "description": "Cordova updater that downloads and installs the signed Kicker Hax APK.",
+  "cordova": {
+    "id": "com.kickerhax.updater",
+    "platforms": ["android"]
+  }
+}
