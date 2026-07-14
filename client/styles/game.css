@@ -568,6 +568,17 @@
   white-space: nowrap;
 }
 
+.mobile-match .tutorial-controls-grid kbd {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(37, 99, 235, 0.82);
+  font-size: 15px;
+}
+
 .tutorial-controls-grid span { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .tutorial-progress { height: 5px; margin: 11px 0 9px; overflow: hidden; border-radius: 3px; background: rgba(148, 163, 184, 0.2); }
 .tutorial-progress i { display: block; height: 100%; border-radius: inherit; background: #3b82f6; transition: width 120ms linear; }

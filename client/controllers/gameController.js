@@ -16,7 +16,7 @@ import { drawSkinImage } from '../utils/skinRenderer.js';
 import { normalizeMatchTeam, resolvePlayerMatchOutcome } from '../utils/matchResult.js';
 import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
-import { isMobilePhoneDevice } from '../utils/deviceCapabilities.js';
+import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
 import { TutorialSession } from '../tutorial/tutorialSession.js';
 
@@ -194,12 +194,13 @@ export const gameController = {
   },
 
   isTouchDevice() {
-    const ua = navigator.userAgent || '';
-    const mobileUA = /Android|iPhone|iPad|iPod|Mobile|IEMobile|Opera Mini/i.test(ua);
-    const coarse = window.matchMedia?.('(pointer: coarse)').matches;
-    // Responsive emulation does not always expose maxTouchPoints. Treat a
-    // coarse pointer or a compact landscape viewport as the mobile HUD too.
-    return !!mobileUA || !!coarse || Math.min(window.innerWidth, window.innerHeight) <= 540;
+    // Viewport dimensions are intentionally ignored: browser zoom must never
+    // switch a desktop player to the mobile HUD or remove the HUD from the app.
+    return shouldUseMobileHud(navigator, {
+      cordova: !!window.cordova,
+      search: window.location.search,
+      coarsePointer: !!window.matchMedia?.('(pointer: coarse)').matches
+    });
   },
 
   isMobilePhone() {

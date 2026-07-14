@@ -8,8 +8,8 @@ function keyLabel(value) {
 function buildControlChips(controls, mobile) {
   if (mobile) {
     return [
-      ['Analógico', 'Mover'], ['Raio', 'Correr'], ['Chuteira', 'Chutar / passar'],
-      ['Brilho', 'Driblar'], ['Escudo', 'Desarmar'], ['Fogo', 'Super chute']
+      ['🕹️', 'Mover'], ['⚡', 'Correr'], ['🥾', 'Chutar / passar'],
+      ['✨', 'Driblar'], ['🛡️', 'Desarmar'], ['🔥', 'Super chute']
     ];
   }
   return [
@@ -63,6 +63,8 @@ export class TutorialSession {
   }
 
   next() {
+    clearTimeout(this.advanceTimer);
+    this.advanceTimer = null;
     if (this.step?.id === 'finish') return this.onFinish?.();
     this.index = Math.min(TUTORIAL_STEPS.length - 1, this.index + 1);
     this.progress = 0;
