@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-DVXNtSG2.js"></script>
+  <script type="module" crossorigin src="./assets/index-BFbm27WS.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-Djc139qG.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-DvKWgG-l.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-D1B7UsVw.css">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-bXANC1Nn.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-DqlcA8te.css">
 </head>
 <body>
 
@@ -104,6 +104,10 @@
           <h2>Perfil do Jogador</h2>
                   <button id="profile-btn-logout" class="btn btn-danger btn-sm">Sair da Conta</button>
         </div>
+        <div id="profile-onboarding-notice" class="profile-onboarding-notice hidden" role="status">
+          <strong>Finalize seu perfil para entrar no jogo</strong>
+          <span>Escolha seu nome de jogador abaixo e toque em <b>Salvar Alterações</b>.</span>
+        </div>
 
         <div class="profile-grid">
           <!-- Editor de Perfil -->
@@ -172,6 +176,7 @@
               <div class="adv-stat-row"><span>Gols Marcados</span> <strong id="stats-goals">0</strong></div>
               <div class="adv-stat-row"><span>Chutes</span> <strong id="stats-shots">0</strong></div>
               <div class="adv-stat-row"><span>Dribles</span> <strong id="stats-dribbles">0</strong></div>
+              <div class="adv-stat-row"><span>Assistências</span> <strong id="stats-assists">0</strong></div>
               <div class="adv-stat-row"><span>Desarmes</span> <strong id="stats-tackles">0</strong></div>
               <div class="adv-stat-row"><span>Empates</span> <strong id="stats-draws">0</strong></div>
               <div class="adv-stat-row"><span>Posse Média</span> <strong id="stats-possession">0%</strong></div>
@@ -213,6 +218,7 @@
           <div><strong id="public-stats-goals">0</strong><span>Gols</span></div>
           <div><strong id="public-stats-shots">0</strong><span>Chutes</span></div>
           <div><strong id="public-stats-dribbles">0</strong><span>Dribles</span></div>
+          <div><strong id="public-stats-assists">0</strong><span>Assistências</span></div>
           <div><strong id="public-stats-tackles">0</strong><span>Desarmes</span></div>
           <div><strong id="public-stats-mvps">0</strong><span>MVPs</span></div>
           <div><strong id="public-stats-possession">0%</strong><span>Posse média</span></div>
@@ -765,6 +771,10 @@
                 <span class="stat-label">⚡ Dribles</span>
                 <span class="stat-value" id="right-stat-dribbles">0</span>
               </div>
+              <div class="stat-row">
+                <span class="stat-label">🤝 Assistências</span>
+                <span class="stat-value" id="right-stat-assists">0</span>
+              </div>
             </div>
           </aside>
         </div>
@@ -885,6 +895,7 @@
           <button id="rank-filter-own-goals" class="btn btn-secondary">Gols Contra</button>
           <button id="rank-filter-shots" class="btn btn-secondary">Chutes</button>
           <button id="rank-filter-dribbles" class="btn btn-secondary">Dribles</button>
+          <button id="rank-filter-assists" class="btn btn-secondary">Assistências</button>
           <button id="rank-filter-tackles" class="btn btn-secondary">Desarmes</button>
           <button id="rank-filter-possession" class="btn btn-secondary">Posse Média</button>
           <button id="rank-filter-matches" class="btn btn-secondary">Jogos</button>
@@ -945,7 +956,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v20.5</div>
+    <div id="game-version-badge" class="version-badge hidden">v21.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -961,7 +972,7 @@
           <section><h3>Multiplayer Casual</h3><p>O host organiza os times e pode usar o painel administrativo. Todos precisam estar prontos antes do início. Concede XP e entra no histórico casual, mas não altera estatísticas competitivas, ranking ou KX Coins.</p></section>
           <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
           <section><h3>Premiação Online</h3><ul><li>Vitória: 80 XP e, no competitivo, 30 KX Coins.</li><li>Empate: 30 XP e, no competitivo, 18 KX Coins.</li><li>Derrota: 15 XP e, no competitivo, 10 KX Coins.</li><li>Casual concede somente XP. Treino e partidas com CPU não concedem progresso.</li></ul></section>
-          <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, chutes, dribles, desarmes, gols contra, posse média e MVP. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
+          <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, assistências, chutes, dribles, desarmes, gols contra, posse média e MVP. A assistência pertence ao último companheiro que tocou na bola antes do autor do gol; um toque adversário cancela a jogada. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
           <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
@@ -977,6 +988,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v21.0 - Jogo Coletivo</h4>
+            <p>Assistências chegam às partidas, perfil e ranking. Placar final, chats e entrada em salas ficaram mais confiáveis; sons online não se perdem mais entre frames. A movimentação responde melhor, desarmes recuperam mais rápido e a partida ganhou música e indicador de trajetória da bola.</p>
+          </section>
           <section>
             <h4>v20.5 - HUD Mobile Renovado</h4>
             <p>O HUD padr&atilde;o do celular agora distribui melhor os bot&otilde;es de a&ccedil;&atilde;o, amplia o anal&oacute;gico e usa 60% de opacidade. As notifica&ccedil;&otilde;es Android tamb&eacute;m receberam textos corrigidos e uma chamada mais divertida.</p>
