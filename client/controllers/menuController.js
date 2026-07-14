@@ -248,6 +248,10 @@ export const menuController = {
       this.profileDraft = createProfileDraft(this.profileData);
     }
 
+    const ownStaffTag = document.getElementById('profile-staff-tag');
+    ownStaffTag?.replaceChildren();
+    if (ownStaffTag) appendStaffTag(ownStaffTag, this.profileData.staffRole, { full: true });
+
     // Bind edit fields
     const usernameInput = document.getElementById('profile-username-input');
     const badgeSelect = document.getElementById('profile-badge-select');
