@@ -491,6 +491,106 @@
   background: rgba(245, 158, 11, 0.88);
 }
 
+/* Guided tutorial floats above the real simulation without covering controls. */
+.tutorial-guide {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  z-index: 35;
+  width: min(620px, calc(100vw - 28px));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.tutorial-card {
+  padding: 14px 16px;
+  border: 1px solid rgba(96, 165, 250, 0.55);
+  border-radius: 8px;
+  color: #f8fafc;
+  background: rgba(5, 10, 27, 0.94);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.tutorial-dialog {
+  margin-top: min(20vh, 150px);
+  border-color: rgba(34, 197, 94, 0.6);
+}
+
+.tutorial-topline,
+.tutorial-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tutorial-topline strong { color: #60a5fa; }
+.tutorial-topline span { color: #94a3b8; font-size: 12px; }
+.tutorial-card h3 { margin: 7px 0 3px; font-size: 21px; }
+.tutorial-card p { margin: 0; color: #cbd5e1; font-size: 14px; line-height: 1.35; }
+
+.tutorial-objective {
+  margin-top: 10px;
+  padding: 7px 10px;
+  border-left: 3px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.11);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.tutorial-card.is-complete .tutorial-objective { border-color: #22c55e; color: #86efac; }
+
+.tutorial-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.tutorial-controls-grid > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.tutorial-controls-grid kbd {
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #fff;
+  background: #2563eb;
+  font: 700 11px 'Outfit', sans-serif;
+  white-space: nowrap;
+}
+
+.tutorial-controls-grid span { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.tutorial-progress { height: 5px; margin: 11px 0 9px; overflow: hidden; border-radius: 3px; background: rgba(148, 163, 184, 0.2); }
+.tutorial-progress i { display: block; height: 100%; border-radius: inherit; background: #3b82f6; transition: width 120ms linear; }
+.tutorial-card.is-complete .tutorial-progress i { background: #22c55e; }
+
+@media (orientation: landscape) and (max-height: 560px) {
+  .tutorial-guide {
+    top: 6px;
+    width: min(54vw, 560px);
+  }
+
+  .tutorial-card { padding: 7px 9px; }
+  .tutorial-dialog { margin-top: 7vh; }
+  .tutorial-card h3 { margin: 3px 0 1px; font-size: clamp(14px, 4vh, 18px); }
+  .tutorial-card p, .tutorial-objective { font-size: clamp(9px, 2.6vh, 12px); line-height: 1.16; }
+  .tutorial-objective { margin-top: 4px; padding: 4px 6px; }
+  .tutorial-controls-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; margin-top: 5px; }
+  .tutorial-controls-grid > div { gap: 3px; padding: 3px; }
+  .tutorial-controls-grid kbd, .tutorial-controls-grid span, .tutorial-topline span { font-size: 8px; }
+  .tutorial-progress { margin: 5px 0; }
+  .tutorial-actions .btn { min-height: 22px; padding: 3px 7px; font-size: 9px; }
+}
+
 #replay-vote-skip-btn {
   min-width: 156px;
   min-height: 38px;

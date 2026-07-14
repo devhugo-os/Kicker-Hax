@@ -18,6 +18,7 @@ import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
+import { TutorialSession } from '../tutorial/tutorialSession.js';
 
 export const gameController = {
   currentUser: null,
@@ -31,6 +32,8 @@ export const gameController = {
   status: 'lobby',
   countdown: 0,
   hudEditorMode: false,
+  tutorialMode: false,
+  tutorialSession: null,
 
   // Socket Lobby
   activeRoom: null,
@@ -144,6 +147,11 @@ export const gameController = {
   },
 
   async exitCurrentMatch() {
+    if (this.tutorialMode) {
+      this.tutorialMode = false;
+      router.show('mode-select-screen');
+      return;
+    }
     const competitiveSurrender = this.mode === 'multiplayer' && !!this.activeRoom?.competitive;
     const shouldExit = await confirmDialog({
       title: competitiveSurrender ? 'Desistir da partida?' : 'Sair da partida?',
@@ -326,6 +334,8 @@ export const gameController = {
     if (cardSolo) {
       cardSolo.onclick = () => {
         this.mode = 'solo';
+        this.practiceMode = false;
+        this.tutorialMode = false;
         router.show('solo-screen');
       };
     }
@@ -335,6 +345,19 @@ export const gameController = {
       cardPractice.onclick = () => {
         this.mode = 'solo';
         this.practiceMode = true;
+        this.tutorialMode = false;
+        this.goalLimit = 0;
+        this.matchTime = 24 * 60 * 60;
+        router.show('match-screen');
+      };
+    }
+
+    const cardTutorial = document.getElementById('mode-card-tutorial');
+    if (cardTutorial) {
+      cardTutorial.onclick = () => {
+        this.mode = 'solo';
+        this.practiceMode = true;
+        this.tutorialMode = true;
         this.goalLimit = 0;
         this.matchTime = 24 * 60 * 60;
         router.show('match-screen');
@@ -345,6 +368,8 @@ export const gameController = {
     if (cardMulti) {
       cardMulti.onclick = () => {
         this.mode = 'multiplayer';
+        this.practiceMode = false;
+        this.tutorialMode = false;
         router.show('multiplayer-screen');
       };
     }
@@ -1197,7 +1222,7 @@ export const gameController = {
 
     // Retrieve selected field size and replay settings
     const sizeSelect = document.getElementById('solo-field-size');
-    const fieldSize = sizeSelect ?sizeSelect.value : 'medium';
+    const fieldSize = this.tutorialMode ? 'medium' : (sizeSelect ? sizeSelect.value : 'medium');
     this.showReplay = true;
 
     // Apply dimensions to canvas
@@ -1288,7 +1313,18 @@ export const gameController = {
       tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, tackleImpactReady: false, shootHalo: 0
     };
 
-    const localPlayers = this.practiceMode ?[bluePlayer] : [redPlayer, bluePlayer];
+    const allyPlayer = {
+      id: 'tutorial-ally', name: 'CPU Parceiro', badge: '🤝', team: C.Team.BLUE, cpu: true,
+      x: this.canvas.width * 0.46, y: this.canvas.height * 0.64,
+      vx: 0, vy: 0, r: C.PLAYER_RADIUS, dir: Math.PI, lastMoveDir: Math.PI,
+      stamina: 1, staminaLock: 0, stun: 0, slowTimer: 0, kickCharge: 0, cool: 0,
+      tackle_cd: 0, dribble_cd: 0, dash_time: 0, invuln: 0, power_cd: 0,
+      tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, tackleImpactReady: false, shootHalo: 0
+    };
+
+    const localPlayers = this.tutorialMode
+      ? [redPlayer, bluePlayer, allyPlayer]
+      : (this.practiceMode ? [bluePlayer] : [redPlayer, bluePlayer]);
     this.players = localPlayers.map(p => new ClientPlayer(p));
 
     // Physical ball simulation
@@ -1424,7 +1460,8 @@ export const gameController = {
 
             // 2) AI bot decision making
             let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
-            if (!this.practiceMode && redPlayer.stun <= 0) {
+            const tutorialEnemyActive = this.tutorialMode && !!this.tutorialSession?.enemyActive;
+            if ((!this.practiceMode || tutorialEnemyActive) && redPlayer.stun <= 0) {
               if (redPlayer.aiDecisionTimer > 0) redPlayer.aiDecisionTimer--;
               const ballFuture = { x: localBallSim.x, y: localBallSim.y };
               if (!localBallSim.owner) {
@@ -1621,6 +1658,7 @@ export const gameController = {
                 const ang = (input.x || input.y) ?Math.atan2(input.y, input.x) : p.dir;
                 Physics.powerKick(p, localBallSim, ang, C.POWER_KICK_POWER);
                 frameSfx.push('power');
+                if (p.id === 'p1') this.tutorialSession?.record('power');
               }
 
               // Regular Shoot Release
@@ -1634,19 +1672,23 @@ export const gameController = {
                   if (p.id === 'p1') this.p1Shots = (this.p1Shots || 0) + 1;
                   Physics.kickBall(p, localBallSim, ang, pow);
                   frameSfx.push('kick');
+                  if (p.id === 'p1') this.tutorialSession?.record('kick');
                 }
                 p.kickCharge = 0;
               }
             };
 
             applySkills(bluePlayer, inputP1);
-            if (!this.practiceMode) applySkills(redPlayer, inputCPU);
+            if (!this.practiceMode || tutorialEnemyActive) applySkills(redPlayer, inputCPU);
+            if (bluePlayer.dribble_cd === C.DRIBBLE_CD) this.tutorialSession?.record('dribble');
 
             Physics.updatePlayerPhysics(bluePlayer, inputP1, localBallSim, (sfx) => frameSfx.push(sfx));
-            if (!this.practiceMode) Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
+            if (!this.practiceMode || this.tutorialMode) Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
+            if (this.tutorialMode) Physics.updatePlayerPhysics(allyPlayer, { x: 0, y: 0 }, localBallSim, (sfx) => frameSfx.push(sfx));
 
             Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
-            if (!this.practiceMode) Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
+            if (!this.practiceMode || this.tutorialMode) Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
+            if (this.tutorialMode) Physics.applyLimits(allyPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
 
             // Resolve the tackle at the final dash frame before normal bodies
             // are separated, mirroring the authoritative multiplayer server.
@@ -1660,6 +1702,13 @@ export const gameController = {
               (side) => {
                 // Goal triggered offline
                 if (side === 'blue') MatchSim.score.blue++; else MatchSim.score.red++;
+
+                if (this.tutorialMode) {
+                  this.tutorialSession?.record('goal', { side });
+                  localBallSim.vx = 0;
+                  localBallSim.vy = 0;
+                  return;
+                }
 
                 // Set last goal detail
                 const scorerName = localBallSim.lastTouch === 'cpu' ?'CPU Bot' : username;
@@ -1688,6 +1737,7 @@ export const gameController = {
               },
               w, h
             );
+            this.tutorialSession?.update({ player: bluePlayer, ball: localBallSim, input: inputP1 });
           }
 
           // Record locally for replay frames
@@ -1720,7 +1770,8 @@ export const gameController = {
           this.ball.draw(this.ctx);
 
           this.players.forEach(p => {
-            const phys = p.id === 'p1' ?bluePlayer : redPlayer;
+            const phys = localPlayers.find(item => item.id === p.id);
+            if (!phys) return;
             p.x = phys.x;
             p.y = phys.y;
             p.dir = phys.dir;
@@ -1847,6 +1898,13 @@ export const gameController = {
         redPlayer.tackleImpactReady = false;
         redPlayer.tackleSuccess = false;
 
+        allyPlayer.x = this.canvas.width * 0.46;
+        allyPlayer.y = this.canvas.height * 0.64;
+        allyPlayer.vx = allyPlayer.vy = 0;
+        allyPlayer.kickCharge = 0;
+        allyPlayer.stamina = 1;
+        allyPlayer.stun = 0;
+
         localBallSim.x = this.canvas.width / 2;
         localBallSim.y = this.canvas.height / 2;
         localBallSim.vx = localBallSim.vy = 0;
@@ -1854,6 +1912,51 @@ export const gameController = {
         localBallSim.lastTouch = null;
       };
       this.resetLocalFieldPositions = resetFieldPositions;
+
+      const setBallOwner = (owner) => {
+        localBallSim.owner = owner?.id || null;
+        localBallSim.lastTouch = owner?.id || null;
+        localBallSim.vx = localBallSim.vy = 0;
+        localBallSim.x = owner ? owner.x + Math.cos(owner.dir) * (owner.r + localBallSim.r + 2) : this.canvas.width / 2;
+        localBallSim.y = owner ? owner.y + Math.sin(owner.dir) * (owner.r + localBallSim.r + 2) : this.canvas.height / 2;
+      };
+
+      // Each lesson starts from a deterministic scene so the instructions and
+      // the physics remain in sync after fast objective completion.
+      const prepareTutorialStep = (step) => {
+        if (!this.tutorialMode || !step) return;
+        resetFieldPositions();
+        MatchSim.status = 'playing';
+        MatchSim.countdownTimer = 0;
+        this.isPaused = !!step.manual;
+        redPlayer.x = C.BORDER + 110;
+        redPlayer.y = this.canvas.height * 0.22;
+        bluePlayer.dir = Math.PI;
+        allyPlayer.dir = Math.PI;
+
+        if (step.id === 'control') {
+          bluePlayer.x = this.canvas.width * 0.68;
+          localBallSim.x = bluePlayer.x - 95;
+          localBallSim.y = bluePlayer.y;
+        } else if (step.id === 'pass') {
+          bluePlayer.x = this.canvas.width * 0.72;
+          bluePlayer.y = this.canvas.height * 0.58;
+          allyPlayer.x = this.canvas.width * 0.47;
+          allyPlayer.y = this.canvas.height * 0.58;
+          setBallOwner(bluePlayer);
+        } else if (['shoot', 'dribble', 'power', 'goal'].includes(step.id)) {
+          bluePlayer.x = this.canvas.width * 0.66;
+          bluePlayer.y = this.canvas.height * 0.5;
+          setBallOwner(bluePlayer);
+        } else if (step.id === 'tackle') {
+          redPlayer.x = this.canvas.width * 0.48;
+          redPlayer.y = this.canvas.height * 0.5;
+          redPlayer.dir = 0;
+          bluePlayer.x = this.canvas.width * 0.64;
+          bluePlayer.y = this.canvas.height * 0.5;
+          setBallOwner(redPlayer);
+        }
+      };
 
       const recordLocalFrame = () => {
         const snap = localPlayers.map(p => ({
@@ -1892,6 +1995,24 @@ export const gameController = {
 
       // Boot local simulation loop
       resetFieldPositions();
+      if (this.tutorialMode) {
+        this.tutorialSession?.destroy();
+        this.tutorialSession = new TutorialSession({
+          root: document.getElementById('tutorial-guide'),
+          controls: settingsController.CTRL_P1,
+          mobile: this.isTouchDevice(),
+          onStepChange: prepareTutorialStep,
+          onFinish: () => {
+            this.tutorialMode = false;
+            router.show('mode-select-screen');
+          },
+          onExit: () => {
+            this.tutorialMode = false;
+            router.show('mode-select-screen');
+          }
+        });
+        this.tutorialSession.start();
+      }
       this.localPhysicsTick = requestAnimationFrame(tickLocalGame);
     })();
   },
@@ -2604,6 +2725,8 @@ export const gameController = {
 
   stopMatchView() {
     cancelAnimationFrame(this.localPhysicsTick);
+    this.tutorialSession?.destroy();
+    this.tutorialSession = null;
     this.stopLocalReplayRecording();
     soundFx.stopCrowd();
     socketService.clearListeners();
