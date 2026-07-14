@@ -889,6 +889,7 @@ class P2PSocketService {
         uid: player?.uid || '',
         username: player?.username || 'Jogador',
         badge: player?.badge || '',
+        staffRole: player?.staffRole || '',
         text
       });
       return;

@@ -1,6 +1,11 @@
 // Kicker Hax - Server-side Room Model
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH } from '../../shared/constants.js';
 
+function normalizeStaffRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  return ['developer', 'influencer'].includes(normalized) ? normalized : '';
+}
+
 export class ServerRoom {
   constructor(code, name, hostId, options = {}) {
     this.code = code.toUpperCase();
@@ -32,7 +37,7 @@ export class ServerRoom {
       username: String(playerProfile.username || 'Jogador').slice(0, USERNAME_MAX_LENGTH),
       badge: playerProfile.badge || '🏳️',
       skin: playerProfile.skin || '',
-      staffRole: ['developer', 'influencer'].includes(playerProfile.staffRole) ? playerProfile.staffRole : '',
+      staffRole: normalizeStaffRole(playerProfile.staffRole),
       team: team, // 'red' | 'blue' | 'spectator'
       ready: false,
       ping: 0,

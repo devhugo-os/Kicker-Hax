@@ -253,6 +253,40 @@
   overscroll-behavior: contain;
 }
 
+/* A tagged sender can consume most of the narrow match sidebar. Keep the
+   identity on the first row and reserve the full second row for the message. */
+.game-chat-messages .chat-msg {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: start;
+  column-gap: 6px;
+  row-gap: 1px;
+  width: 100%;
+  min-width: 0;
+}
+
+.game-chat-messages .chat-msg .msg-sender {
+  grid-column: 2;
+  min-width: 0;
+  max-width: 100%;
+  justify-self: start;
+}
+
+.game-chat-messages .chat-msg .msg-sender strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-chat-messages .chat-msg .msg-text {
+  grid-column: 2;
+  width: 100%;
+  min-width: 0;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 .game-chat-messages.inactive {
   opacity: 0;
 }
@@ -511,6 +545,12 @@
   box-shadow: 0 14px 38px rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(12px);
   pointer-events: auto;
+  transition: opacity 140ms ease, background-color 140ms ease;
+}
+
+.tutorial-card.is-player-under {
+  opacity: 0.16;
+  pointer-events: none;
 }
 
 .tutorial-dialog {

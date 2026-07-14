@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { TUTORIAL_STEPS, TutorialSession } from '../client/tutorial/tutorialSession.js';
+import { keyLabel, TUTORIAL_STEPS, TutorialSession } from '../client/tutorial/tutorialSession.js';
 
 test('tutorial covers every core gameplay mechanic in a stable order', () => {
   assert.deepEqual(
@@ -12,7 +12,14 @@ test('tutorial covers every core gameplay mechanic in a stable order', () => {
   assert.equal(TUTORIAL_STEPS.find(step => step.id === 'shoot').target, 3);
   assert.equal(TUTORIAL_STEPS.find(step => step.id === 'dribble').target, 3);
   assert.equal(TUTORIAL_STEPS.find(step => step.id === 'tackle').target, 3);
+  assert.equal(TUTORIAL_STEPS.find(step => step.id === 'pass').target, 3);
   assert.ok(TUTORIAL_STEPS.every(step => step.title && step.text && step.objective));
+});
+
+test('writes the desktop space key in full', () => {
+  assert.equal(keyLabel(' '), 'Espaço');
+  assert.equal(keyLabel('Space'), 'Espaço');
+  assert.equal(keyLabel('Spacebar'), 'Espaço');
 });
 
 test('clears the previous transition before progressing beyond sprint', () => {
@@ -60,4 +67,13 @@ test('shooting mission counts only goals after a player kick', () => {
   validAttempt.record('goal', { side: 'blue' });
   assert.equal(validAttempt.successes, 1);
   validAttempt.destroy();
+});
+
+test('a confirmed bot tackle immediately fails shooting practice', () => {
+  const session = new TutorialSession({ root: null });
+  session.index = TUTORIAL_STEPS.findIndex(step => step.id === 'shoot');
+  session.record('botTackle');
+  assert.equal(session.feedback?.type, 'failed');
+  assert.match(session.feedback?.text || '', /CPU parou/);
+  session.destroy();
 });

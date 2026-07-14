@@ -1,8 +1,10 @@
 const AUTO_ADVANCE_MS = 700;
 
-function keyLabel(value) {
+export function keyLabel(value) {
   if (!value) return '?';
-  return String(value).replace(/^Key/, '').replace(/^Digit/, '').replace('Space', 'Espaço').replace('ShiftLeft', 'Shift');
+  const key = String(value);
+  if (key === ' ' || key === 'Space' || key === 'Spacebar') return 'Espaço';
+  return key.replace(/^Key/, '').replace(/^Digit/, '').replace('ShiftLeft', 'Shift');
 }
 
 function buildControlChips(controls, mobile) {
@@ -25,7 +27,7 @@ export const TUTORIAL_STEPS = [
   { id: 'move', speaker: 'Treinador KX', title: 'Movimentação', text: 'Mude de direção e conheça o espaço ao seu redor.', objective: 'Percorra o campo até completar a barra.' },
   { id: 'sprint', speaker: 'Treinador KX', title: 'Corrida e stamina', text: 'Correr aumenta sua velocidade, mas consome stamina. Solte o comando para recuperá-la.', objective: 'Corra enquanto se movimenta.' },
   { id: 'control', speaker: 'Treinador KX', title: 'Domínio da bola', text: 'Aproxime-se da bola para dominá-la. O círculo preso ao jogador indica a posse.', objective: 'Pegue a bola.' },
-  { id: 'pass', speaker: 'CPU Parceiro', title: 'Passe', text: 'Um chute curto também é um passe. Mire no parceiro e solte antes de carregar toda a força.', objective: 'Passe a bola para a CPU amigável.' },
+  { id: 'pass', target: 3, speaker: 'CPU Parceiro', title: 'Passe', text: 'Um chute curto também é um passe. Mire no parceiro e solte antes de carregar toda a força.', objective: 'Complete 3 passes para a CPU amigável.' },
   { id: 'shoot', target: 3, speaker: 'Treinador KX', title: 'Chute carregado', text: 'Segure o chute e vença a CPU. Defesa, desarme ou chute para fora reiniciam a tentativa.', objective: 'Marque 3 gols usando o chute.' },
   { id: 'dribble', target: 3, speaker: 'Treinador KX', title: 'Drible', text: 'O drible dá um impulso curto e protege você de desarmes durante alguns instantes.', objective: 'Execute 3 dribles com a posse da bola.' },
   { id: 'power', speaker: 'Treinador KX', title: 'Super chute', text: 'O super chute exige bastante stamina. Use quando tiver espaço e energia.', objective: 'Execute um super chute.' },
@@ -116,6 +118,7 @@ export class TutorialSession {
     if (id === 'tackle' && eventName === 'tackleSuccess') this.registerSuccess('Desarme confirmado!');
     if (id === 'tackle' && eventName === 'tackleFailed') this.fail(payload.message || 'Missão falhou: o desarme não tirou a bola.');
     if (id === 'tackle' && eventName === 'goal' && payload.side === 'red') this.fail('Missão falhou: a CPU marcou antes do desarme.');
+    if (['shoot', 'goal'].includes(id) && eventName === 'botTackle') this.fail('Missão falhou: a CPU parou você com um desarme.');
     if (id === 'goal' && eventName === 'goal') {
       if (payload.side === 'blue') this.complete();
       else this.fail('Missão falhou: a CPU marcou. Tente novamente.');
@@ -156,7 +159,8 @@ export class TutorialSession {
     }, delay);
   }
 
-  update({ player, ball, input }) {
+  update({ player, ball, input, canvas }) {
+    this.updateOcclusion(player, canvas);
     if (!player || !ball || this.isManual || this.step?.celebration || this.progress >= 1 || this.feedback) return;
     const id = this.step?.id;
     if (id === 'move') {
@@ -165,13 +169,28 @@ export class TutorialSession {
     } else if (id === 'sprint' && input?.sprint && Math.abs(input.x) + Math.abs(input.y) > 0.2) {
       this.progress += 1 / 85;
     } else if (id === 'control' && ball.owner === 'p1') this.progress = 1;
-    else if (id === 'pass' && this.passStarted && ball.owner === 'tutorial-ally') this.progress = 1;
+    else if (id === 'pass' && this.passStarted && ball.owner === 'tutorial-ally') this.registerSuccess('Passe completo!');
     else if (id === 'pass' && this.attemptActive && ++this.attemptFrames > 240) this.fail('Missão falhou: o passe não chegou ao parceiro.');
     else if (id === 'shoot') {
       if (ball.owner === 'cpu') this.fail('Missão falhou: a CPU defendeu ou tomou a bola.');
       else if (this.attemptActive && ++this.attemptFrames > 300) this.fail('Missão falhou: o chute não entrou.');
     }
     if (this.progress >= 1) this.complete(); else this.refreshProgress();
+  }
+
+  updateOcclusion(player, canvas) {
+    const card = this.root?.querySelector('.tutorial-card');
+    if (!card || !player || !canvas?.getBoundingClientRect) return;
+    const canvasRect = canvas.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const scaleX = canvasRect.width / Math.max(1, canvas.width || canvasRect.width);
+    const scaleY = canvasRect.height / Math.max(1, canvas.height || canvasRect.height);
+    const x = canvasRect.left + player.x * scaleX;
+    const y = canvasRect.top + player.y * scaleY;
+    const radius = Math.max(12, (player.r || 22) * Math.max(scaleX, scaleY));
+    const under = x + radius >= cardRect.left && x - radius <= cardRect.right
+      && y + radius >= cardRect.top && y - radius <= cardRect.bottom;
+    card.classList.toggle('is-player-under', under);
   }
 
   refreshProgress() {

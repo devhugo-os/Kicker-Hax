@@ -1738,7 +1738,7 @@ export const gameController = {
               },
               w, h
             );
-            this.tutorialSession?.update({ player: bluePlayer, ball: localBallSim, input: inputP1 });
+            this.tutorialSession?.update({ player: bluePlayer, ball: localBallSim, input: inputP1, canvas: this.canvas });
           }
 
           // Record locally for replay frames
@@ -2071,6 +2071,9 @@ export const gameController = {
         owner.stun = Math.max(owner.stun, C.TACKLE_STUN);
         owner.vx = 0;
         owner.vy = 0;
+        if (tackler.id === 'cpu' && owner.id === 'p1') {
+          this.tutorialSession?.record('botTackle');
+        }
         if (tackler.id === 'p1' && localBallSim.owner === tackler.id) {
           this.tutorialSession?.record('tackleSuccess');
         }
@@ -2088,6 +2091,9 @@ export const gameController = {
         owner.vy = 0;
         tackler.vx = 0;
         tackler.vy = 0;
+        if (tackler.id === 'cpu' && owner.id === 'p1') {
+          this.tutorialSession?.record('botTackle');
+        }
         if (tackler.id === 'p1') {
           this.tutorialSession?.record('tackleFailed', { message: 'MissÃ£o falhou: desarme por trÃ¡s nÃ£o concede a posse.' });
         }
