@@ -1885,6 +1885,12 @@ export const gameController = {
         bluePlayer.tackleEval = 0;
         bluePlayer.tackleImpactReady = false;
         bluePlayer.tackleSuccess = false;
+        bluePlayer.tackle_cd = 0;
+        bluePlayer.dribble_cd = 0;
+        bluePlayer.power_cd = 0;
+        bluePlayer.cool = 0;
+        bluePlayer.dash_time = 0;
+        bluePlayer.invuln = 0;
 
         const jitterX2 = (Math.random() - 0.5) * 20;
         const jitterY2 = (Math.random() - 0.5) * 20;
@@ -1898,6 +1904,12 @@ export const gameController = {
         redPlayer.tackleEval = 0;
         redPlayer.tackleImpactReady = false;
         redPlayer.tackleSuccess = false;
+        redPlayer.tackle_cd = 0;
+        redPlayer.dribble_cd = 0;
+        redPlayer.power_cd = 0;
+        redPlayer.cool = 0;
+        redPlayer.dash_time = 0;
+        redPlayer.invuln = 0;
 
         allyPlayer.x = this.canvas.width * 0.46;
         allyPlayer.y = this.canvas.height * 0.64;
@@ -1929,7 +1941,8 @@ export const gameController = {
         resetFieldPositions();
         MatchSim.status = 'playing';
         MatchSim.countdownTimer = 0;
-        this.isPaused = !!step.manual;
+        this.isPaused = !!step.manual || !!step.celebration;
+        if (step.celebration) soundFx.play('reward');
         redPlayer.x = C.BORDER + 110;
         redPlayer.y = this.canvas.height * 0.22;
         bluePlayer.dir = Math.PI;
@@ -2003,6 +2016,7 @@ export const gameController = {
           controls: settingsController.CTRL_P1,
           mobile: this.isTouchDevice(),
           onStepChange: prepareTutorialStep,
+          onAttemptReset: prepareTutorialStep,
           onFinish: () => {
             this.tutorialMode = false;
             router.show('mode-select-screen');
@@ -2035,6 +2049,9 @@ export const gameController = {
         tackler.vx = 0;
         tackler.vy = 0;
         tackler.stun = Math.max(tackler.stun, C.FAIL_STUN);
+        if (tackler.id === 'p1') {
+          this.tutorialSession?.record('tackleFailed', { message: 'MissÃ£o falhou: o dash terminou sem tocar na bola.' });
+        }
         continue;
       }
 
@@ -2054,6 +2071,9 @@ export const gameController = {
         owner.stun = Math.max(owner.stun, C.TACKLE_STUN);
         owner.vx = 0;
         owner.vy = 0;
+        if (tackler.id === 'p1' && localBallSim.owner === tackler.id) {
+          this.tutorialSession?.record('tackleSuccess');
+        }
       } else {
         const pushAng = Math.atan2(owner.y - tackler.y, owner.x - tackler.x);
         localBallSim.owner = null;
@@ -2068,6 +2088,9 @@ export const gameController = {
         owner.vy = 0;
         tackler.vx = 0;
         tackler.vy = 0;
+        if (tackler.id === 'p1') {
+          this.tutorialSession?.record('tackleFailed', { message: 'MissÃ£o falhou: desarme por trÃ¡s nÃ£o concede a posse.' });
+        }
       }
       tackler.tackleSuccess = true;
     }

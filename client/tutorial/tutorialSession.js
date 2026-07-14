@@ -26,27 +26,31 @@ export const TUTORIAL_STEPS = [
   { id: 'sprint', speaker: 'Treinador KX', title: 'Corrida e stamina', text: 'Correr aumenta sua velocidade, mas consome stamina. Solte o comando para recuperá-la.', objective: 'Corra enquanto se movimenta.' },
   { id: 'control', speaker: 'Treinador KX', title: 'Domínio da bola', text: 'Aproxime-se da bola para dominá-la. O círculo preso ao jogador indica a posse.', objective: 'Pegue a bola.' },
   { id: 'pass', speaker: 'CPU Parceiro', title: 'Passe', text: 'Um chute curto também é um passe. Mire no parceiro e solte antes de carregar toda a força.', objective: 'Passe a bola para a CPU amigável.' },
-  { id: 'shoot', speaker: 'Treinador KX', title: 'Chute carregado', text: 'Segure o chute para aumentar a força e solte apontando na direção desejada.', objective: 'Carregue e solte um chute.' },
-  { id: 'dribble', speaker: 'Treinador KX', title: 'Drible', text: 'O drible dá um impulso curto e protege você de desarmes durante alguns instantes.', objective: 'Execute um drible com a posse da bola.' },
+  { id: 'shoot', target: 3, speaker: 'Treinador KX', title: 'Chute carregado', text: 'Segure o chute e vença a CPU. Defesa, desarme ou chute para fora reiniciam a tentativa.', objective: 'Marque 3 gols usando o chute.' },
+  { id: 'dribble', target: 3, speaker: 'Treinador KX', title: 'Drible', text: 'O drible dá um impulso curto e protege você de desarmes durante alguns instantes.', objective: 'Execute 3 dribles com a posse da bola.' },
   { id: 'power', speaker: 'Treinador KX', title: 'Super chute', text: 'O super chute exige bastante stamina. Use quando tiver espaço e energia.', objective: 'Execute um super chute.' },
-  { id: 'tackle', speaker: 'CPU Rival', title: 'Desarme', text: 'Conclua o dash encostando de frente ou de lado no adversário que carrega a bola.', objective: 'Recupere a bola da CPU rival.' },
+  { id: 'tackle', target: 3, speaker: 'CPU Rival', title: 'Desarme', text: 'Conclua o dash encostando de frente ou de lado. Só conta quando a física confirma que você tomou a bola.', objective: 'Faça 3 desarmes válidos na CPU rival.' },
   { id: 'goal', speaker: 'Treinador KX', title: 'Objetivo final', text: 'Combine movimentação, corrida, drible e chute. Ataque o gol da esquerda.', objective: 'Marque um gol no time vermelho.' },
-  { id: 'finish', manual: true, speaker: 'Treinador KX', title: 'Tutorial concluído!', text: 'Você já conhece posse, passe, chute, drible, desarme, stamina e super chute. Agora o campo é seu.', objective: 'Clique em Concluir para voltar aos modos.' }
+  { id: 'finish', celebration: true, speaker: 'Treinador KX', title: 'Tutorial concluído!', text: 'Você dominou os fundamentos do Kicker Hax. Excelente trabalho!', objective: 'Voltando para a seleção de modos...' }
 ];
 
-/** Coordinates presentation and objectives independently from game physics. */
+/** Coordinates tutorial presentation, repetitions and failures independently from physics. */
 export class TutorialSession {
-  constructor({ root, controls, mobile = false, onStepChange, onFinish, onExit }) {
-    Object.assign(this, { root, controls: controls || {}, mobile, onStepChange, onFinish, onExit });
+  constructor({ root, controls, mobile = false, onStepChange, onAttemptReset, onFinish, onExit }) {
+    Object.assign(this, { root, controls: controls || {}, mobile, onStepChange, onAttemptReset, onFinish, onExit });
     this.index = 0;
     this.progress = 0;
     this.lastPosition = null;
     this.passStarted = false;
+    this.attemptActive = false;
+    this.attemptFrames = 0;
+    this.successes = 0;
+    this.feedback = null;
     this.advanceTimer = null;
   }
 
   get step() { return TUTORIAL_STEPS[this.index]; }
-  get enemyActive() { return ['tackle', 'goal'].includes(this.step?.id); }
+  get enemyActive() { return ['shoot', 'tackle', 'goal'].includes(this.step?.id); }
   get isManual() { return !!this.step?.manual; }
 
   start() {
@@ -67,32 +71,93 @@ export class TutorialSession {
     this.advanceTimer = null;
     if (this.step?.id === 'finish') return this.onFinish?.();
     this.index = Math.min(TUTORIAL_STEPS.length - 1, this.index + 1);
+    this.resetState();
+    this.render();
+    this.onStepChange?.(this.step, this);
+    if (this.step?.celebration) this.advanceTimer = setTimeout(() => this.onFinish?.(), 2600);
+  }
+
+  resetState() {
     this.progress = 0;
     this.lastPosition = null;
     this.passStarted = false;
-    this.render();
-    this.onStepChange?.(this.step, this);
+    this.attemptActive = false;
+    this.attemptFrames = 0;
+    this.successes = 0;
+    this.feedback = null;
   }
 
   complete() {
-    if (this.isManual || this.advanceTimer) return;
+    if (this.isManual || this.step?.celebration || this.advanceTimer) return;
     this.progress = 1;
+    this.feedback = { type: 'success', text: 'Objetivo concluído!' };
     this.render();
-    clearTimeout(this.advanceTimer);
     this.advanceTimer = setTimeout(() => this.next(), AUTO_ADVANCE_MS);
   }
 
   record(eventName, payload = {}) {
     const id = this.step?.id;
-    if (id === 'pass' && eventName === 'kick') this.passStarted = true;
-    if (id === 'shoot' && eventName === 'kick') this.complete();
-    if (id === 'dribble' && eventName === 'dribble') this.complete();
+    if (this.feedback || this.isManual || this.step?.celebration) return;
+    if (id === 'pass' && eventName === 'kick') {
+      this.passStarted = true;
+      this.attemptActive = true;
+      this.attemptFrames = 0;
+    }
+    if (id === 'shoot' && eventName === 'kick') {
+      this.attemptActive = true;
+      this.attemptFrames = 0;
+    }
+    if (id === 'shoot' && eventName === 'goal') {
+      if (payload.side === 'blue' && this.attemptActive) this.registerSuccess('Gol confirmado!');
+      else this.fail('Missão falhou: a CPU marcou o gol.');
+    }
+    if (id === 'dribble' && eventName === 'dribble') this.registerSuccess('Drible válido!');
     if (id === 'power' && eventName === 'power') this.complete();
-    if (id === 'goal' && eventName === 'goal' && payload.side === 'blue') this.complete();
+    if (id === 'tackle' && eventName === 'tackleSuccess') this.registerSuccess('Desarme confirmado!');
+    if (id === 'tackle' && eventName === 'tackleFailed') this.fail(payload.message || 'Missão falhou: o desarme não tirou a bola.');
+    if (id === 'tackle' && eventName === 'goal' && payload.side === 'red') this.fail('Missão falhou: a CPU marcou antes do desarme.');
+    if (id === 'goal' && eventName === 'goal') {
+      if (payload.side === 'blue') this.complete();
+      else this.fail('Missão falhou: a CPU marcou. Tente novamente.');
+    }
+  }
+
+  registerSuccess(message) {
+    const target = Math.max(1, Number(this.step?.target || 1));
+    this.successes += 1;
+    this.progress = Math.min(1, this.successes / target);
+    if (this.successes >= target) {
+      this.complete();
+      return;
+    }
+    this.feedback = { type: 'success', text: `${message} ${this.successes}/${target}` };
+    this.render();
+    this.scheduleAttemptReset();
+  }
+
+  fail(message) {
+    if (this.feedback || this.advanceTimer) return;
+    this.feedback = { type: 'failed', text: message || 'Missão falhou. Tente novamente.' };
+    this.attemptActive = false;
+    this.render();
+    this.scheduleAttemptReset(1100);
+  }
+
+  scheduleAttemptReset(delay = 750) {
+    clearTimeout(this.advanceTimer);
+    this.advanceTimer = setTimeout(() => {
+      this.advanceTimer = null;
+      this.feedback = null;
+      this.attemptActive = false;
+      this.attemptFrames = 0;
+      this.passStarted = false;
+      this.render();
+      this.onAttemptReset?.(this.step, this);
+    }, delay);
   }
 
   update({ player, ball, input }) {
-    if (!player || !ball || this.isManual || this.progress >= 1) return;
+    if (!player || !ball || this.isManual || this.step?.celebration || this.progress >= 1 || this.feedback) return;
     const id = this.step?.id;
     if (id === 'move') {
       if (this.lastPosition) this.progress += Math.hypot(player.x - this.lastPosition.x, player.y - this.lastPosition.y) / 420;
@@ -101,7 +166,11 @@ export class TutorialSession {
       this.progress += 1 / 85;
     } else if (id === 'control' && ball.owner === 'p1') this.progress = 1;
     else if (id === 'pass' && this.passStarted && ball.owner === 'tutorial-ally') this.progress = 1;
-    else if (id === 'tackle' && ball.owner === 'p1') this.progress = 1;
+    else if (id === 'pass' && this.attemptActive && ++this.attemptFrames > 240) this.fail('Missão falhou: o passe não chegou ao parceiro.');
+    else if (id === 'shoot') {
+      if (ball.owner === 'cpu') this.fail('Missão falhou: a CPU defendeu ou tomou a bola.');
+      else if (this.attemptActive && ++this.attemptFrames > 300) this.fail('Missão falhou: o chute não entrou.');
+    }
     if (this.progress >= 1) this.complete(); else this.refreshProgress();
   }
 
@@ -114,26 +183,26 @@ export class TutorialSession {
     if (!this.root || !this.step) return;
     const step = this.step;
     const shell = document.createElement('section');
-    shell.className = `tutorial-card${step.manual ? ' tutorial-dialog' : ''}${this.progress >= 1 ? ' is-complete' : ''}`;
+    shell.className = `tutorial-card${step.manual ? ' tutorial-dialog' : ''}${step.celebration ? ' tutorial-celebration' : ''}${this.feedback?.type === 'failed' ? ' is-failed' : ''}${this.progress >= 1 ? ' is-complete' : ''}`;
     shell.setAttribute('aria-live', 'polite');
 
     const top = document.createElement('div');
     top.className = 'tutorial-topline';
-    const speaker = document.createElement('strong');
-    speaker.textContent = step.speaker;
+    const speaker = document.createElement('strong'); speaker.textContent = step.speaker;
     const count = document.createElement('span');
     count.textContent = `Etapa ${Math.min(this.index + 1, TUTORIAL_STEPS.length - 1)}/${TUTORIAL_STEPS.length - 1}`;
     top.append(speaker, count);
     const title = document.createElement('h3'); title.textContent = step.title;
     const text = document.createElement('p'); text.textContent = step.text;
-    const objective = document.createElement('div');
-    objective.className = 'tutorial-objective';
-    objective.textContent = this.progress >= 1 ? 'Objetivo concluído!' : step.objective;
+    const objective = document.createElement('div'); objective.className = 'tutorial-objective';
+    const target = Math.max(1, Number(step.target || 1));
+    objective.textContent = this.feedback?.text || (this.progress >= 1
+      ? 'Objetivo concluído!'
+      : `${step.objective}${target > 1 ? ` (${this.successes}/${target})` : ''}`);
     shell.append(top, title, text, objective);
 
     if (step.showControls) {
-      const controls = document.createElement('div');
-      controls.className = 'tutorial-controls-grid';
+      const controls = document.createElement('div'); controls.className = 'tutorial-controls-grid';
       buildControlChips(this.controls, this.mobile).forEach(([key, label]) => {
         const chip = document.createElement('div');
         const keyEl = document.createElement('kbd'); keyEl.textContent = key;
@@ -147,15 +216,16 @@ export class TutorialSession {
     const fill = document.createElement('i'); fill.dataset.tutorialProgress = '';
     fill.style.width = `${Math.max(3, Math.min(100, this.progress * 100))}%`;
     track.append(fill); shell.append(track);
-    const actions = document.createElement('div'); actions.className = 'tutorial-actions';
-    const exit = document.createElement('button'); exit.type = 'button'; exit.className = 'btn btn-secondary btn-sm'; exit.textContent = 'Sair do tutorial';
-    exit.addEventListener('click', () => this.onExit?.()); actions.append(exit);
-    if (step.manual) {
-      const next = document.createElement('button'); next.type = 'button'; next.className = 'btn btn-primary btn-sm';
-      next.textContent = step.id === 'finish' ? 'Concluir' : 'Começar';
-      next.addEventListener('click', () => this.next()); actions.append(next);
+    if (!step.celebration) {
+      const actions = document.createElement('div'); actions.className = 'tutorial-actions';
+      const exit = document.createElement('button'); exit.type = 'button'; exit.className = 'btn btn-secondary btn-sm'; exit.textContent = 'Sair do tutorial';
+      exit.addEventListener('click', () => this.onExit?.()); actions.append(exit);
+      if (step.manual) {
+        const next = document.createElement('button'); next.type = 'button'; next.className = 'btn btn-primary btn-sm'; next.textContent = 'Começar';
+        next.addEventListener('click', () => this.next()); actions.append(next);
+      }
+      shell.append(actions);
     }
-    shell.append(actions);
     this.root.replaceChildren(shell);
   }
 }

@@ -541,6 +541,39 @@
 }
 
 .tutorial-card.is-complete .tutorial-objective { border-color: #22c55e; color: #86efac; }
+.tutorial-card.is-failed { border-color: rgba(239, 68, 68, 0.82); animation: tutorial-failed 260ms ease-out; }
+.tutorial-card.is-failed .tutorial-objective { border-color: #ef4444; color: #fecaca; background: rgba(127, 29, 29, 0.34); }
+
+.tutorial-celebration {
+  margin-top: min(22vh, 160px);
+  text-align: center;
+  border-color: rgba(250, 204, 21, 0.84);
+  animation: tutorial-celebrate 700ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.tutorial-celebration::before {
+  content: '🏆';
+  display: block;
+  margin-bottom: 4px;
+  font-size: 48px;
+  animation: tutorial-trophy 900ms ease-in-out infinite alternate;
+}
+
+@keyframes tutorial-failed {
+  0%, 100% { transform: translateX(0); }
+  30% { transform: translateX(-8px); }
+  70% { transform: translateX(8px); }
+}
+
+@keyframes tutorial-celebrate {
+  from { opacity: 0; transform: translateY(18px) scale(0.88); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes tutorial-trophy {
+  from { transform: translateY(0) rotate(-4deg); }
+  to { transform: translateY(-8px) rotate(4deg); }
+}
 
 .tutorial-controls-grid {
   display: grid;
@@ -586,20 +619,27 @@
 
 @media (orientation: landscape) and (max-height: 560px) {
   .tutorial-guide {
-    top: 6px;
-    width: min(54vw, 560px);
+    top: 4px;
+    width: min(46vw, 430px);
   }
 
-  .tutorial-card { padding: 7px 9px; }
+  .tutorial-card {
+    padding: 5px 7px;
+    background: rgba(5, 10, 27, 0.78);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+    backdrop-filter: none;
+  }
   .tutorial-dialog { margin-top: 7vh; }
-  .tutorial-card h3 { margin: 3px 0 1px; font-size: clamp(14px, 4vh, 18px); }
-  .tutorial-card p, .tutorial-objective { font-size: clamp(9px, 2.6vh, 12px); line-height: 1.16; }
-  .tutorial-objective { margin-top: 4px; padding: 4px 6px; }
+  .tutorial-card h3 { margin: 2px 0 0; font-size: clamp(12px, 3.5vh, 16px); }
+  .tutorial-card p, .tutorial-objective { font-size: clamp(8px, 2.25vh, 10px); line-height: 1.12; }
+  .tutorial-objective { margin-top: 3px; padding: 3px 5px; }
   .tutorial-controls-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; margin-top: 5px; }
   .tutorial-controls-grid > div { gap: 3px; padding: 3px; }
   .tutorial-controls-grid kbd, .tutorial-controls-grid span, .tutorial-topline span { font-size: 8px; }
-  .tutorial-progress { margin: 5px 0; }
+  .tutorial-progress { height: 3px; margin: 3px 0; }
   .tutorial-actions .btn { min-height: 22px; padding: 3px 7px; font-size: 9px; }
+  .tutorial-celebration { margin-top: 14vh; }
+  .tutorial-celebration::before { font-size: 30px; }
 }
 
 #replay-vote-skip-btn {
