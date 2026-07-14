@@ -1,0 +1,49 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { ClientBall } from '../client/models/clientBall.js';
+import { ClientPlayer } from '../client/models/clientPlayer.js';
+
+test('bola avanca visualmente entre snapshots sem alterar o alvo autoritativo', () => {
+  const ball = new ClientBall();
+  ball.x = 100;
+  ball.y = 100;
+  ball.lastRenderAt = 1000;
+  ball.updateState({ x: 100, y: 100, vx: 4, vy: 0, owner: null }, 1000);
+
+  ball.interpolate(0.35, 1000 + (1000 / 60));
+
+  assert.ok(ball.x > 100);
+  assert.equal(ball.targetX, 100);
+  assert.ok(ball.x < 104);
+});
+
+test('jogador suaviza movimento usando velocidade do snapshot', () => {
+  const player = new ClientPlayer({
+    id: 'p1', name: 'Hugo', team: 0, x: 50, y: 50, dir: 0,
+    vx: 3, vy: 0, stamina: 1, staminaLock: 0, stun: 0,
+    shootHalo: 0, invuln: 0
+  });
+  player.lastRenderAt = 2000;
+  player.updateState({
+    id: 'p1', name: 'Hugo', team: 0, x: 50, y: 50, dir: 0,
+    vx: 3, vy: 0, stamina: 1, staminaLock: 0, stun: 0,
+    shootHalo: 0, invuln: 0
+  }, 2000);
+
+  player.interpolate(0.35, 2000 + (1000 / 60));
+
+  assert.ok(player.x > 50);
+  assert.equal(player.targetX, 50);
+  assert.ok(player.x < 53);
+});
+
+test('pause desativa extrapolacao de movimento entre snapshots', () => {
+  const ball = new ClientBall();
+  ball.x = 100;
+  ball.lastRenderAt = 3000;
+  ball.updateState({ x: 100, y: 100, vx: 8, vy: 0, owner: null }, 3000, false);
+
+  ball.interpolate(0.35, 3000 + (1000 / 60));
+
+  assert.equal(ball.x, 100);
+});

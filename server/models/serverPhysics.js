@@ -366,6 +366,7 @@ export class ServerPhysics {
   }
 
   static kickBall(p, ball, angle, power) {
+    if (ball.owner !== p.id) return false;
     ball.owner = null;
     ball.noPickupFrames = 14;
     ball.noPickupFrom = p.id;
@@ -376,9 +377,11 @@ export class ServerPhysics {
     ball.lastTouch = p.id;
     ball.lastStrikeType = 'kick';
     ball.strikeTimer = 40;
+    return true;
   }
 
   static powerKick(p, ball, angle, power) {
+    if (ball.owner !== p.id) return false;
     ball.owner = null;
     ball.noPickupFrames = 14;
     ball.noPickupFrom = p.id;
@@ -389,5 +392,6 @@ export class ServerPhysics {
     ball.lastTouch = p.id;
     ball.lastStrikeType = 'power';
     ball.strikeTimer = 40;
+    return true;
   }
 }

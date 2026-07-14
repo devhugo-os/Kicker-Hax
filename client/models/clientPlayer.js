@@ -23,6 +23,9 @@ export class ClientPlayer {
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
     this.staffRole = serverPlayer.staffRole || '';
+    this.extrapolateMotion = true;
+    this.stateReceivedAt = performance.now();
+    this.lastRenderAt = this.stateReceivedAt;
     
     this.stamina = serverPlayer.stamina;
     this.staminaLock = serverPlayer.staminaLock;
@@ -39,7 +42,7 @@ export class ClientPlayer {
     this.trail = [];
   }
 
-  updateState(serverPlayer, predictionFrames = 0) {
+  updateState(serverPlayer, receivedAt = performance.now(), extrapolateMotion = true) {
     this.name = serverPlayer.name;
     this.badge = serverPlayer.badge;
     this.skin = serverPlayer.skin || this.skin || '';
@@ -47,10 +50,12 @@ export class ClientPlayer {
     
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
-    this.targetX = serverPlayer.x + this.vx * predictionFrames;
-    this.targetY = serverPlayer.y + this.vy * predictionFrames;
+    this.targetX = serverPlayer.x;
+    this.targetY = serverPlayer.y;
     this.targetDir = serverPlayer.dir;
     this.staffRole = serverPlayer.staffRole || '';
+    this.extrapolateMotion = extrapolateMotion;
+    this.stateReceivedAt = receivedAt;
     
     this.stamina = serverPlayer.stamina;
     this.staminaLock = serverPlayer.staminaLock;
@@ -74,14 +79,24 @@ export class ClientPlayer {
     }
   }
 
-  interpolate(lerpFactor = 0.35) {
-    this.x += (this.targetX - this.x) * lerpFactor;
-    this.y += (this.targetY - this.y) * lerpFactor;
+  interpolate(lerpFactor = 0.35, now = performance.now()) {
+    const frameMs = 1000 / 60;
+    const elapsedFrames = Math.max(0.25, Math.min(2, (now - this.lastRenderAt) / frameMs || 1));
+    const snapshotAgeFrames = Math.max(0, Math.min(3, (now - this.stateReceivedAt) / frameMs));
+    const expectedX = this.targetX + (this.extrapolateMotion ? this.vx * snapshotAgeFrames : 0);
+    const expectedY = this.targetY + (this.extrapolateMotion ? this.vy * snapshotAgeFrames : 0);
+    const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
+
+    // Advance the visual target between 30 Hz snapshots. The three-frame cap
+    // keeps packet loss from turning visual extrapolation into game authority.
+    this.x += (expectedX - this.x) * correction;
+    this.y += (expectedY - this.y) * correction;
     
     // Interpolate direction angles smoothly
     let diff = this.targetDir - this.dir;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    this.dir += diff * lerpFactor;
+    this.dir += diff * correction;
+    this.lastRenderAt = now;
   }
 
   draw(ctx, ballOwnerId) {

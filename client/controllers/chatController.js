@@ -101,8 +101,9 @@ export const chatController = {
       menuController.renderSkin(badgeEl, equippedSkin, badge);
       const author = document.createElement(msg.uid ? 'button' : 'span');
       author.className = 'msg-author';
-      author.textContent = `${msg.username || 'Jogador'}:`;
+      author.textContent = msg.username || 'Jogador';
       appendStaffTag(author, profile?.staffRole || msg.staffRole);
+      author.appendChild(document.createTextNode(':'));
       if (msg.uid) {
         author.type = 'button';
         badgeEl.classList.add('profile-trigger');

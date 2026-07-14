@@ -31,6 +31,7 @@ import { getPendingSkinRequests, getSkinQueueCleanup, normalizeCommunitySkinName
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
+import { getWritableHistoryUids } from '../utils/matchHistory.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 
 const _dec = (val) => atob(val);
@@ -72,7 +73,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '22.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '23.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -638,7 +639,12 @@ export const firebaseService = {
       .replace(/[^a-zA-Z0-9_-]/g, '_')
       .slice(0, 120);
     const category = matchData.competitive || matchData.category === 'competitive' ? 'competitive' : 'casual';
-    await Promise.all((matchData.playerUids || []).map(async uid => {
+    // Every participant writes only its own immutable receipt. This respects
+    // Firestore ownership rules and avoids one unauthorized peer write
+    // invalidating an otherwise successful casual result.
+    const writableUids = getWritableHistoryUids(matchData.playerUids, auth.currentUser?.uid);
+    if (!writableUids.length) throw new Error('Usuário atual não pertence ao resultado da partida.');
+    await Promise.all(writableUids.map(async uid => {
       const historyRef = doc(db, 'history', `${uid}_${safeId}`);
       const existing = await getDoc(historyRef);
       if (!existing.exists()) {

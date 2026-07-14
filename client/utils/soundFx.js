@@ -314,6 +314,12 @@ export const soundFx = {
         this.createTone(920, 0.025, 'square', 0.045);
         this.percuss(0.035, 0.012);
         break;
+      case 'reward':
+        this.createTone(523.25, 0.12, 'triangle', 0.12);
+        setTimeout(() => this.createTone(659.25, 0.13, 'triangle', 0.13), 105);
+        setTimeout(() => this.createTone(783.99, 0.18, 'triangle', 0.15), 220);
+        setTimeout(() => this.createTone(1046.5, 0.24, 'sine', 0.12), 340);
+        break;
       case 'tackle':
         this.percuss(0.22, 0.03);
         this.createTone(140, 0.06, 'sawtooth', 0.22);

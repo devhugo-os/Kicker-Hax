@@ -17,6 +17,7 @@ import { normalizeMatchTeam, resolvePlayerMatchOutcome } from '../utils/matchRes
 import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice } from '../utils/deviceCapabilities.js';
+import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
 
 export const gameController = {
   currentUser: null,
@@ -1607,7 +1608,7 @@ export const gameController = {
               }
 
               // Power Kick
-              if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && (localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 8)) {
+              if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && localBallSim.owner === p.id) {
                 if (p.id === 'p1') this.p1Shots = (this.p1Shots || 0) + 1;
                 p.stamina = Math.max(0, p.stamina - 0.50);
                 if (p.stamina === 0) {
@@ -1624,8 +1625,7 @@ export const gameController = {
 
               // Regular Shoot Release
               if (p.kickCharge > 0 && !input.shoot) {
-                const nearBall = localBallSim.owner === p.id || Math.hypot(p.x - localBallSim.x, p.y - localBallSim.y) < p.r + localBallSim.r + 14;
-                if (nearBall) {
+                if (localBallSim.owner === p.id) {
                   const charge = Physics.clamp(p.kickCharge, 0, 1);
                   p.cool = 14;
                   p.shootHalo = 18;
@@ -1698,6 +1698,7 @@ export const gameController = {
 
         // Render Frame Canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        const cameraShaking = this.beginPowerKickCamera(this.ctx, localBallSim);
         this.drawFieldGrid(this.ctx);
 
         // Update Client elements state LERP
@@ -1711,6 +1712,10 @@ export const gameController = {
           this.ball.x = localBallSim.x;
           this.ball.y = localBallSim.y;
           this.ball.owner = localBallSim.owner;
+          this.ball.vx = localBallSim.vx;
+          this.ball.vy = localBallSim.vy;
+          this.ball.lastStrikeType = localBallSim.lastStrikeType;
+          this.ball.strikeTimer = localBallSim.strikeTimer;
           this.drawShotPreview(this.ctx, bluePlayer, localBallSim, inputP1, bluePlayer.kickCharge || 0);
           this.ball.draw(this.ctx);
 
@@ -1729,6 +1734,7 @@ export const gameController = {
         }
 
         this.drawNetOverlay(this.ctx);
+        if (cameraShaking) this.ctx.restore();
 
         // Top scoreboard and HUD
         const m = Math.floor(MatchSim.matchTime / 60);
@@ -1865,7 +1871,14 @@ export const gameController = {
         }));
 
         const frame = {
-          ball: { x: localBallSim.x, y: localBallSim.y },
+          ball: {
+            x: localBallSim.x,
+            y: localBallSim.y,
+            vx: localBallSim.vx,
+            vy: localBallSim.vy,
+            lastStrikeType: localBallSim.lastStrikeType,
+            strikeTimer: localBallSim.strikeTimer
+          },
           players: snap,
           score: { ...MatchSim.score },
           sfx: [...frameSfx]
@@ -2028,11 +2041,12 @@ export const gameController = {
           coinsGained
         )
         : firebaseService.saveXpOnly(this.currentUser.uid, xpGained, matchId);
-      // Persist the immutable receipt first. If the stats transaction is
-      // interrupted, login reconciliation can still award the W.O. later.
-      firebaseService.addMatchToHistory(matchDoc)
-        .catch(error => console.warn('[Kicker Stats] Recibo de partida pendente:', error))
-        .then(() => saveProgress()).then(() => {
+      // History and progress form one retryable unit. If either write fails,
+      // idempotent match IDs allow the complete result to be retried later.
+      Promise.all([
+        firebaseService.addMatchToHistory(matchDoc),
+        saveProgress()
+      ]).then(() => {
         localStorage.setItem(resultKey, '1');
       }).catch(err => {
         localStorage.removeItem(resultKey);
@@ -2111,7 +2125,6 @@ export const gameController = {
     const now = Date.now();
     const myId = socketService.getSocket().id;
     const me = this.players.find(player => player.id === myId);
-    const nearBall = !!me && Math.hypot(me.x - this.ball.x, me.y - this.ball.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 18;
     const canPlay = this.status === 'playing' && !this.matchHostPaused && !this.inReplay;
     const play = (kind) => {
       soundFx.play(kind);
@@ -2124,8 +2137,9 @@ export const gameController = {
       // possession or cooldown reasons.
       const canTackle = this.ball.owner !== myId && me.tackle_cd <= 0 && me.stamina >= C.TACKLE_STAM_COST;
       const canDribble = this.ball.owner === myId && me.dribble_cd <= 0 && me.stamina >= C.DRIBBLE_STAM_COST;
-      const canPower = nearBall && (me.power_cd || 0) <= 0 && me.stamina >= 0.50;
-      const canKick = nearBall && (me.kickCharge || 0) > 0;
+      const hasBall = this.ball.owner === myId;
+      const canPower = hasBall && (me.power_cd || 0) <= 0 && me.stamina >= 0.50;
+      const canKick = hasBall && (me.kickCharge || 0) > 0;
       if (input.tackle && !previous.tackle && canTackle) play('tackle');
       if (input.dribble && !previous.dribble && canDribble) play('dribble');
       if (input.power && !previous.power && canPower) play('power');
@@ -2237,9 +2251,14 @@ export const gameController = {
         }
       }
 
-      // Update local physical components LERP targets
-      const predictionFrames = state.status === 'playing' && !state.isHostPaused && !state.isDisconnectPaused ? 1.5 : 0;
-      this.ball.updateState(state.ball, predictionFrames);
+      // Store authoritative snapshot targets. Client models extrapolate only
+      // their visual position for a few frames between network updates.
+      const snapshotReceivedAt = performance.now();
+      const extrapolateMotion = state.status === 'playing'
+        && !state.isHostPaused
+        && !state.isDisconnectPaused
+        && !this.inReplay;
+      this.ball.updateState(state.ball, snapshotReceivedAt, extrapolateMotion);
 
       state.players.forEach(sp => {
         sp.skin ||= this.activeRoom?.players?.find(player => player.id === sp.id)?.skin || '';
@@ -2248,7 +2267,7 @@ export const gameController = {
           p = new ClientPlayer(sp);
           this.players.push(p);
         }
-        p.updateState(sp, predictionFrames);
+        p.updateState(sp, snapshotReceivedAt, extrapolateMotion);
       });
 
       // Clear disconnected players
@@ -2449,6 +2468,7 @@ export const gameController = {
 
       // 2) Render Frame
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      const cameraShaking = this.beginPowerKickCamera(this.ctx, this.ball);
       this.drawFieldGrid(this.ctx);
 
       if (this.inReplay) {
@@ -2466,6 +2486,7 @@ export const gameController = {
       }
 
       this.drawNetOverlay(this.ctx);
+      if (cameraShaking) this.ctx.restore();
 
       // Refresh HUD Score clock
       const m = Math.floor(this.matchTime / 60);
@@ -2521,8 +2542,7 @@ export const gameController = {
         if (this.shotCooldown > 0) {
           this.shotCooldown--;
         }
-        const p1NearBall = Math.hypot(me.x - this.ball.x, me.y - this.ball.y) < C.PLAYER_RADIUS + C.BALL_RADIUS + 12;
-        if (!serverStatsAvailable && canTrackLiveStats && p1NearBall && (input.shoot || input.power) && !this.shotCooldown) {
+        if (!serverStatsAvailable && canTrackLiveStats && this.ball.owner === me.id && (input.shoot || input.power) && !this.shotCooldown) {
           const ang = Math.atan2(this.ball.y - me.y, this.ball.x - me.x);
           const isAttackingRight = me.team === C.Team.BLUE;
           if ((isAttackingRight && Math.cos(ang) > 0.2) || (!isAttackingRight && Math.cos(ang) < -0.2)) {
@@ -3149,7 +3169,15 @@ export const gameController = {
 
     // Render replay frame directly
     // Ball
-    ctxBallDraw(this.ctx, frame.ball.x, frame.ball.y);
+    ctxBallDraw(
+      this.ctx,
+      frame.ball.x,
+      frame.ball.y,
+      frame.ball.lastStrikeType,
+      frame.ball.strikeTimer,
+      frame.ball.vx,
+      frame.ball.vy
+    );
 
     // Players
     frame.players.forEach(p => {
@@ -3193,7 +3221,14 @@ export const gameController = {
       this.onlineReplayBuffer = [];
     }
     const frame = {
-      ball: { x: state.ball.x, y: state.ball.y },
+      ball: {
+        x: state.ball.x,
+        y: state.ball.y,
+        vx: state.ball.vx,
+        vy: state.ball.vy,
+        lastStrikeType: state.ball.lastStrikeType,
+        strikeTimer: state.ball.strikeTimer
+      },
       players: state.players.map(p => ({
         id: p.id,
         x: p.x,
@@ -3479,9 +3514,7 @@ export const gameController = {
 
   drawShotPreview(cx, player, ball, input, charge = 0) {
     if (!player || !ball || !input?.shoot) return;
-    const nearBall = ball.owner === player.id
-      || Math.hypot(player.x - ball.x, player.y - ball.y) < player.r + ball.r + 14;
-    if (!nearBall) return;
+    if (ball.owner !== player.id) return;
     const inputLength = Math.hypot(input.x || 0, input.y || 0);
     const angle = inputLength > 0.01 ? Math.atan2(input.y, input.x) : player.dir;
     const normalizedCharge = Math.max(0, Math.min(1, Number(charge) || 0));
@@ -3511,6 +3544,14 @@ export const gameController = {
     cx.arc(targetX, targetY, 6 + normalizedCharge * 5, 0, Math.PI * 2);
     cx.stroke();
     cx.restore();
+  },
+
+  beginPowerKickCamera(cx, ball) {
+    const offset = getPowerKickShakeOffset(ball, performance.now());
+    if (!offset.x && !offset.y) return false;
+    cx.save();
+    cx.translate(offset.x, offset.y);
+    return true;
   },
 
   drawCenterBanner(title, subtitle, isCelebration = false) {
@@ -3938,9 +3979,10 @@ export const gameController = {
       avatar.className = 'room-chat-avatar';
       menuController.renderSkin(avatar, getEquippedSkin(identity), identity.badge || msg.badge);
       const senderName = document.createElement('strong');
-      senderName.textContent = `${msg.username || 'Jogador'}:`;
+      senderName.textContent = msg.username || 'Jogador';
       sender.append(avatar, senderName);
       appendStaffTag(sender, roomPlayer?.staffRole || profile?.staffRole || msg.staffRole);
+      sender.appendChild(document.createTextNode(':'));
       if (msg.uid) sender.addEventListener('click', () => menuController.openPublicProfile(msg.uid));
       const text = document.createElement('span');
       text.className = 'msg-text';
@@ -4262,7 +4304,8 @@ export const gameController = {
 };
 
 // Replay canvas direct drawing helpers to prevent class overhead
-function ctxBallDraw(cx, x, y) {
+function ctxBallDraw(cx, x, y, strikeType = null, strikeTimer = 0, vx = 0, vy = 0) {
+  drawPowerKickBallEffect(cx, { x, y, r: C.BALL_RADIUS, vx, vy, lastStrikeType: strikeType, strikeTimer });
   cx.fillStyle = 'rgba(0,0,0,.25)';
   cx.beginPath();
   cx.ellipse(x + 3, y + 6, C.BALL_RADIUS * 1.1, C.BALL_RADIUS * 0.6, 0, 0, Math.PI * 2);

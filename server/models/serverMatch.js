@@ -309,7 +309,14 @@ export class ServerMatch {
     }));
 
     const frame = {
-      ball: { x: this.ball.x, y: this.ball.y },
+      ball: {
+        x: this.ball.x,
+        y: this.ball.y,
+        vx: this.ball.vx,
+        vy: this.ball.vy,
+        lastStrikeType: this.ball.lastStrikeType,
+        strikeTimer: this.ball.strikeTimer
+      },
       players: snap,
       score: { ...this.score },
       sfx: [...this.soundEffects]
@@ -748,7 +755,7 @@ export class ServerMatch {
           }
 
           // Power Kick
-          if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && (this.ball.owner === p.id || Math.hypot(p.x - this.ball.x, p.y - this.ball.y) < p.r + this.ball.r + 8)) {
+          if (input.power && p.power_cd <= 0 && p.stamina >= 0.50 && this.ball.owner === p.id) {
             const stats = this.playerStats.get(p.id);
             if (stats) stats.shots++;
             p.stamina = Math.max(0, p.stamina - 0.50);
@@ -767,8 +774,7 @@ export class ServerMatch {
 
           // Regular Shoot Release
           if (p.kickCharge > 0 && !input.shoot) {
-            const nearBall = this.ball.owner === p.id || Math.hypot(p.x - this.ball.x, p.y - this.ball.y) < p.r + this.ball.r + 14;
-            if (nearBall) {
+            if (this.ball.owner === p.id) {
               const charge = ServerPhysics.clamp(p.kickCharge, 0, 1);
               p.cool = 14;
               p.shootHalo = 18;

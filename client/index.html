@@ -100,7 +100,7 @@
       <div class="profile-layout card-blur">
         <div class="profile-header">
           <button id="profile-btn-back" class="btn btn-secondary btn-icon">⬅️ Voltar</button>
-          <div class="profile-title-group"><h2>Perfil do Jogador</h2><span id="profile-staff-tag"></span></div>
+          <h2>Perfil do Jogador</h2>
                   <button id="profile-btn-logout" class="btn btn-danger btn-sm">Sair da Conta</button>
         </div>
         <div id="profile-onboarding-notice" class="profile-onboarding-notice hidden" role="status">
@@ -955,7 +955,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v22.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v23.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -966,18 +966,24 @@
           <p>Modos, resultados, progresso e critérios competitivos.</p>
         </header>
         <div class="game-rules-content">
+          <section><h3>Onde encontrar cada modo</h3><p>No menu principal, selecione <strong>Jogar</strong>. A tela seguinte separa Jogar Sozinho, Treino Livre e Multiplayer Online. Mercado, perfil, ranking, configurações, controles e créditos possuem botões próprios no menu principal.</p></section>
+          <section><h3>Controles no computador</h3><p>Abra <strong>Controles</strong> no menu principal para visualizar ou trocar as teclas de movimento, chute, super chute, drible, desarme e sprint. Selecione o comando que deseja alterar e pressione uma tecla livre. Enter permanece reservado ao chat e teclas do sistema não podem ser vinculadas.</p></section>
+          <section><h3>HUD e controles no celular</h3><p>Abra <strong>Controles &gt; Editar HUD na partida</strong>. Um treino de configuração será aberto: arraste o analógico e todos os botões até a posição desejada; toque no lápis de cada controle para ajustar tamanho e opacidade. Use <strong>Confirmar HUD</strong> na parte inferior para salvar no perfil ou <strong>Restaurar padrões</strong> para recuperar o layout inicial.</p></section>
+          <section><h3>Posse e chute</h3><p>Encoste na bola para dominá-la. Somente o jogador que está com a posse pode chutar, carregar o chute, driblar ou executar o super chute. Segure o comando de chute para aumentar a força e solte para finalizar; a seta mostra a direção antes do disparo. O super chute consome mais stamina, possui recarga e gera um disparo muito mais veloz.</p></section>
+          <section><h3>Movimentação e habilidades</h3><p>Sprint aumenta a velocidade enquanto consome stamina. Drible exige posse, avança o jogador e concede uma proteção curta contra desarmes. O desarme executa um avanço: ele precisa concluir o contato com o portador da bola para funcionar. No celular, a assistência de desarme direciona esse avanço para a bola; computadores e tablets não recebem essa ajuda.</p></section>
+          <section><h3>Chat, pausa e estatísticas</h3><p>Em partidas no computador, pressione Enter para entrar ou sair da digitação do chat. No celular, use o botão de chat do HUD. Pausa, chat e estatísticas podem ser reposicionados no editor mobile. Estatísticas da partida mostram posse, chutes, dribles e desarmes; somente as competitivas alimentam o ranking permanente.</p></section>
           <section><h3>Treino Livre</h3><p>Tempo e gols são ilimitados. Serve para praticar movimentação, chute, drible e desarme. Não concede XP, KX Coins, estatísticas, ranking ou histórico.</p></section>
           <section><h3>Jogar Sozinho</h3><p>Partida local contra CPU com dificuldade configurável. Replay é obrigatório após gols. Partidas com bot não concedem XP, KX Coins, estatísticas, ranking ou histórico online.</p></section>
           <section><h3>Multiplayer Casual</h3><p>O host organiza os times e pode usar o painel administrativo. Todos precisam estar prontos antes do início. Concede XP e entra no histórico casual, mas não altera estatísticas competitivas, ranking ou KX Coins.</p></section>
           <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
           <section><h3>Premiação Online</h3><ul><li>Vitória: 80 XP e, no competitivo, 30 KX Coins.</li><li>Empate: 30 XP e, no competitivo, 18 KX Coins.</li><li>Derrota: 15 XP e, no competitivo, 10 KX Coins.</li><li>Casual concede somente XP. Treino e partidas com CPU não concedem progresso.</li></ul></section>
-          <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, assistências, chutes, dribles, desarmes, gols contra, posse média e MVP. A assistência pertence ao último companheiro que tocou na bola antes do autor do gol; um toque adversário cancela a jogada. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
+          <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, assistências, chutes, dribles, desarmes, gols contra, posse média e MVP. A assistência pertence ao último companheiro que passou a bola quando o primeiro chute do recebedor vira gol; um toque adversário ou um segundo chute cancela a assistência. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
           <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
           <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
           <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
-          <section><h3>Vitrines e Solicitações</h3><p>Skins da comunidade custam 150 na vitrine diária, 300 na semanal e 600 na mensal. Cada conta pode solicitar uma skin por dia. O recorte enviado participa das seleções e a vitrine mantém a skin atual quando não existe nova candidata válida para o período.</p></section>
+          <section><h3>Vitrines e Solicitações</h3><p>Skins da comunidade custam 90 KX Coins na vitrine diária, 180 na semanal e 360 na mensal. Cada conta pode solicitar uma skin por dia. O recorte enviado participa das seleções e a vitrine mantém a skin atual quando não existe nova candidata válida para o período.</p></section>
         </div>
       </div>
     </div>
@@ -987,6 +993,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v23.0 - Impacto e Precisão</h4>
+            <p>Super chutes agora sacodem o campo e deixam a bola energizada. O multiplayer recebeu movimento visual mais fluido entre atualizações de rede, chutes exigem posse real, skins novas recebem som de comemoração e históricos casuais sobrevivem ao abandono do host. O manual ganhou orientações completas de controles, HUD e mecânicas; tags oficiais também foram reorganizadas nos chats e removidas das caixas do próprio perfil.</p>
+          </section>
           <section>
             <h4>v22.0 - Jogo Coletivo</h4>
             <p>Assistências agora só valem quando o primeiro chute após o passe vira gol. O multiplayer recebeu relógio dedicado para manter a partida fluida com o host em segundo plano, previsão visual enquanto o chute é carregado e som ao dominar a bola. Baús ganharam som de roleta, a assistência de desarme ficou exclusiva para celulares reais e as tags oficiais aparecem na partida, nos chats, rankings e perfis; os nomes dos créditos também abrem o perfil oficial.</p>

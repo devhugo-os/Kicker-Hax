@@ -224,9 +224,6 @@ export const menuController = {
         flagEl.classList.toggle('hidden', !usesProfileBadge(this.profileData));
       }
       if (nameEl) nameEl.textContent = this.profileData.displayName || this.profileData.username;
-      const quickName = nameEl?.closest('.quick-name');
-      quickName?.querySelector('.staff-tag')?.remove();
-      if (quickName) appendStaffTag(quickName, this.profileData.staffRole);
       if (levelEl) levelEl.textContent = this.profileData.level || 1;
       if (avatarEl) this.renderSkin(avatarEl, getEquippedSkin(this.profileData), this.profileData.badge);
 
@@ -244,10 +241,6 @@ export const menuController = {
 
   async loadProfileScreen() {
     if (!this.currentUser || !this.profileData) return;
-
-    const ownStaffTag = document.getElementById('profile-staff-tag');
-    ownStaffTag?.replaceChildren();
-    if (ownStaffTag) appendStaffTag(ownStaffTag, this.profileData.staffRole);
 
     // Returning from the inventory must preserve unsaved skin/name changes.
     if (!this.profileDraft) {
@@ -549,7 +542,7 @@ export const menuController = {
       this.publicProfileData = profile;
       const publicTitle = document.getElementById('public-profile-title');
       publicTitle.textContent = profile.displayName || profile.username || 'Jogador';
-      appendStaffTag(publicTitle, profile.staffRole);
+      appendStaffTag(publicTitle, profile.staffRole, { full: true });
       document.getElementById('public-profile-bio').textContent = profile.bio || 'Sem biografia.';
       document.getElementById('public-profile-level').textContent = profile.level || 1;
       this.renderSkin(document.getElementById('public-profile-avatar'), getEquippedSkin(profile), profile.badge);

@@ -1,6 +1,6 @@
 const STAFF_ROLES = {
-  developer: { label: 'DEV', className: 'developer', color: '#38bdf8', textColor: '#031525' },
-  influencer: { label: 'INFLUENCIADOR', className: 'influencer', color: '#facc15', textColor: '#211500' }
+  developer: { label: 'DEV', fullLabel: 'DESENVOLVEDOR', className: 'developer', color: '#38bdf8', textColor: '#031525' },
+  influencer: { label: 'INF', fullLabel: 'INFLUENCIADOR', className: 'influencer', color: '#facc15', textColor: '#211500' }
 };
 
 export function normalizeStaffRole(role) {
@@ -8,18 +8,18 @@ export function normalizeStaffRole(role) {
   return STAFF_ROLES[key] ? key : '';
 }
 
-export function createStaffTag(role) {
+export function createStaffTag(role, options = {}) {
   const key = normalizeStaffRole(role);
   if (!key) return null;
   const tag = document.createElement('span');
   tag.className = `staff-tag ${STAFF_ROLES[key].className}`;
-  tag.textContent = STAFF_ROLES[key].label;
+  tag.textContent = options.full ? STAFF_ROLES[key].fullLabel : STAFF_ROLES[key].label;
   tag.title = key === 'developer' ? 'Desenvolvedor oficial' : 'Influenciador oficial';
   return tag;
 }
 
-export function appendStaffTag(container, role) {
-  const tag = createStaffTag(role);
+export function appendStaffTag(container, role, options = {}) {
+  const tag = createStaffTag(role, options);
   if (tag) container.appendChild(tag);
 }
 

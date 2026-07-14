@@ -165,6 +165,7 @@ export const marketController = {
         result.classList.remove('hidden');
         this.finishChestRoulette = null;
         this.lastChestReward = won;
+        if (!duplicate) soundFx.play('reward');
         resolve();
       };
       this.finishChestRoulette = finish;
@@ -223,6 +224,7 @@ export const marketController = {
       const result = await firebaseService.purchaseSkinChest(this.user.uid, chest, won, pending.purchaseId);
       menuController.profileData = { ...menuController.profileData, ...result.profile };
       this.clearPendingChestPurchase(pending.purchaseId);
+      if (!result.duplicate) soundFx.play('reward');
       showToast(`${won.name} foi recuperada e está no seu inventário.`, 'success');
     } catch (error) {
       if (!this.isRetryablePurchaseError(error)) this.clearPendingChestPurchase(pending.purchaseId);
@@ -273,6 +275,7 @@ export const marketController = {
           menuController.profileData = { ...menuController.profileData, ...profile };
           this.renderWallet();
           await this.renderFeatured();
+          soundFx.play('reward');
           showToast(`${skin.name || config.label} adicionada ao perfil.`, 'success');
         } catch (error) {
           showToast(error.message, 'error');
