@@ -1418,6 +1418,22 @@ html.app-runtime #menu-btn-download-app {
   word-break: break-word;
 }
 
+.credits-profile-link {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  padding: 3px 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.credits-profile-link:not(:disabled):hover { color: #60a5fa; }
+.credits-profile-link:disabled { cursor: default; opacity: 0.72; }
+.profile-title-group { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; }
+
 .chat-msg .msg-time {
   color: var(--text-muted);
   font-size: 10px;

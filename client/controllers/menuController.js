@@ -121,6 +121,9 @@ export const menuController = {
     router.register('profile-screen', {
       onEnter: () => this.loadProfileScreen()
     });
+    router.register('credits-screen', {
+      onEnter: () => this.loadCreditsStaff()
+    });
 
     const publicProfileModal = document.getElementById('public-profile-modal');
     document.getElementById('public-profile-close')?.addEventListener('click', () => publicProfileModal?.classList.add('hidden'));
@@ -221,6 +224,9 @@ export const menuController = {
         flagEl.classList.toggle('hidden', !usesProfileBadge(this.profileData));
       }
       if (nameEl) nameEl.textContent = this.profileData.displayName || this.profileData.username;
+      const quickName = nameEl?.closest('.quick-name');
+      quickName?.querySelector('.staff-tag')?.remove();
+      if (quickName) appendStaffTag(quickName, this.profileData.staffRole);
       if (levelEl) levelEl.textContent = this.profileData.level || 1;
       if (avatarEl) this.renderSkin(avatarEl, getEquippedSkin(this.profileData), this.profileData.badge);
 
@@ -238,6 +244,10 @@ export const menuController = {
 
   async loadProfileScreen() {
     if (!this.currentUser || !this.profileData) return;
+
+    const ownStaffTag = document.getElementById('profile-staff-tag');
+    ownStaffTag?.replaceChildren();
+    if (ownStaffTag) appendStaffTag(ownStaffTag, this.profileData.staffRole);
 
     // Returning from the inventory must preserve unsaved skin/name changes.
     if (!this.profileDraft) {
@@ -368,6 +378,30 @@ export const menuController = {
         historyList.innerHTML = '<div class="subtext text-danger">Erro ao carregar histórico.</div>';
       }
     }
+  },
+
+  async loadCreditsStaff() {
+    const roles = [
+      ['developer', 'Hugo'],
+      ['influencer', 'Rhuan']
+    ];
+    await Promise.all(roles.map(async ([role, fallbackName]) => {
+      const button = document.querySelector(`[data-staff-profile="${role}"]`);
+      if (!button) return;
+      button.disabled = true;
+      button.textContent = fallbackName;
+      try {
+        const profile = await firebaseService.getStaffProfile(role);
+        if (!profile) return;
+        button.replaceChildren(document.createTextNode(profile.displayName || profile.username || fallbackName));
+        appendStaffTag(button, role);
+        button.disabled = false;
+        button.onclick = () => this.openPublicProfile(profile.uid);
+        button.title = `Ver perfil de ${profile.displayName || profile.username || fallbackName}`;
+      } catch (error) {
+        console.warn(`[Créditos] Perfil ${role} indisponível:`, error);
+      }
+    }));
   },
 
   async saveProfileEdits() {

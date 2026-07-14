@@ -15,13 +15,13 @@ export class ClientBall {
     this.vy = 0;
   }
 
-  updateState(serverBall) {
-    this.targetX = serverBall.x;
-    this.targetY = serverBall.y;
-    this.owner = serverBall.owner;
-    this.lastTouch = serverBall.lastTouch || null;
+  updateState(serverBall, predictionFrames = 0) {
     this.vx = Number(serverBall.vx || 0);
     this.vy = Number(serverBall.vy || 0);
+    this.targetX = serverBall.x + this.vx * predictionFrames;
+    this.targetY = serverBall.y + this.vy * predictionFrames;
+    this.owner = serverBall.owner;
+    this.lastTouch = serverBall.lastTouch || null;
   }
 
   // Smooth position interpolation

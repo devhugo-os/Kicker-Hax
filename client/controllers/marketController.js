@@ -11,6 +11,7 @@ import { normalizeCommunitySkinName } from '../utils/skinQueue.js';
 import { confirmDialog } from '../utils/dialog.js';
 import { encodeSkinCanvas, validateSkinImageFile } from '../utils/skinImage.js';
 import { SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
+import { soundFx } from '../utils/soundFx.js';
 
 const FEATURED = {
   daily: { label: 'Skin do dia', price: 90, reset: 'Troca diariamente' },
@@ -140,12 +141,15 @@ export const marketController = {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       track.style.transition = 'transform 5s cubic-bezier(.08,.7,.12,1)';
       track.style.transform = `translateX(${targetOffset}px)`;
+      this.stopRouletteSound = soundFx.startRoulette(5000);
     }));
     return new Promise(resolve => {
       let completed = false;
       const finish = () => {
         if (completed) return;
         completed = true;
+        this.stopRouletteSound?.();
+        this.stopRouletteSound = null;
         track.style.transition = 'none';
         track.style.transform = `translateX(${targetOffset}px)`;
         const canOpenAgain = Number(menuController.profileData?.coins || 0) >= chest.price;
@@ -171,6 +175,8 @@ export const marketController = {
 
   closeChestRoulette() {
     this.finishChestRoulette?.();
+    this.stopRouletteSound?.();
+    this.stopRouletteSound = null;
     document.getElementById('chest-roulette-modal')?.classList.add('hidden');
     if (this.lastChestReward) showToast(`${this.lastChestReward.name} já está no seu inventário.`, 'success');
   },

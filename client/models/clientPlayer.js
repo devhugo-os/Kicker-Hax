@@ -2,6 +2,7 @@
 import * as C from '../../shared/constants.js';
 import { segmentGraphemes, isEmojiCluster } from '../utils/graphemes.js';
 import { drawSkinImage } from '../utils/skinRenderer.js';
+import { drawStaffTagOnCanvas } from '../utils/staffTags.js';
 
 export class ClientPlayer {
   constructor(serverPlayer) {
@@ -19,6 +20,9 @@ export class ClientPlayer {
     this.targetX = serverPlayer.x;
     this.targetY = serverPlayer.y;
     this.targetDir = serverPlayer.dir || 0;
+    this.vx = Number(serverPlayer.vx || 0);
+    this.vy = Number(serverPlayer.vy || 0);
+    this.staffRole = serverPlayer.staffRole || '';
     
     this.stamina = serverPlayer.stamina;
     this.staminaLock = serverPlayer.staminaLock;
@@ -35,15 +39,18 @@ export class ClientPlayer {
     this.trail = [];
   }
 
-  updateState(serverPlayer) {
+  updateState(serverPlayer, predictionFrames = 0) {
     this.name = serverPlayer.name;
     this.badge = serverPlayer.badge;
     this.skin = serverPlayer.skin || this.skin || '';
     this.team = serverPlayer.team;
     
-    this.targetX = serverPlayer.x;
-    this.targetY = serverPlayer.y;
+    this.vx = Number(serverPlayer.vx || 0);
+    this.vy = Number(serverPlayer.vy || 0);
+    this.targetX = serverPlayer.x + this.vx * predictionFrames;
+    this.targetY = serverPlayer.y + this.vy * predictionFrames;
     this.targetDir = serverPlayer.dir;
+    this.staffRole = serverPlayer.staffRole || '';
     
     this.stamina = serverPlayer.stamina;
     this.staminaLock = serverPlayer.staminaLock;
@@ -166,5 +173,6 @@ export class ClientPlayer {
       ctx.fillStyle = C.TEAM_NAME_COLORS[this.team] || '#e2e8f0';
       ctx.fillText(this.name, this.x, this.y - this.r - 14);
     }
+    drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 31, this.staffRole);
   }
 }

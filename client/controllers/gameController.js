@@ -15,7 +15,8 @@ import { getEquippedSkin } from '../data/skins.js';
 import { drawSkinImage } from '../utils/skinRenderer.js';
 import { normalizeMatchTeam, resolvePlayerMatchOutcome } from '../utils/matchResult.js';
 import { escapeHtml } from '../utils/safeHtml.js';
-import { appendStaffTag } from '../utils/staffTags.js';
+import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
+import { isMobilePhoneDevice } from '../utils/deviceCapabilities.js';
 
 export const gameController = {
   currentUser: null,
@@ -192,13 +193,17 @@ export const gameController = {
     return !!mobileUA || !!coarse || Math.min(window.innerWidth, window.innerHeight) <= 540;
   },
 
+  isMobilePhone() {
+    return isMobilePhoneDevice(navigator);
+  },
+
   /**
    * Makes a mobile tackle commit to the ball. The virtual stick is deliberately
    * ignored for this short lunge so an existing movement direction cannot pull
    * the player away from the tackle target.
    */
   applyMobileTackleAssist(input, player, ball) {
-    if (!this.isTouchDevice() || !this.virtualInput?.tackle || !input.tackle || !player || !ball) return;
+    if (!this.isMobilePhone() || !this.virtualInput?.tackle || !input.tackle || !player || !ball) return;
     const dx = ball.x - player.x;
     const dy = ball.y - player.y;
     const distance = Math.hypot(dx, dy);
@@ -1271,6 +1276,7 @@ export const gameController = {
       name: username,
       badge: badge,
       skin: equippedSkin,
+      staffRole: menuController.profileData?.staffRole || '',
       team: C.Team.BLUE,
       cpu: false,
       x: this.canvas.width - C.BORDER - 120,
@@ -1646,7 +1652,7 @@ export const gameController = {
             // are separated, mirroring the authoritative multiplayer server.
             this.resolveLocalTackleImpacts(localPlayers, localBallSim);
             Physics.resolvePlayerPlayer(localPlayers);
-            Physics.resolvePlayerBall(localPlayers, localBallSim);
+            Physics.resolvePlayerBall(localPlayers, localBallSim, () => frameSfx.push('pickup'));
 
             Physics.updateBallPhysics(
               localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, localPlayers,
@@ -1705,7 +1711,7 @@ export const gameController = {
           this.ball.x = localBallSim.x;
           this.ball.y = localBallSim.y;
           this.ball.owner = localBallSim.owner;
-          this.drawBallLandingIndicator(this.ctx, localBallSim);
+          this.drawShotPreview(this.ctx, bluePlayer, localBallSim, inputP1, bluePlayer.kickCharge || 0);
           this.ball.draw(this.ctx);
 
           this.players.forEach(p => {
@@ -1852,6 +1858,7 @@ export const gameController = {
           has: (localBallSim.owner === p.id),
           name: p.id === 'p1' ?username : 'CPU Bot',
           badge: p.id === 'p1' ? badge : '⚙️',
+          staffRole: p.id === 'p1' ? (menuController.profileData?.staffRole || '') : '',
           inv: p.invuln || 0,
           stun: p.stun || 0,
           halo: p.shootHalo || 0
@@ -2231,7 +2238,8 @@ export const gameController = {
       }
 
       // Update local physical components LERP targets
-      this.ball.updateState(state.ball);
+      const predictionFrames = state.status === 'playing' && !state.isHostPaused && !state.isDisconnectPaused ? 1.5 : 0;
+      this.ball.updateState(state.ball, predictionFrames);
 
       state.players.forEach(sp => {
         sp.skin ||= this.activeRoom?.players?.find(player => player.id === sp.id)?.skin || '';
@@ -2240,7 +2248,7 @@ export const gameController = {
           p = new ClientPlayer(sp);
           this.players.push(p);
         }
-        p.updateState(sp);
+        p.updateState(sp, predictionFrames);
       });
 
       // Clear disconnected players
@@ -2432,6 +2440,13 @@ export const gameController = {
         socketService.sendGameInput(input);
       }
 
+      const me = this.players.find(player => player.id === localId);
+      if (input.shoot && !this.onlineShootStartedAt) this.onlineShootStartedAt = Date.now();
+      if (!input.shoot) this.onlineShootStartedAt = null;
+      const localCharge = input.shoot && this.onlineShootStartedAt
+        ? Math.min(1, (Date.now() - this.onlineShootStartedAt) / 900)
+        : 0;
+
       // 2) Render Frame
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.drawFieldGrid(this.ctx);
@@ -2441,7 +2456,7 @@ export const gameController = {
       } else {
         // Interpolate ball and players positions locally (LERP)
         this.ball.interpolate(0.35);
-        this.drawBallLandingIndicator(this.ctx, this.ball);
+        this.drawShotPreview(this.ctx, me, this.ball, input, Math.max(localCharge, me?.kickCharge || 0));
         this.ball.draw(this.ctx);
 
         this.players.forEach(p => {
@@ -2463,7 +2478,6 @@ export const gameController = {
 
       // Refresh sidebars (stamina / power / speed / tackles / dribbles)
       const myId = localId;
-      const me = this.players.find(p => p.id === myId);
       const opp = this.players.find(p => p.id !== myId && p.team !== 'spectator');
 
       if (me) {
@@ -2471,12 +2485,6 @@ export const gameController = {
         const myPow = document.getElementById('right-pow-fill');
         if (myStam) myStam.style.height = `${me.stamina * 100}%`;
 
-        // Read local kick charge if shoot held
-        if (input.shoot && !this.onlineShootStartedAt) this.onlineShootStartedAt = Date.now();
-        if (!input.shoot) this.onlineShootStartedAt = null;
-        const localCharge = input.shoot && this.onlineShootStartedAt
-          ? Math.min(1, (Date.now() - this.onlineShootStartedAt) / 900)
-          : 0;
         if (myPow) myPow.style.height = `${localCharge * 100}%`;
         this.updateMobileActionMeters(me.stamina, Math.max(localCharge, me.kickCharge || 0));
 
@@ -3146,7 +3154,8 @@ export const gameController = {
     // Players
     frame.players.forEach(p => {
       const replaySkin = p.skin || this.players.find(player => player.id === p.id || player.name === p.name)?.skin || '';
-      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, p.name, p.badge, replaySkin, p.halo, p.inv, p.stun, p.has);
+      const replayRole = p.staffRole || this.players.find(player => player.id === p.id || player.name === p.name)?.staffRole || '';
+      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, p.name, p.badge, replaySkin, p.halo, p.inv, p.stun, p.has, replayRole);
     });
 
     // Replay text info
@@ -3194,6 +3203,7 @@ export const gameController = {
         has: state.ball.owner === p.id,
         name: p.name || '',
         badge: p.badge || '',
+        staffRole: p.staffRole || '',
         inv: p.invuln || 0,
         stun: p.stun || 0,
         halo: p.shootHalo || 0
@@ -3467,19 +3477,23 @@ export const gameController = {
     cx.restore();
   },
 
-  drawBallLandingIndicator(cx, ball) {
-    if (ball.owner) return;
-    const vx = Number(ball.vx || 0);
-    const vy = Number(ball.vy || 0);
-    if (Math.hypot(vx, vy) < 1.2) return;
-    const decayDistance = 1 / Math.max(0.01, 1 - C.FRICTION_FIELD);
-    const targetX = Math.max(C.BORDER, Math.min(this.canvas.width - C.BORDER, ball.x + vx * decayDistance));
-    const targetY = Math.max(C.BORDER, Math.min(this.canvas.height - C.BORDER, ball.y + vy * decayDistance));
-    const angle = Math.atan2(targetY - ball.y, targetX - ball.x);
+  drawShotPreview(cx, player, ball, input, charge = 0) {
+    if (!player || !ball || !input?.shoot) return;
+    const nearBall = ball.owner === player.id
+      || Math.hypot(player.x - ball.x, player.y - ball.y) < player.r + ball.r + 14;
+    if (!nearBall) return;
+    const inputLength = Math.hypot(input.x || 0, input.y || 0);
+    const angle = inputLength > 0.01 ? Math.atan2(input.y, input.x) : player.dir;
+    const normalizedCharge = Math.max(0, Math.min(1, Number(charge) || 0));
+    const power = C.KICK_BASE + C.KICK_CHARGE * normalizedCharge;
+    const travel = power * C.FRICTION_FIELD / Math.max(0.01, 1 - C.FRICTION_FIELD);
+    const targetX = Math.max(C.BORDER, Math.min(this.canvas.width - C.BORDER, ball.x + Math.cos(angle) * travel));
+    const targetY = Math.max(C.BORDER, Math.min(this.canvas.height - C.BORDER, ball.y + Math.sin(angle) * travel));
     cx.save();
-    cx.strokeStyle = 'rgba(125, 211, 252, .78)';
-    cx.fillStyle = '#7dd3fc';
-    cx.lineWidth = 2;
+    cx.globalAlpha = 0.58 + normalizedCharge * 0.32;
+    cx.strokeStyle = normalizedCharge > 0.72 ? '#facc15' : '#7dd3fc';
+    cx.fillStyle = cx.strokeStyle;
+    cx.lineWidth = 2 + normalizedCharge;
     cx.setLineDash([7, 7]);
     cx.beginPath();
     cx.moveTo(ball.x, ball.y);
@@ -3492,6 +3506,10 @@ export const gameController = {
     cx.lineTo(targetX - Math.cos(angle + 0.55) * 11, targetY - Math.sin(angle + 0.55) * 11);
     cx.closePath();
     cx.fill();
+    cx.globalAlpha *= 0.75;
+    cx.beginPath();
+    cx.arc(targetX, targetY, 6 + normalizedCharge * 5, 0, Math.PI * 2);
+    cx.stroke();
     cx.restore();
   },
 
@@ -4260,7 +4278,7 @@ function ctxBallDraw(cx, x, y) {
   cx.fill();
 }
 
-function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBall) {
+function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBall, staffRole = '') {
   // Trail details
   ctxPlayerShadow(cx, x, y);
 
@@ -4326,6 +4344,7 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
     cx.fillStyle = C.TEAM_NAME_COLORS[team] || '#e2e8f0';
     cx.fillText(name, x, y - C.PLAYER_RADIUS - 14);
   }
+  drawStaffTagOnCanvas(cx, x, y - C.PLAYER_RADIUS - 31, staffRole);
 }
 
 function ctxPlayerShadow(cx, x, y) {

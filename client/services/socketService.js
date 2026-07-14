@@ -486,7 +486,7 @@ class P2PSocketService {
         const hostPlayer = this.serverRoom.players.find(player => player.id === this.clientId);
         matchEndedByHostExit = activeMatch.forfeitAgainstTeam(hostPlayer?.team);
         activeMatch.isHostPaused = false;
-        clearInterval(activeMatch.tickInterval);
+        activeMatch.stopTicker();
       }
 
       // Close guests WebRTC channels

@@ -1,5 +1,6 @@
 // Kicker Hax - Server-side Match Model
 import * as C from '../../shared/constants.js';
+import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
 import { ServerPhysics } from './serverPhysics.js';
 
 export class ServerMatch {
@@ -81,13 +82,15 @@ export class ServerMatch {
     this.playerStats = new Map();
     this.lastTrackedTouchId = null;
     this.assistCandidateId = null;
+    this.assistRecipientId = null;
+    this.assistShotCount = 0;
     this.resetPlayerStats();
 
-    // Keep the authoritative browser-host in sync after a background-tab
-    // timer clamp. Delayed callbacks catch simulation up in one broadcast.
+    // The P2P host remains authoritative even while its tab is hidden. The
+    // worker-backed clock avoids Chrome's severe background timer clamp.
     this.lastScheduledTickAt = Date.now();
     this.lastBroadcastAt = 0;
-    this.tickInterval = setInterval(() => this.runScheduledTick(), 1000 / 60);
+    this.tickScheduler = createRealtimeTicker(timestamp => this.runScheduledTick(timestamp));
 
     // Initial kickoff setup
     this.kickoff();
@@ -129,6 +132,7 @@ export class ServerMatch {
         existing.name = lobbyPlayer.username;
         existing.badge = lobbyPlayer.badge;
         existing.skin = lobbyPlayer.skin || '';
+        existing.staffRole = lobbyPlayer.staffRole || '';
         existing.cpu = !!lobbyPlayer.cpu;
         existing.difficulty = lobbyPlayer.difficulty || C.Difficulty.MEDIUM;
       } else {
@@ -170,6 +174,7 @@ export class ServerMatch {
       name: lobbyPlayer.username,
       badge: lobbyPlayer.badge,
       skin: lobbyPlayer.skin || '',
+      staffRole: lobbyPlayer.staffRole || '',
       team: lobbyPlayer.team === 'red' ? C.Team.RED : C.Team.BLUE,
       cpu: !!lobbyPlayer.cpu,
       difficulty: lobbyPlayer.difficulty || C.Difficulty.MEDIUM,
@@ -281,6 +286,8 @@ export class ServerMatch {
     this.ball.noPickupFrom = null;
     this.lastTrackedTouchId = null;
     this.assistCandidateId = null;
+    this.assistRecipientId = null;
+    this.assistShotCount = 0;
 
     this.soundEffects.push('whistle');
   }
@@ -295,6 +302,7 @@ export class ServerMatch {
       has: (this.ball.owner === p.id),
       name: p.name || '',
       badge: p.badge || '',
+      staffRole: p.staffRole || '',
       inv: p.invuln || 0,
       stun: p.stun || 0,
       halo: p.shootHalo || 0
@@ -334,6 +342,7 @@ export class ServerMatch {
 
     const scorerStats = this.playerStats.get(scorerId);
     const assistant = !ownGoal && this.assistCandidateId && this.assistCandidateId !== scorerId
+      && this.assistRecipientId === scorerId && this.assistShotCount === 1
       ? this.players.find(player => player.id === this.assistCandidateId && player.team === scorer?.team)
       : null;
     if (scorerStats) {
@@ -599,6 +608,8 @@ export class ServerMatch {
           team: p.team,
           x: p.x,
           y: p.y,
+          vx: 0,
+          vy: 0,
           dir: p.dir,
           stamina: p.stamina,
           staminaLock: p.staminaLock,
@@ -610,7 +621,8 @@ export class ServerMatch {
           dribble_cd: p.dribble_cd,
           power_cd: p.power_cd,
           badge: p.badge,
-          name: p.name
+          name: p.name,
+          staffRole: p.staffRole || ''
         })),
         score: this.score,
         matchTime: this.matchTime,
@@ -678,7 +690,7 @@ export class ServerMatch {
       if (this.endFreezeTimer <= 0) {
         this.status = 'ended';
         this.onMatchEnd(this.buildMatchResult());
-        clearInterval(this.tickInterval);
+        this.stopTicker();
       }
     } else if (this.status === 'playing') {
       // Clock decrement
@@ -748,6 +760,7 @@ export class ServerMatch {
             p.shootHalo = 22;
 
             const ang = (input.x || input.y) ? Math.atan2(input.y, input.x) : p.dir;
+            this.registerAssistShot(p.id);
             ServerPhysics.powerKick(p, this.ball, ang, C.POWER_KICK_POWER);
             this.soundEffects.push('power');
           }
@@ -763,6 +776,7 @@ export class ServerMatch {
               const pow = Math.max(C.KICK_BASE, C.KICK_BASE + C.KICK_CHARGE * charge);
               const stats = this.playerStats.get(p.id);
               if (stats) stats.shots++;
+              this.registerAssistShot(p.id);
               ServerPhysics.kickBall(p, this.ball, ang, pow);
               this.soundEffects.push('kick');
             }
@@ -781,7 +795,7 @@ export class ServerMatch {
 
       // Collisions and ball movement
       ServerPhysics.resolvePlayerPlayer(this.players);
-      ServerPhysics.resolvePlayerBall(this.players, this.ball);
+      ServerPhysics.resolvePlayerBall(this.players, this.ball, () => this.soundEffects.push('pickup'));
       this.trackAssistCandidate();
 
       // Update ball physics
@@ -819,6 +833,8 @@ export class ServerMatch {
         team: p.team,
         x: p.x,
         y: p.y,
+        vx: p.vx,
+        vy: p.vy,
         dir: p.dir,
         stamina: p.stamina,
         staminaLock: p.staminaLock,
@@ -834,7 +850,8 @@ export class ServerMatch {
         // restricted to competitive results elsewhere in the server flow.
         matchStats: this.playerStats.get(p.id) ? { ...this.playerStats.get(p.id) } : null,
         badge: p.badge,
-        name: p.name
+        name: p.name,
+        staffRole: p.staffRole || ''
       })),
       score: this.score,
       matchTime: this.matchTime,
@@ -856,14 +873,26 @@ export class ServerMatch {
     if (!currentTouchId || currentTouchId === this.lastTrackedTouchId) return;
     const previous = this.players.find(player => player.id === this.lastTrackedTouchId);
     const current = this.players.find(player => player.id === currentTouchId);
-    this.assistCandidateId = previous && current && previous.id !== current.id && previous.team === current.team
-      ? previous.id
-      : null;
+    const isTeamPass = previous && current && previous.id !== current.id && previous.team === current.team;
+    this.assistCandidateId = isTeamPass ? previous.id : null;
+    this.assistRecipientId = isTeamPass ? current.id : null;
+    this.assistShotCount = 0;
     this.lastTrackedTouchId = currentTouchId;
   }
 
-  runScheduledTick() {
-    const now = Date.now();
+  registerAssistShot(playerId) {
+    if (!this.assistCandidateId) return;
+    if (playerId !== this.assistRecipientId || this.assistShotCount >= 1) {
+      this.assistCandidateId = null;
+      this.assistRecipientId = null;
+      this.assistShotCount = 0;
+      return;
+    }
+    this.assistShotCount = 1;
+  }
+
+  runScheduledTick(timestamp = Date.now()) {
+    const now = Number(timestamp) || Date.now();
     const elapsed = Math.max(0, now - this.lastScheduledTickAt);
     const frames = Math.min(180, Math.max(1, Math.round(elapsed / (1000 / 60))));
     this.lastScheduledTickAt = now;
@@ -906,6 +935,11 @@ export class ServerMatch {
     this.disconnectAllowsRejoin = options.allowRejoin !== false;
     this.disconnectPauseUntil = Date.now() + (options.timeoutMs || 90000);
     return true;
+  }
+
+  stopTicker() {
+    this.tickScheduler?.stop();
+    this.tickScheduler = null;
   }
 
   /** Moves an expired reconnection pause to the team's final 30 second vote. */
@@ -1007,11 +1041,11 @@ export class ServerMatch {
     this.io.to(this.roomCode).emit('gameState', {
       ball: { ...this.ball },
       players: this.players.map(p => ({
-        id: p.id, team: p.team, x: p.x, y: p.y, dir: p.dir,
+        id: p.id, team: p.team, x: p.x, y: p.y, vx: 0, vy: 0, dir: p.dir,
         stamina: p.stamina, staminaLock: p.staminaLock, stun: p.stun,
         shootHalo: p.shootHalo, kickCharge: p.kickCharge || 0, invuln: p.invuln,
         tackle_cd: p.tackle_cd, dribble_cd: p.dribble_cd, power_cd: p.power_cd,
-        badge: p.badge, name: p.name
+        badge: p.badge, name: p.name, staffRole: p.staffRole || ''
       })),
       score: this.score,
       matchTime: this.matchTime,
@@ -1157,7 +1191,7 @@ export class ServerMatch {
     this.isHostPaused = false;
     this.pauseTicks = 0;
     this.status = 'ended';
-    clearInterval(this.tickInterval);
+    this.stopTicker();
     this.onMatchEnd(this.buildMatchResult());
     return true;
   }
@@ -1211,7 +1245,7 @@ export class ServerMatch {
   }
 
   stop() {
-    clearInterval(this.tickInterval);
+    this.stopTicker();
   }
 
   skipReplay() {

@@ -72,7 +72,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '21.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '22.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -335,6 +335,18 @@ export const firebaseService = {
       console.warn('[Kicker Stats] Histórico indisponível para reconciliação visual:', error);
     }
     return stored;
+  },
+
+  async getStaffProfile(role) {
+    const normalizedRole = ['developer', 'influencer'].includes(role) ? role : '';
+    if (!normalizedRole) return null;
+    const snapshot = await getDocs(query(
+      collection(db, 'users'),
+      where('staffRole', '==', normalizedRole),
+      limit(1)
+    ));
+    const profileDoc = snapshot.docs[0];
+    return profileDoc ? normalizeCosmetics({ uid: profileDoc.id, ...profileDoc.data() }) : null;
   },
 
   async saveMatchResult(uid, isWin, isLoss, isDraw, goals, shots, dribbles, assists, ownGoals, isMvp, xpGained, tackles = 0, possessionPct = 0, matchId = null, coinReward = 0) {

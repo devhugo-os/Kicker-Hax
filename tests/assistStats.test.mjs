@@ -16,6 +16,8 @@ test('registra assistencia do ultimo companheiro antes do gol', () => {
     ['artilheiro', { goals: 0, ownGoals: 0 }]
   ]);
   match.assistCandidateId = 'passador';
+  match.assistRecipientId = 'artilheiro';
+  match.assistShotCount = 1;
   match.soundEffects = [];
 
   match.triggerGoal('red', 'artilheiro');
@@ -37,4 +39,16 @@ test('toque adversario cancela candidato a assistencia', () => {
   match.trackAssistCandidate();
 
   assert.equal(match.assistCandidateId, null);
+});
+
+test('segundo chute do recebedor cancela a assistencia', () => {
+  const match = Object.create(ServerMatch.prototype);
+  match.assistCandidateId = 'passador';
+  match.assistRecipientId = 'autor';
+  match.assistShotCount = 0;
+  match.registerAssistShot('autor');
+  assert.equal(match.assistShotCount, 1);
+  match.registerAssistShot('autor');
+  assert.equal(match.assistCandidateId, null);
+  assert.equal(match.assistRecipientId, null);
 });

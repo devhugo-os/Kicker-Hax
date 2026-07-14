@@ -100,7 +100,7 @@
       <div class="profile-layout card-blur">
         <div class="profile-header">
           <button id="profile-btn-back" class="btn btn-secondary btn-icon">⬅️ Voltar</button>
-          <h2>Perfil do Jogador</h2>
+          <div class="profile-title-group"><h2>Perfil do Jogador</h2><span id="profile-staff-tag"></span></div>
                   <button id="profile-btn-logout" class="btn btn-danger btn-sm">Sair da Conta</button>
         </div>
         <div id="profile-onboarding-notice" class="profile-onboarding-notice hidden" role="status">
@@ -400,9 +400,9 @@
         
         <div class="credits-list">
           <div class="credits-role">Desenvolvedor Principal</div>
-          <div class="credits-name">Hugo</div>
+          <button class="credits-name credits-profile-link" data-staff-profile="developer" type="button">Hugo</button>
           <div class="credits-role">Influenciador Oficial</div>
-          <div class="credits-name">Rhuan</div>
+          <button class="credits-name credits-profile-link" data-staff-profile="influencer" type="button">Rhuan</button>
           <div class="credits-role">Engine de Física & Multiplayer</div>
           <div class="credits-name">Socket.IO & Web Canvas</div>
           <div class="credits-role">Trilha Sonora & Sintetizadores</div>
@@ -955,7 +955,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v21.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v22.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -987,6 +987,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v22.0 - Jogo Coletivo</h4>
+            <p>Assistências agora só valem quando o primeiro chute após o passe vira gol. O multiplayer recebeu relógio dedicado para manter a partida fluida com o host em segundo plano, previsão visual enquanto o chute é carregado e som ao dominar a bola. Baús ganharam som de roleta, a assistência de desarme ficou exclusiva para celulares reais e as tags oficiais aparecem na partida, nos chats, rankings e perfis; os nomes dos créditos também abrem o perfil oficial.</p>
+          </section>
           <section>
             <h4>v21.0 - Jogo Coletivo</h4>
             <p>Assistências chegam às partidas, perfil e ranking. Placar final, chats e entrada em salas ficaram mais confiáveis; sons online não se perdem mais entre frames. A movimentação responde melhor, desarmes recuperam mais rápido e a partida ganhou música e indicador de trajetória da bola.</p>

@@ -8,6 +8,7 @@ let crowdGain = null;
 let crowdNode = null;
 let menuTheme = null;
 let matchTheme = null;
+let rouletteTimers = [];
 let isMuted = false;
 let globalVolume = 0.8; // 0.0 to 1.0
 let musicVolume = 0.55; // 0.0 to 1.0
@@ -212,6 +213,7 @@ export const soundFx = {
   },
 
   suspendForBackground() {
+    this.stopRoulette();
     this.stopCrowd();
     this.stopMenuTheme();
     this.stopMatchTheme();
@@ -304,6 +306,14 @@ export const soundFx = {
         this.createTone(520, 0.05, 'square', 0.18);
         this.createTone(260, 0.06, 'square', 0.09);
         break;
+      case 'pickup':
+        this.createTone(330, 0.045, 'triangle', 0.08);
+        setTimeout(() => this.createTone(440, 0.05, 'triangle', 0.07), 35);
+        break;
+      case 'roulette':
+        this.createTone(920, 0.025, 'square', 0.045);
+        this.percuss(0.035, 0.012);
+        break;
       case 'tackle':
         this.percuss(0.22, 0.03);
         this.createTone(140, 0.06, 'sawtooth', 0.22);
@@ -333,6 +343,24 @@ export const soundFx = {
         this.playCheer();
         break;
     }
+  },
+
+  startRoulette(durationMs = 5000) {
+    this.stopRoulette();
+    let elapsed = 0;
+    let delay = 42;
+    while (elapsed < durationMs - 120) {
+      const timer = setTimeout(() => this.play('roulette'), elapsed);
+      rouletteTimers.push(timer);
+      elapsed += delay;
+      delay = Math.min(245, delay * 1.072);
+    }
+    return () => this.stopRoulette();
+  },
+
+  stopRoulette() {
+    rouletteTimers.forEach(timer => clearTimeout(timer));
+    rouletteTimers = [];
   },
 
   ensureAudio() {
