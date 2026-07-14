@@ -22,3 +22,13 @@ export function createChestPurchaseId() {
 export function getDuplicateChestRefund(chestPrice) {
   return Math.floor(Math.max(0, Number(chestPrice) || 0) * 0.25);
 }
+
+export function markChestPurchaseCommitted(pending, result) {
+  if (!pending?.purchaseId) return null;
+  return {
+    ...pending,
+    committed: true,
+    duplicate: !!result?.duplicate,
+    refund: Math.max(0, Number(result?.refund) || 0)
+  };
+}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../client/utils/chestPurchase.js';
+import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, markChestPurchaseCommitted, normalizeChestPurchaseId } from '../client/utils/chestPurchase.js';
 
 test('normaliza e encontra o recibo da mesma abertura', () => {
   const id = normalizeChestPurchaseId('chest:abc/123');
@@ -26,4 +26,14 @@ test('recupera o reembolso da duplicata depois de reabrir o aplicativo', () => {
   const recovered = findChestPurchaseReceipt(appendChestPurchaseReceipt([], receipt), 'chest_saved');
   assert.equal(recovered.duplicate, true);
   assert.equal(recovered.refund, 80);
+});
+
+test('mantem a compra duplicada pendente ate a roleta ser revelada ou fechada', () => {
+  const pending = { purchaseId: 'chest_pending', chestId: 'golden', skinId: 'storm' };
+  assert.deepEqual(markChestPurchaseCommitted(pending, { duplicate: true, refund: 80 }), {
+    ...pending,
+    committed: true,
+    duplicate: true,
+    refund: 80
+  });
 });

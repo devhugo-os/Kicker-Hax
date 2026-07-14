@@ -14,7 +14,7 @@ import { setupCharacterLimitWarnings } from './utils/contentLimitWarnings.js';
 
 // Vite replaces the build constant in production. The fallback keeps the
 // local development server usable when it serves the source module directly.
-const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '23.0.0';
+const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '24.0.0';
 const DISPLAY_VERSION = APP_VERSION.split('.').length > 2
   ? APP_VERSION.replace(/\.0$/, '')
   : APP_VERSION;
@@ -83,23 +83,22 @@ function initApp() {
   settingsController.loadSettings();
   chatController.init();
 
-  // 3) Setup ripple buttons dynamic highlights
-  document.querySelectorAll('button, .btn, .mode-card').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      soundFx.playButton();
-      const ripple = document.createElement('span');
-      ripple.className = 'ripple';
-      
-      const rect = btn.getBoundingClientRect();
-      const size = Math.max(rect.width, rect.height);
-      
-      ripple.style.width = ripple.style.height = `${size}px`;
-      ripple.style.left = `${e.clientX - rect.left - size / 2}px`;
-      ripple.style.top = `${e.clientY - rect.top - size / 2}px`;
-      
-      btn.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 500);
-    });
+  // 3) Delegated feedback also covers profile links created after startup.
+  document.addEventListener('click', (event) => {
+    const target = event.target.closest('button, .btn, .mode-card, .profile-trigger, #menu-quick-profile');
+    if (!target) return;
+    soundFx.playButton();
+    if (!target.matches('button, .btn, .mode-card')) return;
+
+    const ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    const rect = target.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    ripple.style.width = ripple.style.height = `${size}px`;
+    ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
+    target.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 500);
   });
 
   // 4) Subscribe to Firebase Authentication state change

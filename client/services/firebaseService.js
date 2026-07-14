@@ -32,6 +32,7 @@ import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
 import { getWritableHistoryUids } from '../utils/matchHistory.js';
+import { findStaffProfileByRole } from '../utils/staffProfiles.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 
 const _dec = (val) => atob(val);
@@ -73,7 +74,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '23.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '24.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -341,13 +342,22 @@ export const firebaseService = {
   async getStaffProfile(role) {
     const normalizedRole = ['developer', 'influencer'].includes(role) ? role : '';
     if (!normalizedRole) return null;
-    const snapshot = await getDocs(query(
+    const exactSnapshot = await getDocs(query(
       collection(db, 'users'),
       where('staffRole', '==', normalizedRole),
       limit(1)
     ));
-    const profileDoc = snapshot.docs[0];
-    return profileDoc ? normalizeCosmetics({ uid: profileDoc.id, ...profileDoc.data() }) : null;
+    const exactProfile = exactSnapshot.docs[0];
+    if (exactProfile) return normalizeCosmetics({ uid: exactProfile.id, ...exactProfile.data() });
+
+    // Older assignments can contain capitalization or surrounding spaces.
+    // Credits must normalize them exactly like profile and gameplay tags do.
+    const allProfiles = await getDocs(collection(db, 'users'));
+    const profile = findStaffProfileByRole(
+      allProfiles.docs.map(profileDoc => ({ uid: profileDoc.id, ...profileDoc.data() })),
+      normalizedRole
+    );
+    return profile ? normalizeCosmetics(profile) : null;
   },
 
   async saveMatchResult(uid, isWin, isLoss, isDraw, goals, shots, dribbles, assists, ownGoals, isMvp, xpGained, tackles = 0, possessionPct = 0, matchId = null, coinReward = 0) {

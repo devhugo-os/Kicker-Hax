@@ -6,7 +6,7 @@ import { showToast } from '../utils/toast.js';
 import { buildChestReel, getReelTargetOffset } from '../utils/chestReel.js';
 import { escapeHtml, safeImageSource } from '../utils/safeHtml.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
-import { createChestPurchaseId } from '../utils/chestPurchase.js';
+import { createChestPurchaseId, markChestPurchaseCommitted } from '../utils/chestPurchase.js';
 import { normalizeCommunitySkinName } from '../utils/skinQueue.js';
 import { confirmDialog } from '../utils/dialog.js';
 import { encodeSkinCanvas, validateSkinImageFile } from '../utils/skinImage.js';
@@ -102,14 +102,17 @@ export const marketController = {
     if (!confirmed) return false;
     const won = rollChest(chestId);
     const purchaseId = createChestPurchaseId();
-    this.setPendingChestPurchase({ purchaseId, chestId, skinId: won.id });
+    const pendingPurchase = { purchaseId, chestId, skinId: won.id };
+    this.setPendingChestPurchase(pendingPurchase);
     this.openingChest = true;
     try {
       const result = await firebaseService.purchaseSkinChest(this.user.uid, chest, won, purchaseId);
-      this.clearPendingChestPurchase(purchaseId);
+      // Keep the committed receipt until the reveal ends. Closing the app
+      // during the spin can then reconcile the same idempotent transaction.
+      this.setPendingChestPurchase(markChestPurchaseCommitted(pendingPurchase, result));
       menuController.profileData = { ...menuController.profileData, ...result.profile };
       this.renderWallet();
-      await this.playRoulette(chest, won, result.duplicate, result.refund);
+      await this.playRoulette(chest, won, result.duplicate, result.refund, purchaseId);
       return true;
     } catch (error) {
       if (!this.isRetryablePurchaseError(error)) this.clearPendingChestPurchase(purchaseId);
@@ -120,7 +123,7 @@ export const marketController = {
     }
   },
 
-  playRoulette(chest, won, duplicate, refund) {
+  playRoulette(chest, won, duplicate, refund, purchaseId) {
     const modal = document.getElementById('chest-roulette-modal');
     const track = document.getElementById('chest-roulette-track');
     const result = document.getElementById('chest-result');
@@ -138,13 +141,14 @@ export const marketController = {
     // Flush the zero position before starting a long decelerating spin. Using
     // measured DOM coordinates avoids assumptions about margins or mobile CSS.
     void track.offsetWidth;
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      track.style.transition = 'transform 5s cubic-bezier(.08,.7,.12,1)';
-      track.style.transform = `translateX(${targetOffset}px)`;
-      this.stopRouletteSound = soundFx.startRoulette(5000);
-    }));
     return new Promise(resolve => {
       let completed = false;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (completed) return;
+        track.style.transition = 'transform 5s cubic-bezier(.08,.7,.12,1)';
+        track.style.transform = `translateX(${targetOffset}px)`;
+        this.stopRouletteSound = soundFx.startRoulette(5000);
+      }));
       const finish = () => {
         if (completed) return;
         completed = true;
@@ -165,6 +169,7 @@ export const marketController = {
         result.classList.remove('hidden');
         this.finishChestRoulette = null;
         this.lastChestReward = won;
+        this.clearPendingChestPurchase(purchaseId);
         if (!duplicate) soundFx.play('reward');
         resolve();
       };
@@ -223,9 +228,14 @@ export const marketController = {
     try {
       const result = await firebaseService.purchaseSkinChest(this.user.uid, chest, won, pending.purchaseId);
       menuController.profileData = { ...menuController.profileData, ...result.profile };
+      this.renderWallet();
       this.clearPendingChestPurchase(pending.purchaseId);
-      if (!result.duplicate) soundFx.play('reward');
-      showToast(`${won.name} foi recuperada e está no seu inventário.`, 'success');
+      if (result.duplicate) {
+        showToast(`Duplicata recuperada: ${result.refund} KX Coins devolvidos.`, 'success');
+      } else {
+        soundFx.play('reward');
+        showToast(`${won.name} foi recuperada e está no seu inventário.`, 'success');
+      }
     } catch (error) {
       if (!this.isRetryablePurchaseError(error)) this.clearPendingChestPurchase(pending.purchaseId);
       console.warn('[Kicker Market] Abertura pendente aguardando nova tentativa:', error);

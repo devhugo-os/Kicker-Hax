@@ -276,6 +276,29 @@ export const soundFx = {
     } catch (e) {}
   },
 
+  playPowerRumble() {
+    try {
+      const buses = this.ensureBuses();
+      if (!buses) return;
+      const { ac, outGain, recGain } = buses;
+      const now = ac.currentTime;
+      const oscillator = ac.createOscillator();
+      const gain = ac.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(82, now);
+      oscillator.frequency.exponentialRampToValueAtTime(34, now + 0.42);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.3, now + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+      oscillator.connect(gain);
+      gain.connect(outGain);
+      if (recDest) gain.connect(recGain);
+      oscillator.start(now);
+      oscillator.stop(now + 0.44);
+      this.percuss(0.16, 0.18);
+    } catch (e) {}
+  },
+
   playCheer() {
     try {
       if (!crowdGain) this.startCrowd();
@@ -332,6 +355,7 @@ export const soundFx = {
         this.createTone(360, 0.08, 'sawtooth', 0.18);
         setTimeout(() => this.createTone(720, 0.06, 'square', 0.16), 80);
         setTimeout(() => this.percuss(0.25, 0.04), 120);
+        this.playPowerRumble();
         break;
       case 'post':
         this.createTone(900, 0.04, 'square', 0.12);
