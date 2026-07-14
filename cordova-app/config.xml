@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.kickerhax.app" version="21.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://apache.org/cordova/ns/1.0">
+<widget id="com.kickerhax.app" version="21.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://apache.org/cordova/ns/1.0">
   <name>Kicker Hax</name>
   <description>Kicker Hax mobile shell that always loads the current GitHub Pages release.</description>
   <author email="devhugo.os@gmail.com" href="https://devhugo-os.github.io/Kicker-Hax/">Kicker Hax</author>
