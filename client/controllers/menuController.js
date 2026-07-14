@@ -31,6 +31,19 @@ export const menuController = {
     this.currentUser = user;
     if (!user) return;
 
+    // Authentication and profile creation are separate Firebase operations.
+    // Hydrate the profile before binding UI that depends on onboarding fields,
+    // especially after a seasonal reset creates a brand-new document.
+    this.profileData = await firebaseService.getUserProfile(user.uid);
+    if (!this.profileData) {
+      this.profileData = await firebaseService.ensureUserProfile(user);
+    }
+    if (!this.profileData) {
+      throw new Error('Perfil autenticado nao foi criado ou carregado.');
+    }
+    this.profileDraft = null;
+    this.profileDirty = false;
+
     // Hook Menu Buttons
     const btnPlay = document.getElementById('menu-btn-play');
     if (btnPlay) btnPlay.onclick = () => router.show('mode-select-screen');

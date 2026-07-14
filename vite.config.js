@@ -5,7 +5,9 @@ import { basename, resolve } from 'node:path';
 const cordovaConfig = readFileSync(resolve('cordova-app/config.xml'), 'utf8');
 const nativeVersion = cordovaConfig.match(/<widget\b[^>]*\bversion="([^"]+)"/)?.[1];
 if (!nativeVersion) throw new Error('Versao ausente em cordova-app/config.xml.');
-const displayVersion = nativeVersion.replace(/\.0$/, '');
+const displayVersion = nativeVersion.split('.').length > 2
+  ? nativeVersion.replace(/\.0$/, '')
+  : nativeVersion;
 
 export default defineConfig({
   root: 'client',
