@@ -12,16 +12,21 @@ export function normalizeReportTeam(team) {
 /** Produces a stable 1-10 match rating from the player's contribution. */
 export function calculateMatchRating(stats = {}, winnerTeam = 'draw') {
   const team = normalizeReportTeam(stats.team);
-  const resultBonus = winnerTeam === 'draw' ? 0.15 : team === normalizeReportTeam(winnerTeam) ? 0.4 : 0;
-  const possessionImpact = (Math.max(0, Math.min(100, Number(stats.possessionPct || 0))) - 50) * 0.006;
-  const raw = 5.8
-    + resultBonus
-    + (Number(stats.goals || 0) * 1.25)
-    + (Number(stats.assists || 0) * 0.75)
-    + (Math.min(8, Number(stats.tackles || 0)) * 0.18)
-    + (Math.min(10, Number(stats.dribbles || 0)) * 0.12)
-    + (Math.min(10, Number(stats.shots || 0)) * 0.05)
-    - (Number(stats.ownGoals || 0) * 1.1)
+  const won = winnerTeam !== 'draw' && team === normalizeReportTeam(winnerTeam);
+  const lost = winnerTeam !== 'draw' && !won;
+  const resultImpact = won ? 0.65 : lost ? -0.35 : 0.1;
+  const possessionImpact = (Math.max(0, Math.min(100, Number(stats.possessionPct || 0))) - 50) * 0.008;
+  const shots = Math.max(0, Number(stats.shots || 0));
+  const goals = Math.max(0, Number(stats.goals || 0));
+  const missedShots = Math.max(0, shots - goals);
+  const raw = 5.0
+    + resultImpact
+    + (goals * 1.2)
+    + (Number(stats.assists || 0) * 0.65)
+    + (Math.min(10, Number(stats.tackles || 0)) * 0.14)
+    + (Math.min(12, Number(stats.dribbles || 0)) * 0.08)
+    - (Math.min(10, missedShots) * 0.1)
+    - (Number(stats.ownGoals || 0) * 1.2)
     + possessionImpact;
   return Math.round(Math.max(1, Math.min(10, raw)) * 10) / 10;
 }

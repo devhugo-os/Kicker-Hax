@@ -28,7 +28,14 @@ import {
 import { getDatabase, ref, push, onChildAdded, onChildRemoved, onValue, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update, set, remove, onDisconnect, runTransaction as runRtdbTransaction } from 'firebase/database';
 import { groupSeasonHistoryByUid, mergeCompetitiveHistoryStats } from '../utils/statReconciliation.js';
 import { getPendingSkinRequests, getSkinQueueCleanup, normalizeCommunitySkinName } from '../utils/skinQueue.js';
-import { calculateOverallRating, compareOverallRanking, comparePossessionRanking, compareWinRateRanking } from '../utils/rankingScore.js';
+import {
+  calculateOverallRating,
+  compareOverallRanking,
+  comparePossessionRanking,
+  compareRatingRanking,
+  compareWinRateRanking,
+  getAverageMatchRating
+} from '../utils/rankingScore.js';
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
@@ -72,12 +79,13 @@ const emptySeasonStats = uid => ({
   seasonId: CURRENT_SEASON_ID,
   matchesPlayed: 0, wins: 0, losses: 0, draws: 0, goals: 0, shots: 0,
   dribbles: 0, assists: 0, ownGoals: 0, mvps: 0, tackles: 0, possessionTotal: 0,
-  possessionMatches: 0, processedMatchIds: {}
+  possessionMatches: 0, ratingTotal: 0, ratingMatches: 0,
+  processedMatchIds: {}, processedRatingMatchIds: {}
 });
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '31.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '32.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -363,7 +371,7 @@ export const firebaseService = {
     return profile ? normalizeCosmetics(profile) : null;
   },
 
-  async saveMatchResult(uid, isWin, isLoss, isDraw, goals, shots, dribbles, assists, ownGoals, isMvp, xpGained, tackles = 0, possessionPct = 0, matchId = null, coinReward = 0) {
+  async saveMatchResult(uid, isWin, isLoss, isDraw, goals, shots, dribbles, assists, ownGoals, isMvp, xpGained, tackles = 0, possessionPct = 0, matchId = null, coinReward = 0, matchRating = 0) {
     const statsRef = doc(db, 'stats', uid);
     const userRef = doc(db, 'users', uid);
     const safeMatchId = matchId ? String(matchId).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) : null;
@@ -381,7 +389,21 @@ export const firebaseService = {
       const seasonStats = stats.seasonId === CURRENT_SEASON_ID ? stats : emptySeasonStats(uid);
       const seasonUser = user.seasonId === CURRENT_SEASON_ID ? user : { ...user, level: 1, xp: 0, processedXpMatchIds: {} };
       const processedMatchIds = seasonStats.processedMatchIds || {};
+      const processedRatingMatchIds = seasonStats.processedRatingMatchIds || {};
+      const parsedRating = Number(matchRating);
+      const safeRating = Number.isFinite(parsedRating)
+        ? Math.max(1, Math.min(10, parsedRating))
+        : 5;
+      const ratingAlreadySaved = safeMatchId && processedRatingMatchIds[safeMatchId];
+      if (safeMatchId && processedMatchIds[safeMatchId] && ratingAlreadySaved) {
+        return;
+      }
       if (safeMatchId && processedMatchIds[safeMatchId]) {
+        transaction.update(statsRef, {
+          ratingTotal: (seasonStats.ratingTotal || 0) + safeRating,
+          ratingMatches: (seasonStats.ratingMatches || 0) + 1,
+          processedRatingMatchIds: { ...processedRatingMatchIds, [safeMatchId]: true }
+        });
         return;
       }
 
@@ -402,9 +424,14 @@ export const firebaseService = {
         tackles: (seasonStats.tackles || 0) + tackles,
         possessionTotal: (seasonStats.possessionTotal || 0) + possessionPct,
         possessionMatches: (seasonStats.possessionMatches || 0) + 1,
+        ratingTotal: (seasonStats.ratingTotal || 0) + safeRating,
+        ratingMatches: (seasonStats.ratingMatches || 0) + 1,
         processedMatchIds: safeMatchId
           ? { ...processedMatchIds, [safeMatchId]: true }
-          : processedMatchIds
+          : processedMatchIds,
+        processedRatingMatchIds: safeMatchId
+          ? { ...processedRatingMatchIds, [safeMatchId]: true }
+          : processedRatingMatchIds
       };
 
       // Update XP & level calculations
@@ -708,7 +735,7 @@ export const firebaseService = {
           uid, isWin, isLoss, isDraw,
           stats.goals || 0, stats.shots || 0, stats.dribbles || 0,
           stats.assists || 0, stats.ownGoals || 0, isMvp, xp, stats.tackles || 0,
-          stats.possessionPct || 0, matchId, coins
+          stats.possessionPct || 0, matchId, coins, stats.rating || 5
         );
       } else {
         await this.saveXpOnly(uid, xp, matchId);
@@ -800,6 +827,9 @@ export const firebaseService = {
           possessionAvg: (statsData.possessionMatches || statsData.matchesPlayed || 0) > 0
             ? Math.round((statsData.possessionTotal || 0) / (statsData.possessionMatches || statsData.matchesPlayed || 1))
             : 0,
+          ratingTotal: Number(statsData.ratingTotal || 0),
+          ratingMatches: Number(statsData.ratingMatches || 0),
+          ratingAvg: getAverageMatchRating(statsData),
           mvps: statsData.mvps || 0,
           xp: seasonActive ? (userData.xp || 0) : 0,
           // Wallet balance belongs to the user document and remains rankable
@@ -828,6 +858,7 @@ export const firebaseService = {
         if (criteria === 'ownGoals') return (r.ownGoals || 0) > 0;
         if (criteria === 'tackles') return (r.tackles || 0) > 0;
         if (criteria === 'possession') return (r.possessionAvg || 0) > 0;
+        if (criteria === 'rating') return (r.ratingMatches || 0) > 0;
         if (criteria === 'coins') return r.coins > 0;
         if (criteria === 'skins') return r.skinCount > 0;
         if (criteria === 'winrate') return (r.matchesPlayed || 0) > 0;
@@ -867,6 +898,8 @@ export const firebaseService = {
         ranking.sort((a, b) => b.tackles - a.tackles);
       } else if (criteria === 'possession') {
         ranking.sort(comparePossessionRanking);
+      } else if (criteria === 'rating') {
+        ranking.sort(compareRatingRanking);
       } else if (criteria === 'coins') {
         ranking.sort((a, b) => b.coins - a.coins);
       } else if (criteria === 'skins') {

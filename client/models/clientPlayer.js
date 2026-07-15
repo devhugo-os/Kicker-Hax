@@ -37,6 +37,7 @@ export class ClientPlayer {
     this.dribble_cd = serverPlayer.dribble_cd || 0;
     this.power_cd = serverPlayer.power_cd || 0;
     this.matchStats = serverPlayer.matchStats || null;
+    this.renderTrail = true;
     
     // Aesthetic trails
     this.trail = [];
@@ -69,7 +70,7 @@ export class ClientPlayer {
     if (Object.hasOwn(serverPlayer, 'matchStats')) this.matchStats = serverPlayer.matchStats || null;
 
     // Record trail for active sprint
-    if (this.staminaLock <= 0 && this.invuln > 0) {
+    if (this.renderTrail && this.staminaLock <= 0 && this.invuln > 0) {
       this.trail.push({ x: this.x, y: this.y, alpha: 0.5 });
       if (this.trail.length > 5) this.trail.shift();
     } else {
@@ -82,7 +83,7 @@ export class ClientPlayer {
   interpolate(lerpFactor = 0.35, now = performance.now(), localPrediction = null) {
     const frameMs = 1000 / 60;
     const elapsedFrames = Math.max(0.25, Math.min(2, (now - this.lastRenderAt) / frameMs || 1));
-    const snapshotAgeFrames = Math.max(0, Math.min(12, (now - this.stateReceivedAt) / frameMs));
+    const snapshotAgeFrames = Math.max(0, Math.min(6, (now - this.stateReceivedAt) / frameMs));
     let expectedX = this.targetX + (this.extrapolateMotion ? this.vx * snapshotAgeFrames : 0);
     let expectedY = this.targetY + (this.extrapolateMotion ? this.vy * snapshotAgeFrames : 0);
     if (this.extrapolateMotion && localPrediction) {
@@ -90,16 +91,18 @@ export class ClientPlayer {
       const ay = Number(localPrediction.input?.y || 0);
       const length = Math.hypot(ax, ay);
       if (length > 0.001) {
-        const oneWayFrames = Math.min(8, Math.max(0, Number(localPrediction.pingMs || 0) / 2 / frameMs));
+        const oneWayFrames = Math.min(3, Math.max(0, Number(localPrediction.pingMs || 0) / 2 / frameMs));
         const sprintMultiplier = localPrediction.input?.sprint && this.staminaLock <= 0 && this.stamina > 0 ? 1.5 : 1;
         const predictedSpeed = C.MAX_SPEED * 1.2 * sprintMultiplier;
-        expectedX += (ax / length) * predictedSpeed * oneWayFrames;
-        expectedY += (ay / length) * predictedSpeed * oneWayFrames;
+        // Predict only the velocity delta. Adding a full movement estimate on
+        // top of server velocity caused mobile overshoot and rubber-banding.
+        expectedX += (((ax / length) * predictedSpeed) - this.vx) * oneWayFrames;
+        expectedY += (((ay / length) * predictedSpeed) - this.vy) * oneWayFrames;
       }
     }
     const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
 
-    // Advance the visual target between snapshots. The twelve-frame cap keeps
+    // Advance the visual target between snapshots. The six-frame cap keeps
     // remote movement continuous during a short mobile/network jitter burst;
     // authoritative targets still correct every received snapshot.
     this.x += (expectedX - this.x) * correction;

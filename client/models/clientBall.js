@@ -38,7 +38,7 @@ export class ClientBall {
   interpolate(lerpFactor = 0.35, now = performance.now()) {
     const frameMs = 1000 / 60;
     const elapsedFrames = Math.max(0.25, Math.min(2, (now - this.lastRenderAt) / frameMs || 1));
-    const snapshotAgeFrames = Math.max(0, Math.min(12, (now - this.stateReceivedAt) / frameMs));
+    const snapshotAgeFrames = Math.max(0, Math.min(6, (now - this.stateReceivedAt) / frameMs));
     const expectedX = this.targetX + (this.extrapolateMotion ? this.vx * snapshotAgeFrames : 0);
     const expectedY = this.targetY + (this.extrapolateMotion ? this.vy * snapshotAgeFrames : 0);
     const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);

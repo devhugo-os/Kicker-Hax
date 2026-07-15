@@ -730,7 +730,7 @@ html.app-runtime #menu-btn-download-app {
 
 .profile-rating-pair {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin: 9px 0;
 }
@@ -757,6 +757,8 @@ html.app-runtime #menu-btn-download-app {
 .public-profile-rating strong { font-size: 23px; }
 .profile-rating-card.overall strong,
 .public-profile-rating.overall strong { color: #facc15; }
+.profile-rating-card.rating strong,
+.public-profile-rating.rating strong { color: #67e8f9; }
 .profile-rating-card.level strong,
 .public-profile-rating.level strong { color: #60a5fa; }
 
@@ -1790,13 +1792,13 @@ html.app-runtime #menu-btn-download-app {
 }
 .public-profile-header {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 174px;
+  grid-template-columns: 82px minmax(0, 1fr) 258px;
   align-items: center;
   gap: 16px;
   padding-right: 42px;
 }
 .public-profile-header p { color: var(--text-secondary); overflow-wrap: anywhere; }
-.public-profile-ratings { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.public-profile-ratings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .public-profile-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .public-profile-stats > div { display: grid; place-items: center; gap: 2px; padding: 10px 5px; background: rgba(255,255,255,.035); border: 1px solid var(--border-light); border-radius: 6px; }
 .public-profile-stats strong { font-size: 20px; }
@@ -1816,7 +1818,7 @@ html.app-runtime #menu-btn-download-app {
 
 @media (max-width: 760px), (max-height: 520px) {
   .public-profile-card { width: 100vw; height: 100dvh; max-height: 100dvh; padding: 8px; gap: 7px; border-radius: 0; }
-  .public-profile-header { grid-template-columns: 54px minmax(0, 1fr) 108px; gap: 7px; padding-right: 44px; }
+  .public-profile-header { grid-template-columns: 54px minmax(0, 1fr) 156px; gap: 7px; padding-right: 44px; }
   .public-profile-header .avatar-preview { width: 50px; height: 50px; font-size: 25px; }
   .public-profile-header h2 { font-size: 17px; }
   .public-profile-header p { font-size: 9px; max-height: 28px; overflow: auto; }
@@ -3394,11 +3396,11 @@ html.app-runtime #menu-btn-download-app {
 .match-report-team-stats > div { display: grid; gap: 2px; font-size: 10px; color: var(--text-muted); }
 .match-report-value { font-size: 13px; font-weight: 800; color: var(--text-primary); }
 
-.match-report-table { min-width: 620px; }
+.match-report-table { min-width: 860px; }
 .match-report-players { overflow-x: auto; }
 .match-report-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.7fr) repeat(7, minmax(45px, .55fr));
+  grid-template-columns: minmax(150px, 1.7fr) repeat(7, minmax(82px, .7fr));
   align-items: center;
   gap: 5px;
   min-height: 34px;
@@ -3438,8 +3440,8 @@ html.app-runtime #menu-btn-download-app {
   .match-report-team-stats { gap: 2px; }
   .match-report-team-stats > div { font-size: 7px; }
   .match-report-value { font-size: 10px; }
-  .match-report-table { min-width: 500px; }
-  .match-report-row { grid-template-columns: minmax(110px, 1.6fr) repeat(7, minmax(38px, .5fr)); min-height: 26px; padding: 3px 4px; font-size: 9px; }
+  .match-report-table { min-width: 740px; }
+  .match-report-row { grid-template-columns: minmax(120px, 1.6fr) repeat(7, minmax(70px, .65fr)); min-height: 26px; padding: 3px 4px; font-size: 9px; }
   .match-report-header { min-height: 18px; font-size: 7px; }
   .match-report-rating { font-size: 10px; }
   .match-details-card { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); padding: 10px; }

@@ -19,7 +19,7 @@ import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
 import { TutorialSession, tutorialNeedsAlly, tutorialNeedsBall, tutorialNeedsEnemy } from '../tutorial/tutorialSession.js';
-import { getPossessionConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
+import { getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
 import { buildMatchReport } from '../../shared/matchReport.js';
 import { renderMatchReport } from '../components/matchReportView.js';
 
@@ -43,6 +43,7 @@ export const gameController = {
   onlineMatchMeta: null,
   lastOnlineActionInput: {},
   localActionSoundUntil: {},
+  lastMatchReadySentAt: 0,
 
   // Render & Physics Loop
   canvas: null,
@@ -56,6 +57,7 @@ export const gameController = {
   // Replay
   replayFrames: [],
   inReplay: false,
+  replayFallbackTimer: null,
   onlineMatchFinished: false,
   replayFrameIdx: 0,
   replayTimer: 0,
@@ -226,6 +228,16 @@ export const gameController = {
     input.mobileTackleAssist = true;
   },
 
+  flushMobileOnlineInput() {
+    if (this.mode !== 'multiplayer' || router.currentScreenId !== 'match-screen' || this.hudEditorMode) return;
+    const localId = socketService.getSocket().id;
+    const player = this.players?.find(item => item.id === localId);
+    if (!player) return;
+    const input = { ...this.virtualInput };
+    this.applyMobileTackleAssist(input, player, this.ball);
+    socketService.sendGameInput(input);
+  },
+
   setupMobileControls() {
     this.virtualInput = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
     const controls = document.getElementById('mobile-controls');
@@ -244,6 +256,7 @@ export const gameController = {
       this.virtualInput.x = 0;
       this.virtualInput.y = 0;
       if (knob) knob.style.transform = 'translate(-50%, -50%)';
+      this.flushMobileOnlineInput();
     };
     const updateStick = (e) => {
       if (this.hudEditorMode) return;
@@ -261,6 +274,7 @@ export const gameController = {
       this.virtualInput.x = Math.max(-1, Math.min(1, dx / max));
       this.virtualInput.y = Math.max(-1, Math.min(1, dy / max));
       knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
+      this.flushMobileOnlineInput();
     };
     if (stick) {
       stick.addEventListener('pointerdown', (e) => {
@@ -306,10 +320,12 @@ export const gameController = {
         e.preventDefault();
         if (this.hudEditorMode) return;
         this.virtualInput[action] = true;
+        this.flushMobileOnlineInput();
       };
       const release = (e) => {
         e.preventDefault();
         this.virtualInput[action] = false;
+        this.flushMobileOnlineInput();
       };
       btn.addEventListener('pointerdown', press);
       btn.addEventListener('pointerup', release);
@@ -827,6 +843,7 @@ export const gameController = {
     const btnRankOwnGoals = document.getElementById('rank-filter-own-goals');
     const btnRankTackles = document.getElementById('rank-filter-tackles');
     const btnRankPossession = document.getElementById('rank-filter-possession');
+    const btnRankRating = document.getElementById('rank-filter-rating');
     const btnRankCoins = document.getElementById('rank-filter-coins');
     const btnRankSkins = document.getElementById('rank-filter-skins');
 
@@ -841,6 +858,7 @@ export const gameController = {
     if (btnRankAssists) btnRankAssists.onclick = () => this.loadRanking('assists');
     if (btnRankTackles) btnRankTackles.onclick = () => this.loadRanking('tackles');
     if (btnRankPossession) btnRankPossession.onclick = () => this.loadRanking('possession');
+    if (btnRankRating) btnRankRating.onclick = () => this.loadRanking('rating');
     if (btnRankMatches) btnRankMatches.onclick = () => this.loadRanking('matches');
     if (btnRankMvps) btnRankMvps.onclick = () => this.loadRanking('mvps');
     if (btnRankOverall) btnRankOverall.onclick = () => this.loadRanking('overall');
@@ -1694,6 +1712,7 @@ export const gameController = {
                 Physics.powerKick(p, localBallSim, ang, C.POWER_KICK_POWER);
                 frameSfx.push('power');
                 if (p.id === 'p1') this.tutorialSession?.record('power');
+                if (p.id === 'cpu') this.tutorialSession?.record('botKick');
               }
 
               // Regular Shoot Release
@@ -1708,6 +1727,7 @@ export const gameController = {
                   Physics.kickBall(p, localBallSim, ang, pow);
                   frameSfx.push('kick');
                   if (p.id === 'p1') this.tutorialSession?.record('kick');
+                  if (p.id === 'cpu') this.tutorialSession?.record('botKick');
                 }
                 p.kickCharge = 0;
               }
@@ -2264,7 +2284,8 @@ export const gameController = {
           playerStats.tackles || this.p1Tackles || 0,
           playerStats.possessionPct || 0,
           matchId,
-          coinsGained
+          coinsGained,
+          playerStats.rating || 5
         )
         : firebaseService.saveXpOnly(this.currentUser.uid, xpGained, matchId);
       // History and progress form one retryable unit. If either write fails,
@@ -2426,6 +2447,10 @@ export const gameController = {
     this.applyFieldDimensions(this.activeRoom?.fieldSize || this.fieldSize || 'medium');
 
     socketService.onGameState((state) => {
+      if (state?.status === 'loading' && Date.now() - this.lastMatchReadySentAt > 1000) {
+        this.lastMatchReadySentAt = Date.now();
+        socketService.sendMatchClientReady();
+      }
       const sequence = Number(state?.transportSequence || state?.sequence || 0);
       if (sequence > 0 && sequence <= this.lastGameStateSequence) return;
       if (sequence > 0) this.lastGameStateSequence = sequence;
@@ -2449,6 +2474,15 @@ export const gameController = {
       }
       if (!this.inReplay && state.status !== 'replay') {
         this.recordOnlineReplayFrame(state);
+      }
+      if (state.status === 'replay' && !this.inReplay && !this.replayFallbackTimer) {
+        // The reliable replay payload may be delayed behind other control
+        // packets on mobile. Start from buffered snapshots instead of freezing.
+        this.replayFallbackTimer = setTimeout(() => {
+          this.replayFallbackTimer = null;
+          if (this.status !== 'replay' || this.inReplay || !this.onlineReplayBuffer?.length) return;
+          this.beginOnlineReplay(this.onlineReplayBuffer, this.lastGoal, (1000 / 30) * C.REPLAY_SLOWMO_FACTOR);
+        }, 220);
       }
 
       // Play sound effects triggered on server
@@ -2503,6 +2537,8 @@ export const gameController = {
           this.players.push(p);
         }
         p.updateState(sp, snapshotReceivedAt, extrapolateMotion);
+        p.renderTrail = !this.isTouchDevice();
+        if (!p.renderTrail) p.trail.length = 0;
       });
 
       // Clear disconnected players
@@ -2522,36 +2558,14 @@ export const gameController = {
     });
 
     socketService.onPlayReplay(({ replayFrames, goalInfo, replayStartAt, replayDelayMs, replayFrameMs }) => {
+      if (this.inReplay) return;
       const frames = (replayFrames && replayFrames.length > 0) ? replayFrames : (this.onlineReplayBuffer || []);
       if (!frames || frames.length === 0) {
         this.lastGoal = goalInfo;
         this.endReplayPlayback();
         return;
       }
-      this.inReplay = true;
-      this.replayFrames = frames.slice();
-      this.replayFrameIdx = 0;
-      this.replayTimer = 0;
-      this.lastGoal = goalInfo;
-      this.replayFrameMs = Number(replayFrameMs) || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR);
-      // Device clocks are not synchronized. Start immediately when the replay
-      // packet arrives instead of holding a frozen first frame for clock sync.
-      this.replayStartedAtWall = Date.now();
-      this.lastReplaySfxIdx = -1;
-
-      document.getElementById('replay-overlay')?.classList.remove('hidden');
-      const replayVoteButton = document.getElementById('replay-vote-skip-btn');
-      if (replayVoteButton) {
-        const localId = socketService.getSocket().id;
-        const canVoteReplay = this.players.some(player => player.id === localId);
-        replayVoteButton.classList.toggle('hidden', !canVoteReplay);
-        replayVoteButton.disabled = !canVoteReplay;
-        replayVoteButton.textContent = `Pular replay (0/${this.players.length || 1})`;
-        replayVoteButton.onclick = canVoteReplay ? () => socketService.voteSkipReplay() : null;
-      }
-
-      // Start recording locally for MP4 export
-      this.startLocalReplayRecording();
+      this.beginOnlineReplay(frames, goalInfo, replayFrameMs);
     });
 
     socketService.onMatchEnded((result) => {
@@ -2709,8 +2723,9 @@ export const gameController = {
       if (this.inReplay) {
         this.playbackReplay();
       } else {
-        // Interpolate ball and players positions locally (LERP)
-        this.ball.interpolate(0.28);
+        // Interpolate ball and players at display refresh rate. The higher
+        // correction follows the 30 Hz snapshots without leaving stale echoes.
+        this.ball.interpolate(0.34);
         this.drawShotPreview(this.ctx, me, this.ball, input, Math.max(localCharge, me?.kickCharge || 0));
         this.ball.draw(this.ctx);
 
@@ -2718,7 +2733,7 @@ export const gameController = {
           const localPrediction = p.id === localId && this.status === 'playing' && !this.matchHostPaused
             ? { input, pingMs: this.pingMs || 0 }
             : null;
-          p.interpolate(0.28, performance.now(), localPrediction);
+          p.interpolate(0.34, performance.now(), localPrediction);
           p.draw(this.ctx, this.ball.owner);
         });
       }
@@ -2825,7 +2840,9 @@ export const gameController = {
       }
 
       // Render countdown banner
-      if (this.status === 'countdown') {
+      if (this.status === 'loading') {
+        this.drawCenterBanner('Aguardando jogadores...', 'A partida começa quando todos abrirem o campo.');
+      } else if (this.status === 'countdown') {
         this.drawCenterBanner(`Começa em ${this.countdown}...`, 'Prepare-se!');
       } else if (this.status === 'freeze') {
         const goal = this.lastGoal || { scorerName: 'Jogador', ownGoal: false };
@@ -2838,6 +2855,10 @@ export const gameController = {
     };
 
     this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
+    // The authoritative clock remains stopped until every active client has
+    // installed its state/replay listeners and opened this match view.
+    this.lastMatchReadySentAt = Date.now();
+    socketService.sendMatchClientReady();
   },
 
   stopMatchView() {
@@ -3403,7 +3424,7 @@ export const gameController = {
 
     // Trigger local audio triggers synced with frames
     if (this.replayFrameIdx !== this.lastReplaySfxIdx) {
-      frame.sfx.forEach(sfx => soundFx.play(sfx));
+      (frame.sfx || []).forEach(sfx => soundFx.play(sfx));
       this.lastReplaySfxIdx = this.replayFrameIdx;
     }
 
@@ -3436,6 +3457,8 @@ export const gameController = {
   },
 
   endReplayPlayback() {
+    clearTimeout(this.replayFallbackTimer);
+    this.replayFallbackTimer = null;
     this.inReplay = false;
     this.stopLocalReplayRecording();
     document.getElementById('replay-overlay')?.classList.add('hidden');
@@ -3453,6 +3476,33 @@ export const gameController = {
       this.pendingMatchResult = null;
       this.showOnlineMatchEnd(pending);
     }
+  },
+
+  beginOnlineReplay(frames, goalInfo, replayFrameMs) {
+    if (!Array.isArray(frames) || frames.length === 0) return;
+    clearTimeout(this.replayFallbackTimer);
+    this.replayFallbackTimer = null;
+    this.inReplay = true;
+    this.replayFrames = frames.slice();
+    this.replayFrameIdx = 0;
+    this.replayTimer = 0;
+    this.lastGoal = goalInfo || this.lastGoal;
+    this.replayFrameMs = Number(replayFrameMs) || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR);
+    // Device clocks are not synchronized. Start as soon as frames are local.
+    this.replayStartedAtWall = Date.now();
+    this.lastReplaySfxIdx = -1;
+    document.getElementById('replay-overlay')?.classList.remove('hidden');
+
+    const replayVoteButton = document.getElementById('replay-vote-skip-btn');
+    if (replayVoteButton) {
+      const localId = socketService.getSocket().id;
+      const canVoteReplay = this.players.some(player => player.id === localId);
+      replayVoteButton.classList.toggle('hidden', !canVoteReplay);
+      replayVoteButton.disabled = !canVoteReplay;
+      replayVoteButton.textContent = `Pular replay (0/${this.players.length || 1})`;
+      replayVoteButton.onclick = canVoteReplay ? () => socketService.voteSkipReplay() : null;
+    }
+    this.startLocalReplayRecording();
   },
 
   recordOnlineReplayFrame(state) {
@@ -3487,7 +3537,9 @@ export const gameController = {
       sfx: [...(state.soundEffects || [])]
     };
     this.onlineReplayBuffer.push(frame);
-    if (this.onlineReplayBuffer.length > C.REPLAY_CAPTURE_FRAMES) {
+    // Snapshots arrive at 30 Hz, so 120 frames retain four seconds without
+    // keeping twice as much object data on mobile devices.
+    if (this.onlineReplayBuffer.length > Math.ceil(C.REPLAY_CAPTURE_FRAMES / 2)) {
       this.onlineReplayBuffer.shift();
     }
   },
@@ -4282,6 +4334,9 @@ export const gameController = {
       ['possession', 'Posse Média', r => `${r.possessionAvg || 0}%`],
       ['possessionScore', 'Índice', r => `${Math.round(getPossessionConfidenceScore(r))}%`],
       ['possessionMatches', 'Jogos', r => r.possessionMatches || r.matchesPlayed || 0],
+      ['rating', 'Nota Média', r => Number(r.ratingAvg || 0).toFixed(1)],
+      ['ratingScore', 'Índice', r => Number(getRatingConfidenceScore(r) || 0).toFixed(1)],
+      ['ratingMatches', 'Jogos', r => r.ratingMatches || 0],
       ['mvps', 'MVPs', r => r.mvps || 0],
       ['coins', 'KX Coins', r => r.coins || 0],
       ['skins', 'Skins', r => r.skinCount || 0],
@@ -4297,6 +4352,8 @@ export const gameController = {
         ? ['winrate', 'winrateScore', 'matches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
         : filter === 'possession'
           ? ['possession', 'possessionScore', 'possessionMatches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
+          : filter === 'rating'
+            ? ['rating', 'ratingScore', 'ratingMatches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
         : allColumns.filter(([key]) => key === filter);
     const colSpan = 2 + visibleColumns.length;
 
@@ -4327,10 +4384,11 @@ export const gameController = {
     const btnOwnGoals = document.getElementById('rank-filter-own-goals');
     const btnTackles = document.getElementById('rank-filter-tackles');
     const btnPossession = document.getElementById('rank-filter-possession');
+    const btnRating = document.getElementById('rank-filter-rating');
     const btnCoins = document.getElementById('rank-filter-coins');
     const btnSkins = document.getElementById('rank-filter-skins');
 
-    [btnWins, btnGoals, btnShots, btnDribbles, btnAssists, btnMatches, btnMvps, btnOverall, btnWinrate, btnLevel, btnGeneral, btnLosses, btnDraws, btnOwnGoals, btnTackles, btnPossession, btnCoins, btnSkins].forEach(b => b?.classList.remove('active'));
+    [btnWins, btnGoals, btnShots, btnDribbles, btnAssists, btnMatches, btnMvps, btnOverall, btnWinrate, btnLevel, btnGeneral, btnLosses, btnDraws, btnOwnGoals, btnTackles, btnPossession, btnRating, btnCoins, btnSkins].forEach(b => b?.classList.remove('active'));
     if (filter === 'general') btnGeneral?.classList.add('active');
     if (filter === 'wins') btnWins?.classList.add('active');
     if (filter === 'losses') btnLosses?.classList.add('active');
@@ -4342,6 +4400,7 @@ export const gameController = {
     if (filter === 'assists') btnAssists?.classList.add('active');
     if (filter === 'tackles') btnTackles?.classList.add('active');
     if (filter === 'possession') btnPossession?.classList.add('active');
+    if (filter === 'rating') btnRating?.classList.add('active');
     if (filter === 'matches') btnMatches?.classList.add('active');
     if (filter === 'mvps') btnMvps?.classList.add('active');
     if (filter === 'overall') btnOverall?.classList.add('active');

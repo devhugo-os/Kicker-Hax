@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-CtajjtGK.js"></script>
+  <script type="module" crossorigin src="./assets/index-CrejFJUb.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-ge5jg6nm.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-DcXxzAPZ.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-C5DJf1Gz.css">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-B56pDnmk.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-CNG9Am_U.css">
 </head>
 <body>
 
@@ -137,7 +137,7 @@
 
             <div class="input-group">
               <label for="profile-username-input">Nome de Usuário (Apenas letras, números e sublinhado)</label>
-              <input type="text" id="profile-username-input" maxlength="15" placeholder="Escolha seu apelido" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+              <input type="text" id="profile-username-input" maxlength="20" placeholder="Escolha seu apelido" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
             </div>
 
             <div class="input-group">
@@ -185,7 +185,8 @@
               <div class="adv-stat-row"><span>Posse Média</span> <strong id="stats-possession">0%</strong></div>
               <div class="adv-stat-row"><span>Gols Contra</span> <strong id="stats-own-goals">0</strong></div>
               <div class="adv-stat-row"><span>MVPs</span> <strong id="stats-mvps">0</strong></div>
-              <div class="profile-rating-pair" aria-label="Classificação e nível do jogador">
+              <div class="profile-rating-pair" aria-label="Nota média, classificação e nível do jogador">
+                <div class="profile-rating-card rating"><span>Nota Média</span><strong id="stats-rating">0.0</strong></div>
                 <div class="profile-rating-card overall"><span>Overall</span><strong id="stats-overall">0</strong></div>
                 <div class="profile-rating-card level"><span>Nível</span><strong id="stats-level">1</strong></div>
               </div>
@@ -215,6 +216,7 @@
             <p id="public-profile-bio">Sem biografia.</p>
           </div>
           <div class="public-profile-ratings">
+            <div class="public-profile-rating rating"><span>Nota Média</span><strong id="public-profile-rating">0.0</strong></div>
             <div class="public-profile-rating overall"><span>Overall</span><strong id="public-profile-overall">0</strong></div>
             <div class="public-profile-rating level"><span>Nível</span><strong id="public-profile-level">1</strong></div>
           </div>
@@ -582,7 +584,7 @@
         <form autocomplete="off" id="create-room-form">
           <div class="input-group">
             <label for="room-name-input">Nome da Sala</label>
-            <input type="text" id="room-name-input" maxlength="15" required placeholder="Arena de Haxball" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <input type="text" id="room-name-input" maxlength="20" required placeholder="Arena de Haxball" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
           </div>
           <div class="input-group">
             <label for="room-password-input">Senha de Acesso (opcional)</label>
@@ -931,6 +933,7 @@
           <button id="rank-filter-assists" class="btn btn-secondary">Assistências</button>
           <button id="rank-filter-tackles" class="btn btn-secondary">Desarmes</button>
           <button id="rank-filter-possession" class="btn btn-secondary">Posse Média</button>
+          <button id="rank-filter-rating" class="btn btn-secondary">Nota Média</button>
           <button id="rank-filter-matches" class="btn btn-secondary">Jogos</button>
           <button id="rank-filter-mvps" class="btn btn-secondary">MVPs</button>
           <button id="rank-filter-coins" class="btn btn-secondary">KX Coins</button>
@@ -989,7 +992,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v31.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v32.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1013,7 +1016,7 @@
           <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
           <section><h3>Premiação Online</h3><ul><li>Vitória: 80 XP e, no competitivo, 30 KX Coins.</li><li>Empate: 30 XP e, no competitivo, 18 KX Coins.</li><li>Derrota: 15 XP e, no competitivo, 10 KX Coins.</li><li>Casual concede somente XP. Treino e partidas com CPU não concedem progresso.</li></ul></section>
           <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, assistências, chutes, dribles, desarmes, gols contra, posse média e MVP. A assistência pertence ao último companheiro que passou a bola quando o primeiro chute do recebedor vira gol; um toque adversário ou um segundo chute cancela a assistência. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
-          <section><h3>Overall, Geral, Winrate e Posse</h3><p><strong>Geral</strong> usa o Overall como critério principal e mostra as demais estatísticas para explicar a posição. O Overall é uma nota de carta entre 40 e 99 formada por resultados, gols, assistências, dribles, desarmes, precisão, posse, MVPs, gols contra e confiança pela quantidade de jogos. <strong>Winrate</strong> exibe porcentagem, índice de confiança e jogos; o limite inferior de Wilson premia campanhas eficientes e consistentes. <strong>Posse Média</strong> também exibe índice e jogos, usando uma base neutra de vinte partidas para impedir que um pico isolado supere quem mantém boa posse por mais jogos.</p></section>
+          <section><h3>Overall, Nota Média, Winrate e Posse</h3><p><strong>Geral</strong> usa o Overall como critério principal. O Overall vai de 40 a 99 e considera principalmente a Nota Média competitiva, além de resultados, gols, assistências, dribles, desarmes, precisão, posse, MVPs e gols contra. A <strong>Nota Média</strong> vai de 1,0 a 10,0, é mais rígida e possui ranking com índice ajustado e quantidade de jogos, evitando que uma partida isolada supere uma campanha consistente. <strong>Winrate</strong> usa o limite inferior de Wilson; <strong>Posse Média</strong> usa uma base neutra de vinte partidas.</p></section>
           <section><h3>Resultado e histórico detalhado</h3><p>Ao terminar uma partida, o relatório mostra participantes, nota individual, gols, assistências, chutes, dribles, desarmes, posse e os totais de cada time. Os mesmos detalhes podem ser reabertos clicando em uma partida no histórico próprio ou público. Partidas casuais exibem o relatório e dão XP, mas apenas as competitivas alimentam estatísticas, ranking e KX Coins.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
@@ -1031,6 +1034,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v32.0 - Sincronia em Campo</h4>
+            <p>Partidas online agora aguardam todos os jogadores abrirem o campo antes do relógio, enviam ações mobile imediatamente e evitam rajadas de física quando o host volta do segundo plano. Replay ganhou fallback no celular, menor carga e reprodução mais estável. O tutorial remove CPUs das finalizações técnicas, restaura a perseguição no desafio final e reconhece recuperações defensivas. Resultados mostram nomes completos das estatísticas e ordenam o time vencedor primeiro. Nota Média competitiva chegou aos perfis e ranking, imediatamente à esquerda do Overall, com critério rígido e peso principal na classificação geral. Nomes de jogador e sala agora aceitam até 20 caracteres.</p>
+          </section>
           <section>
             <h4>v31.0 - Relat&oacute;rio de Partida</h4>
             <p>Resultados e hist&oacute;ricos agora exibem participantes, notas, estat&iacute;sticas individuais e totais por time em uma interface responsiva. O ranking de posse ganhou prote&ccedil;&atilde;o maior para amostras pequenas, o tutorial remove o rival da miss&atilde;o de passe, mensagens corrompidas foram corrigidas e o descarte do perfil tamb&eacute;m desfaz a sele&ccedil;&atilde;o visual de skins.</p>

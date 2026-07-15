@@ -12,10 +12,10 @@ export const BALL_RADIUS = 10;
 export const PLAYER_RADIUS = 16;
 
 // User-generated content limits shared by the SPA and Node/Socket.IO server.
-export const USERNAME_MAX_LENGTH = 15;
+export const USERNAME_MAX_LENGTH = 20;
 export const PROFILE_BIO_MAX_LENGTH = 60;
 export const SKIN_NAME_MAX_LENGTH = 15;
-export const ROOM_NAME_MAX_LENGTH = 15;
+export const ROOM_NAME_MAX_LENGTH = 20;
 export const ROOM_PASSWORD_MAX_LENGTH = 8;
 export const CHAT_MESSAGE_MAX_LENGTH = 255;
 export const SKIN_IMAGE_MAX_BYTES = 500 * 1024;
@@ -57,7 +57,9 @@ export const POWER_KICK_CD = 60;
 export const GOAL_FREEZE_FRAMES = 180;
 export const END_FREEZE_FRAMES = 180;
 export const REPLAY_CAPTURE_FRAMES = 240;
-export const REPLAY_SLOWMO_FACTOR = 5;
+// Two rendered frames per captured frame keeps slow motion readable without
+// turning a four-second play into an excessively long replay on mobile.
+export const REPLAY_SLOWMO_FACTOR = 2;
 export const RESTART_COUNTDOWN_FRAMES = 180;
 
 export const Team = {

@@ -27,7 +27,7 @@ function renderTeamSummary(report, team) {
   stats.className = 'match-report-team-stats';
   [
     ['Posse', `${data.possessionPct || 0}%`], ['Chutes', data.shots || 0],
-    ['Assist.', data.assists || 0], ['Dribles', data.dribbles || 0], ['Desarmes', data.tackles || 0]
+    ['Assistências', data.assists || 0], ['Dribles', data.dribbles || 0], ['Desarmes', data.tackles || 0]
   ].forEach(([label, value]) => {
     const row = document.createElement('div');
     row.append(cell(label), cell(String(value), 'match-report-value'));
@@ -46,12 +46,19 @@ function renderPlayers(report, mvp) {
   table.className = 'match-report-table';
   const header = document.createElement('div');
   header.className = 'match-report-row match-report-header';
-  ['Jogador', 'Nota', 'G', 'A', 'C', 'D', 'T', 'Posse'].forEach(label => header.appendChild(cell(label)));
+  ['Jogador', 'Nota', 'Gols', 'Assistências', 'Chutes', 'Dribles', 'Desarmes', 'Posse'].forEach(label => header.appendChild(cell(label)));
   table.appendChild(header);
 
   report.playerStats
     .slice()
-    .sort((a, b) => (a.team - b.team) || (b.rating - a.rating) || String(a.username).localeCompare(String(b.username)))
+    .sort((a, b) => {
+      const winnerFirstA = report.winnerTeam === 'draw' ? 0 : a.team === report.winnerTeam ? 0 : 1;
+      const winnerFirstB = report.winnerTeam === 'draw' ? 0 : b.team === report.winnerTeam ? 0 : 1;
+      return (winnerFirstA - winnerFirstB)
+        || (a.team - b.team)
+        || (b.rating - a.rating)
+        || String(a.username).localeCompare(String(b.username));
+    })
     .forEach(player => {
       const row = document.createElement('div');
       row.className = `match-report-row team-${player.team === Team.RED ? 'red' : 'blue'}`;

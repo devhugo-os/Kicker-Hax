@@ -27,7 +27,9 @@ export function tutorialNeedsAlly(stepId) {
 }
 
 export function tutorialNeedsEnemy(stepId) {
-  return ['shoot', 'dribble', 'tackle'].includes(stepId);
+  // Chute normal and super chute are technique lessons. The rival returns for
+  // dribbling, tackling and the final challenge that combines every mechanic.
+  return ['dribble', 'tackle', 'goal'].includes(stepId);
 }
 
 export function tutorialNeedsBall(stepId) {
@@ -65,6 +67,7 @@ export class TutorialSession {
     this.trajectoryMoved = false;
     this.pendingOutcome = null;
     this.dribblePending = false;
+    this.tackleRecoveryArmed = false;
   }
 
   get step() { return TUTORIAL_STEPS[this.index]; }
@@ -107,6 +110,7 @@ export class TutorialSession {
     this.trajectoryMoved = false;
     this.pendingOutcome = null;
     this.dribblePending = false;
+    this.tackleRecoveryArmed = false;
   }
 
   complete() {
@@ -155,6 +159,7 @@ export class TutorialSession {
       return;
     }
     if (id === 'tackle' && eventName === 'tackleSuccess') this.registerSuccess('Desarme confirmado!');
+    if (id === 'tackle' && eventName === 'botKick') this.tackleRecoveryArmed = true;
     if (id === 'tackle' && eventName === 'tackleFailed') this.fail(payload.message || 'Missão falhou: o desarme não tirou a bola.');
     if (id === 'tackle' && eventName === 'goal' && payload.side === 'red') this.fail('Missão falhou: a CPU marcou antes do desarme.');
     if (['shoot', 'goal'].includes(id) && eventName === 'botTackle') this.fail('Missão falhou: a CPU parou você com um desarme.');
@@ -233,6 +238,7 @@ export class TutorialSession {
       this.trajectoryMoved = false;
       this.pendingOutcome = null;
       this.dribblePending = false;
+      this.tackleRecoveryArmed = false;
       this.onFeedbackChange?.(false, this);
       this.render();
       this.onAttemptReset?.(this.step, this);
@@ -273,6 +279,11 @@ export class TutorialSession {
     else if (id === 'dribble' && this.dribblePending && Number(player.dash_time || 0) <= 0) {
       if (ball.owner === 'p1') this.registerContinuousSuccess('Drible completo!');
       else this.fail('Missão falhou: você perdeu a bola durante o drible.');
+    } else if (id === 'tackle' && this.tackleRecoveryArmed && ball.owner === 'p1') {
+      // Recovering a bad CPU shot is still a defensive ball recovery and
+      // therefore counts toward the tackling lesson requested by the player.
+      this.tackleRecoveryArmed = false;
+      this.registerSuccess('Recuperação defensiva confirmada!');
     }
     if (this.progress >= 1) this.complete(); else this.refreshProgress();
   }

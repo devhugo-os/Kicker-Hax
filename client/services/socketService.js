@@ -9,6 +9,19 @@ import { buildRoomCleanupPatch, getOrphanRoomCodes, getRoomActivityTimestamp } f
 import { shouldDropRealtimeState } from '../utils/realtimeTransport.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
 
+// Prefer direct WebRTC routes, including local-network candidates, and keep a
+// small ICE pool ready so joining a room does not stall the first inputs.
+const PEER_OPTIONS = {
+  config: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ],
+    iceCandidatePoolSize: 4,
+    bundlePolicy: 'max-bundle'
+  }
+};
+
 class P2PSocketService {
   constructor() {
     this.listeners = new Map();
@@ -42,6 +55,7 @@ class P2PSocketService {
     this.peerGeneration = 0;
     this.lastInputSentAt = 0;
     this.lastInputSignature = '';
+    this.lastInputActionSignature = '';
     this.activeMatchId = null;
     const isNativeFrame = new URLSearchParams(window.location.search).get('native') === '1' && window.parent !== window;
     const sessionStore = isNativeFrame ? localStorage : sessionStorage;
@@ -164,7 +178,7 @@ class P2PSocketService {
     if (this.isHost) {
       // Direct local execution for host's own emissions
       this.handleHostReceivedData(this.clientId, event, data);
-    } else if (event === 'gameInput' && this.realtimeHostConn?.open) {
+    } else if (['gameInput', 'ping'].includes(event) && this.realtimeHostConn?.open) {
       const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
       if (!shouldDropRealtimeState(event, bufferedAmount)) {
         this.realtimeHostConn.send({ event, data });
@@ -255,7 +269,7 @@ class P2PSocketService {
     // Instantiate Host PeerJS
     if (this.peer) this.peer.destroy();
     const peerGeneration = ++this.peerGeneration;
-    const peer = new Peer(this.clientId);
+    const peer = new Peer(this.clientId, PEER_OPTIONS);
     this.peer = peer;
     
     peer.on('open', async (id) => {
@@ -339,7 +353,7 @@ class P2PSocketService {
         }
         conn.on('open', () => this.realtimeConnections.set(conn.peer, conn));
         conn.on('data', (payload) => {
-          if (payload?.event === 'gameInput') {
+          if (['gameInput', 'ping'].includes(payload?.event)) {
             this.handleHostReceivedData(conn.peer, payload.event, payload.data, conn);
           }
         });
@@ -451,7 +465,7 @@ class P2PSocketService {
       // Instantiate Guest PeerJS
       if (this.peer) this.peer.destroy();
       const peerGeneration = ++this.peerGeneration;
-      const peer = new Peer(this.clientId);
+      const peer = new Peer(this.clientId, PEER_OPTIONS);
       this.peer = peer;
 
       peer.on('open', (id) => {
@@ -511,7 +525,7 @@ class P2PSocketService {
         });
         this.realtimeHostConn = realtimeConn;
         realtimeConn.on('data', (payload) => {
-          if (payload?.event === 'gameState') this.triggerLocalEvent(payload.event, payload.data);
+          if (['gameState', 'pong'].includes(payload?.event)) this.triggerLocalEvent(payload.event, payload.data);
           else if (['joinSuccess', 'matchRejoined', 'joinError'].includes(payload?.event)) handleHostPayload(payload);
         });
         realtimeConn.on('close', () => {
@@ -791,6 +805,13 @@ class P2PSocketService {
       if (this.serverRoom.match) {
         this.serverRoom.match.updateInput(socketId, data);
       }
+    }
+
+    else if (event === 'matchClientReady') {
+      const match = this.serverRoom.match;
+      if (!match || (data?.matchId && data.matchId !== match.matchId)) return;
+      match.touchPlayer(socketId);
+      match.markClientReady(socketId);
     }
 
     else if (event === 'voteContinueWithoutDisconnected') {
@@ -1296,14 +1317,25 @@ class P2PSocketService {
 
   sendGameInput(inputData) {
     const now = Date.now();
-    const signature = `${inputData.x}|${inputData.y}|${+!!inputData.shoot}|${+!!inputData.sprint}|${+!!inputData.dribble}|${+!!inputData.tackle}|${+!!inputData.power}|${+!!inputData.mobileTackleAssist}`;
-    const actionChanged = signature !== this.lastInputSignature;
-    // 30 Hz is responsive enough for close tackles while unchanged input is
-    // still coalesced to protect the host from redundant packets.
-    if (!actionChanged && now - this.lastInputSentAt < 33) return;
+    const normalized = {
+      ...inputData,
+      x: Math.round(Number(inputData.x || 0) * 100) / 100,
+      y: Math.round(Number(inputData.y || 0) * 100) / 100
+    };
+    const actionSignature = `${+!!normalized.shoot}|${+!!normalized.sprint}|${+!!normalized.dribble}|${+!!normalized.tackle}|${+!!normalized.power}|${+!!normalized.mobileTackleAssist}`;
+    const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
+    const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
+    // Movement is capped at 30 Hz; button edges bypass that cap so mobile
+    // actions arrive immediately without joystick jitter flooding WebRTC.
+    if (!urgentActionChanged && now - this.lastInputSentAt < 33) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;
-    this.emit('gameInput', inputData);
+    this.lastInputActionSignature = actionSignature;
+    this.emit('gameInput', normalized);
+  }
+
+  sendMatchClientReady() {
+    this.emit('matchClientReady', { matchId: this.activeMatchId });
   }
 
   hostResetMatch() {

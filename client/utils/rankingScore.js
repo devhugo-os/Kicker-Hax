@@ -40,6 +40,23 @@ export function getPossessionConfidenceScore(player) {
   return ((getPossessionAverage(player) * matches) + (50 * priorMatches)) / (matches + priorMatches);
 }
 
+export function getAverageMatchRating(player) {
+  const matches = Math.max(0, Number(player?.ratingMatches || 0));
+  const explicitAverage = Number(player?.ratingAvg);
+  if (Number.isFinite(explicitAverage)) return Math.min(10, Math.max(0, explicitAverage));
+  return matches > 0
+    ? Math.min(10, Math.max(0, Number(player?.ratingTotal || 0) / matches))
+    : 0;
+}
+
+/** Pulls a small rating sample toward 5.0 until the player proves consistency. */
+export function getRatingConfidenceScore(player) {
+  const matches = Math.max(0, Number(player?.ratingMatches || 0));
+  if (matches === 0) return 0;
+  const priorMatches = 8;
+  return ((getAverageMatchRating(player) * matches) + (5 * priorMatches)) / (matches + priorMatches);
+}
+
 /**
  * Produces a FIFA-style 40-99 card rating from competitive per-match output.
  * Ten matches provide full confidence; before that, the rating is pulled
@@ -57,16 +74,19 @@ export function calculateOverallRating(player) {
   const possessionAverage = Number(player?.possessionAvg ?? (matches > 0
     ? Number(player?.possessionTotal || 0) / matches
     : 0));
+  const matchRating = getRatingConfidenceScore(player);
+  const ratingQuality = matchRating > 0 ? cap(matchRating - 1, 9) : 0;
   const performance =
-    (winRate * 32)
-    + (cap(perMatch(player?.goals), 1.5) * 14)
-    + (cap(perMatch(player?.assists), 1) * 10)
-    + (cap(perMatch(player?.dribbles), 4) * 10)
-    + (cap(perMatch(player?.tackles), 5) * 12)
-    + (accuracy * 8)
-    + (cap(possessionAverage, 65) * 6)
-    + (cap(perMatch(player?.mvps), 0.5) * 8)
-    - (cap(perMatch(player?.ownGoals), 0.5) * 4);
+    (ratingQuality * 35)
+    + (getWinRateConfidenceScore(player) * 25)
+    + (cap(perMatch(player?.goals), 1.5) * 8)
+    + (cap(perMatch(player?.assists), 1) * 7)
+    + (cap(perMatch(player?.dribbles), 4) * 5)
+    + (cap(perMatch(player?.tackles), 5) * 7)
+    + (accuracy * 4)
+    + (cap(possessionAverage, 65) * 4)
+    + (cap(perMatch(player?.mvps), 0.5) * 5)
+    - (cap(perMatch(player?.ownGoals), 0.5) * 5);
   const rawRating = 40 + (performance * 0.59);
   const confidence = Math.min(1, matches / 10);
   return Math.round(Math.min(99, Math.max(40, 50 + ((rawRating - 50) * confidence))));
@@ -101,5 +121,15 @@ export function comparePossessionRanking(a, b) {
   const aMatches = Number(a?.possessionMatches ?? a?.matchesPlayed ?? 0);
   const bMatches = Number(b?.possessionMatches ?? b?.matchesPlayed ?? 0);
   if (bMatches !== aMatches) return bMatches - aMatches;
+  return compareOverallRanking(a, b);
+}
+
+export function compareRatingRanking(a, b) {
+  const confidenceDifference = getRatingConfidenceScore(b) - getRatingConfidenceScore(a);
+  if (Math.abs(confidenceDifference) > Number.EPSILON) return confidenceDifference;
+  const averageDifference = getAverageMatchRating(b) - getAverageMatchRating(a);
+  if (Math.abs(averageDifference) > Number.EPSILON) return averageDifference;
+  const matchDifference = Number(b?.ratingMatches || 0) - Number(a?.ratingMatches || 0);
+  if (matchDifference) return matchDifference;
   return compareOverallRanking(a, b);
 }

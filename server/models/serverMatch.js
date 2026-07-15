@@ -14,10 +14,11 @@ export class ServerMatch {
     this.fieldSize = fieldSize;
     this.competitive = !!options.competitive;
     this.matchId = options.matchId || `${roomCode}-${Date.now()}-${globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10)}`;
-    this.startedAt = new Date().toISOString();
+    this.startedAt = null;
     this.allowCasualForfeit = !!options.allowCasualForfeit;
-    this.onlineGoalFreezeFrames = Math.min(C.GOAL_FREEZE_FRAMES, options.goalFreezeFrames || 120);
-    this.onlineReplaySlowmoFactor = options.replaySlowmoFactor || 3;
+    this.onlineGoalFreezeFrames = Math.min(C.GOAL_FREEZE_FRAMES, options.goalFreezeFrames || C.GOAL_FREEZE_FRAMES);
+    this.onlineReplaySlowmoFactor = options.replaySlowmoFactor || C.REPLAY_SLOWMO_FACTOR;
+    this.onlineReplayCaptureStride = 2;
 
     if (this.fieldSize === 'small') {
       this.w = 896; this.h = 560;
@@ -29,8 +30,9 @@ export class ServerMatch {
 
     this.score = { red: 0, blue: 0 };
     this.matchTime = duration * 60;
-    this.status = 'countdown'; // 'countdown' | 'playing' | 'freeze' | 'end-freeze' | 'ended'
-    this.countdownTimer = 300; // ~5s at 60Hz
+    this.status = 'loading'; // 'loading' | 'countdown' | 'playing' | 'freeze' | 'replay' | 'end-freeze' | 'ended'
+    this.countdownTimer = 0;
+    this.readyPlayerIds = new Set();
     this.goalFreezeTimer = 0;
     this.endFreezeTimer = 0;
     this.isHostPaused = false;
@@ -237,6 +239,19 @@ export class ServerMatch {
     }
   }
 
+  /** Starts the shared countdown only after every active player opened the match view. */
+  markClientReady(socketId) {
+    if (!this.inputs.has(socketId) || this.status !== 'loading') return false;
+    this.readyPlayerIds.add(socketId);
+    const everyoneReady = [...this.inputs.keys()].every(id => this.readyPlayerIds.has(id));
+    if (!everyoneReady) return false;
+    this.startedAt = new Date().toISOString();
+    this.status = 'countdown';
+    this.countdownTimer = 180;
+    this.soundEffects.push('whistle');
+    return true;
+  }
+
   kickoff() {
     const redPlayers = this.players.filter(p => p.team === C.Team.RED);
     const bluePlayers = this.players.filter(p => p.team === C.Team.BLUE);
@@ -333,13 +348,17 @@ export class ServerMatch {
     this.replayBufferIndex = (this.replayBufferIndex + 1) % this.replayBuffer.length;
   }
 
-  getReplayQueue() {
+  getReplayQueue(stride = 1) {
     const list = [];
     for (let i = 0; i < this.replayBuffer.length; i++) {
       const idx = (this.replayBufferIndex + i) % this.replayBuffer.length;
       if (this.replayBuffer[idx]) list.push(this.replayBuffer[idx]);
     }
-    return list;
+    const safeStride = Math.max(1, Math.floor(stride));
+    if (safeStride === 1) return list;
+    // Keep the final goal frame while reducing the reliable WebRTC payload.
+    const offset = Math.max(0, (list.length - 1) % safeStride);
+    return list.filter((_, index) => index % safeStride === offset);
   }
 
   triggerGoal(side, scorerId) {
@@ -667,7 +686,7 @@ export class ServerMatch {
       this.goalFreezeTimer--;
       this.recordFrame();
       if (this.goalFreezeTimer <= 0) {
-        const replayFrames = this.getReplayQueue();
+        const replayFrames = this.getReplayQueue(this.onlineReplayCaptureStride);
         const replayStartAt = Date.now();
         this.replayVotes = new Set();
         // Send replay buffer to all clients
@@ -676,11 +695,11 @@ export class ServerMatch {
           goalInfo: this.lastGoal,
           replayStartAt,
           replayDelayMs: 0,
-          replayFrameMs: (1000 / 60) * this.onlineReplaySlowmoFactor
+          replayFrameMs: (1000 / 60) * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor
         });
         this.status = 'replay';
         // Keep the authoritative match paused while clients play the slow-motion replay.
-        this.countdownTimer = Math.ceil(replayFrames.length * this.onlineReplaySlowmoFactor) + 10;
+        this.countdownTimer = Math.ceil(replayFrames.length * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor) + 10;
       }
     } else if (this.status === 'replay') {
       this.countdownTimer--;
@@ -830,7 +849,7 @@ export class ServerMatch {
 
     // Broadcast current snapshot to all users in room
     const sequence = ++this.snapshotSequence;
-    const includeExtendedState = sequence === 1 || sequence % 6 === 0;
+    const includeExtendedState = sequence === 1 || sequence % 10 === 0;
     const snap = {
       sequence,
       serverSentAt: Date.now(),
@@ -912,14 +931,17 @@ export class ServerMatch {
   runScheduledTick(timestamp = Date.now()) {
     const now = Number(timestamp) || Date.now();
     const elapsed = Math.max(0, now - this.lastScheduledTickAt);
-    const frames = Math.min(180, Math.max(1, Math.round(elapsed / (1000 / 60))));
+    // A suspended host tab can report a large elapsed interval at once. Never
+    // replay that backlog in a burst: it causes remote players to teleport and
+    // floods the WebRTC state channel. The worker normally keeps this at 1.
+    const frames = Math.min(6, Math.max(1, Math.round(elapsed / (1000 / 60))));
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
       // Physics remains at 60 Hz. Velocity-aware rendering fills the gap
-      // between 20 Hz snapshots while the lower cadence leaves headroom for
+      // between 30 Hz snapshots while the lower cadence leaves headroom for
       // remote/mobile WebRTC links and rooms with several spectators.
       const finalFrame = frame === frames - 1;
-      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 50;
+      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 33;
       this.tick();
       if (!this.skipBroadcast) this.lastBroadcastAt = now;
       if (this.status === 'ended') break;

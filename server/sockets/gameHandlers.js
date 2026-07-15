@@ -2,6 +2,14 @@
 import { db } from '../database/memoryDb.js';
 
 export function registerGameHandlers(io, socket) {
+  socket.on('matchClientReady', ({ matchId } = {}) => {
+    const conn = db.getConnection(socket.id);
+    const room = conn && db.getRoom(conn.roomCode);
+    if (!room?.match || (matchId && matchId !== room.match.matchId)) return;
+    room.match.touchPlayer(socket.id);
+    room.match.markClientReady(socket.id);
+  });
+
   socket.on('gameInput', (inputData) => {
     const conn = db.getConnection(socket.id);
     if (!conn) return;
