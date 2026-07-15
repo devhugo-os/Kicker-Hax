@@ -22,6 +22,9 @@ class P2PSocketService {
     // Peer connections
     this.connections = []; // guest WebRTC connections (if host)
     this.hostConn = null;   // host WebRTC connection (if guest)
+    this.realtimeConnections = new Map(); // guest id -> unordered state channel
+    this.realtimeHostConn = null;
+    this.gameStateSequence = 0;
     
     // Host Room state (only instantiated if host)
     this.serverRoom = null;
@@ -160,6 +163,11 @@ class P2PSocketService {
     if (this.isHost) {
       // Direct local execution for host's own emissions
       this.handleHostReceivedData(this.clientId, event, data);
+    } else if (event === 'gameInput' && this.realtimeHostConn?.open) {
+      const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
+      if (!shouldDropRealtimeState(event, bufferedAmount)) {
+        this.realtimeHostConn.send({ event, data });
+      }
     } else if (this.hostConn && this.hostConn.open) {
       // Send payload to host via WebRTC
       this.hostConn.send({ event, data });
@@ -168,13 +176,18 @@ class P2PSocketService {
 
   // Broadcast helper for host to send to self + all connected guests
   broadcast(event, data) {
-    this.triggerLocalEvent(event, data);
+    const payload = event === 'gameState'
+      ? { ...data, transportSequence: ++this.gameStateSequence }
+      : data;
+    this.triggerLocalEvent(event, payload);
     this.connections.forEach(conn => {
       if (conn.open) {
-        const bufferedAmount = Number(conn.dataChannel?.bufferedAmount || 0);
+        const realtimeConn = this.realtimeConnections.get(conn.peer);
+        const target = event === 'gameState' && realtimeConn?.open ? realtimeConn : conn;
+        const bufferedAmount = Number(target.dataChannel?.bufferedAmount || 0);
         if (shouldDropRealtimeState(event, bufferedAmount)) return;
         try {
-          conn.send({ event, data });
+          target.send({ event, data: payload });
         } catch (error) {
           if (event !== 'gameState') console.warn(`[P2PSocket] Falha ao enviar ${event}:`, error);
         }
@@ -263,6 +276,9 @@ class P2PSocketService {
 
       // Add connection to mock database structure
       this.connections = [];
+      this.realtimeConnections.forEach(conn => conn.close());
+      this.realtimeConnections.clear();
+      this.gameStateSequence = 0;
 
       // A reused room code must never inherit chat from a previous room.
       await this.cleanupRoomChats(code).catch(() => {});
@@ -314,6 +330,26 @@ class P2PSocketService {
     });
 
     peer.on('connection', (conn) => {
+      const realtimeChannel = conn.metadata?.channel === 'realtime';
+      if (realtimeChannel) {
+        if (this.peer !== peer || this.peerGeneration !== peerGeneration) {
+          conn.close();
+          return;
+        }
+        conn.on('open', () => this.realtimeConnections.set(conn.peer, conn));
+        conn.on('data', (payload) => {
+          if (payload?.event === 'gameInput') {
+            this.handleHostReceivedData(conn.peer, payload.event, payload.data, conn);
+          }
+        });
+        conn.on('close', () => {
+          if (this.realtimeConnections.get(conn.peer) === conn) this.realtimeConnections.delete(conn.peer);
+        });
+        conn.on('error', () => {
+          if (this.realtimeConnections.get(conn.peer) === conn) this.realtimeConnections.delete(conn.peer);
+        });
+        return;
+      }
       if (this.peer !== peer || this.peerGeneration !== peerGeneration) {
         conn.close();
         return;
@@ -416,8 +452,30 @@ class P2PSocketService {
         if (this.peer !== peer || this.peerGeneration !== peerGeneration || this.roomOperation !== 'join') return;
         console.log('[P2PSocket] Conectando como convidado com ID:', id);
 
-        const conn = this.peer.connect(roomData.hostPeerId);
+        const conn = this.peer.connect(roomData.hostPeerId, {
+          reliable: true,
+          serialization: 'json',
+          metadata: { channel: 'control' }
+        });
         this.hostConn = conn;
+
+        // Fast replaceable traffic must not share head-of-line blocking with
+        // chat, ping, replay and match lifecycle events.
+        const realtimeConn = this.peer.connect(roomData.hostPeerId, {
+          reliable: false,
+          serialization: 'json',
+          metadata: { channel: 'realtime' }
+        });
+        this.realtimeHostConn = realtimeConn;
+        realtimeConn.on('data', (payload) => {
+          if (payload?.event === 'gameState') this.triggerLocalEvent(payload.event, payload.data);
+        });
+        realtimeConn.on('close', () => {
+          if (this.realtimeHostConn === realtimeConn) this.realtimeHostConn = null;
+        });
+        realtimeConn.on('error', () => {
+          if (this.realtimeHostConn === realtimeConn) this.realtimeHostConn = null;
+        });
 
         conn.on('open', () => {
           console.log('[P2PSocket] WebRTC aberto com Host. Enviando requisição de entrada...');
@@ -518,8 +576,12 @@ class P2PSocketService {
         c.close();
       });
       this.connections = [];
+      this.realtimeConnections.forEach(conn => conn.close());
+      this.realtimeConnections.clear();
       this.serverRoom = null;
     } else if (this.hostConn) {
+      this.realtimeHostConn?.close();
+      this.realtimeHostConn = null;
       this.hostConn.close();
       this.hostConn = null;
       this.stopRoomChat();
@@ -538,6 +600,7 @@ class P2PSocketService {
     this.hostDepartureReported = false;
     this.roomOperation = null;
     this.activeMatchId = null;
+    this.gameStateSequence = 0;
     // PeerJS can emit close either synchronously or after cleanup.
     setTimeout(() => { this.isLeavingRoom = false; }, 0);
   }
@@ -870,6 +933,8 @@ class P2PSocketService {
   handleHostPlayerDisconnect(conn) {
     const socketId = conn.peer;
     this.connections = this.connections.filter(c => c !== conn);
+    this.realtimeConnections.get(socketId)?.close();
+    this.realtimeConnections.delete(socketId);
 
     if (this.serverRoom) {
       const departingPlayer = this.serverRoom.players.find(player => player.id === socketId);

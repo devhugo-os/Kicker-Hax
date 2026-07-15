@@ -28,6 +28,7 @@ import {
 import { getDatabase, ref, push, onChildAdded, onValue, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update, set, remove, onDisconnect, runTransaction as runRtdbTransaction } from 'firebase/database';
 import { groupSeasonHistoryByUid, mergeCompetitiveHistoryStats } from '../utils/statReconciliation.js';
 import { getPendingSkinRequests, getSkinQueueCleanup, normalizeCommunitySkinName } from '../utils/skinQueue.js';
+import { calculateOverallRating, compareOverallRanking, compareWinRateRanking } from '../utils/rankingScore.js';
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
@@ -74,7 +75,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '28.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '29.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -760,7 +761,7 @@ export const firebaseService = {
         // history but its stats transaction was interrupted or rejected.
         const statsData = mergeCompetitiveHistoryStats(storedStats, historyByUid.get(uid) || [], uid);
         const seasonActive = userData.seasonId === CURRENT_SEASON_ID;
-        ranking.push({
+        const rankingPlayer = {
           uid,
           username: userData.username,
           displayName: userData.username,
@@ -790,7 +791,9 @@ export const firebaseService = {
           skinCount: Array.isArray(userData.ownedSkins)
             ? new Set(userData.ownedSkins.filter(id => id !== 'rookie')).size
             : 0
-        });
+        };
+        rankingPlayer.overall = calculateOverallRating(rankingPlayer);
+        ranking.push(rankingPlayer);
       }
 
       // Filter out players who have 0 or less in the selected criteria
@@ -810,9 +813,9 @@ export const firebaseService = {
         if (criteria === 'possession') return (r.possessionAvg || 0) > 0;
         if (criteria === 'coins') return r.coins > 0;
         if (criteria === 'skins') return r.skinCount > 0;
+        if (criteria === 'winrate') return (r.matchesPlayed || 0) > 0;
         if (criteria === 'overall') {
-          const score = (r.wins * 8) + (r.goals * 5) + (r.mvps * 10) + (r.dribbles * 2) + r.shots + (r.matchesPlayed * 0.5) - (r.losses * 2);
-          return score > 0;
+          return (r.matchesPlayed || 0) > 0;
         }
         return true;
       });
@@ -851,12 +854,10 @@ export const firebaseService = {
         ranking.sort((a, b) => b.coins - a.coins);
       } else if (criteria === 'skins') {
         ranking.sort((a, b) => b.skinCount - a.skinCount || b.coins - a.coins);
+      } else if (criteria === 'winrate') {
+        ranking.sort(compareWinRateRanking);
       } else if (criteria === 'overall') {
-        ranking.sort((a, b) => {
-          const scoreA = (a.wins * 8) + (a.goals * 5) + (a.mvps * 10) + (a.dribbles * 2) + a.shots + (a.matchesPlayed * 0.5) - (a.losses * 2);
-          const scoreB = (b.wins * 8) + (b.goals * 5) + (b.mvps * 10) + (b.dribbles * 2) + b.shots + (b.matchesPlayed * 0.5) - (b.losses * 2);
-          return scoreB - scoreA;
-        });
+        ranking.sort(compareOverallRanking);
       }
 
       return ranking.slice(0, maxCount);

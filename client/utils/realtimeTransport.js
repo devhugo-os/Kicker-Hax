@@ -1,4 +1,8 @@
-export const MAX_REALTIME_BUFFERED_BYTES = 24 * 1024;
+export const MAX_REALTIME_BUFFERED_BYTES = 12 * 1024;
+
+export function isRealtimeEvent(event) {
+  return event === 'gameState' || event === 'gameInput';
+}
 
 /**
  * Realtime snapshots are replaceable: when the reliable WebRTC channel is
@@ -6,7 +10,7 @@ export const MAX_REALTIME_BUFFERED_BYTES = 24 * 1024;
  * Lobby, chat, replay and result events are never discarded here.
  */
 export function shouldDropRealtimeState(event, bufferedAmount = 0) {
-  return event === 'gameState'
+  return isRealtimeEvent(event)
     && Number.isFinite(Number(bufferedAmount))
     && Number(bufferedAmount) > MAX_REALTIME_BUFFERED_BYTES;
 }

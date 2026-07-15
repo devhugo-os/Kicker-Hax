@@ -896,6 +896,7 @@
         <div class="ranking-filters">
           <button id="rank-filter-general" class="btn btn-secondary active">Geral</button>
           <button id="rank-filter-overall" class="btn btn-secondary">Overall</button>
+          <button id="rank-filter-winrate" class="btn btn-secondary">Winrate</button>
           <button id="rank-filter-level" class="btn btn-secondary">Nível</button>
           <button id="rank-filter-wins" class="btn btn-secondary">Vitórias</button>
           <button id="rank-filter-losses" class="btn btn-secondary">Derrotas</button>
@@ -965,7 +966,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v28.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v29.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1003,6 +1004,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v29.0 - Jogo sem Fronteiras</h4>
+            <p>O multiplayer agora separa estados e comandos em um canal WebRTC r&aacute;pido, sem retransmitir quadros antigos, enquanto chat, ping, replay e resultados permanecem confi&aacute;veis. Snapshots fora de ordem s&atilde;o ignorados, a renderiza&ccedil;&atilde;o absorve oscila&ccedil;&otilde;es maiores e o tr&aacute;fego foi reduzido sem alterar a f&iacute;sica de 60 FPS. O tutorial ganhou press&atilde;o real na etapa de drible e aguarda toda a trajet&oacute;ria de chutes antes do feedback. Ranking de Winrate e nota Overall de 0 a 99 agora possuem crit&eacute;rios distintos, e o chat da partida ficou mais organizado.</p>
+          </section>
           <section>
             <h4>v28.0 - Conex&atilde;o em Jogo</h4>
             <p>O multiplayer agora descarta snapshots ultrapassados quando o WebRTC congestiona, reduz o peso dos estados e usa previs&atilde;o visual no jogador local para responder melhor mesmo com ping alto. O retorno exige o identificador exato da partida e &eacute; invalidado no encerramento. No tutorial, o feedback congela a jogada, qualquer CPU sob o painel o deixa transparente e a CPU parceira aparece somente na miss&atilde;o de passe. Chats de lobby e partida sempre abrem na mensagem mais recente.</p>

@@ -816,6 +816,7 @@ export const gameController = {
     const btnRankMatches = document.getElementById('rank-filter-matches');
     const btnRankMvps = document.getElementById('rank-filter-mvps');
     const btnRankOverall = document.getElementById('rank-filter-overall');
+    const btnRankWinrate = document.getElementById('rank-filter-winrate');
     const btnRankLevel = document.getElementById('rank-filter-level');
     const btnRankGeneral = document.getElementById('rank-filter-general');
     const btnRankLosses = document.getElementById('rank-filter-losses');
@@ -840,6 +841,7 @@ export const gameController = {
     if (btnRankMatches) btnRankMatches.onclick = () => this.loadRanking('matches');
     if (btnRankMvps) btnRankMvps.onclick = () => this.loadRanking('mvps');
     if (btnRankOverall) btnRankOverall.onclick = () => this.loadRanking('overall');
+    if (btnRankWinrate) btnRankWinrate.onclick = () => this.loadRanking('winrate');
     if (btnRankLevel) btnRankLevel.onclick = () => this.loadRanking('level');
     if (btnRankCoins) btnRankCoins.onclick = () => this.loadRanking('coins');
     if (btnRankSkins) btnRankSkins.onclick = () => this.loadRanking('skins');
@@ -1623,6 +1625,22 @@ export const gameController = {
               }
             }
 
+            if (this.tutorialMode && this.tutorialSession?.step?.id === 'dribble') {
+              // The dribble lesson needs visible pressure, not a tackle. The
+              // rival follows the carrier closely so the player can feel the
+              // protected dash without the lesson ending through a steal.
+              const dx = bluePlayer.x - redPlayer.x;
+              const dy = bluePlayer.y - redPlayer.y;
+              const distance = Math.hypot(dx, dy) || 1;
+              inputCPU.x = (dx / distance) * 0.82;
+              inputCPU.y = (dy / distance) * 0.82;
+              inputCPU.sprint = distance > 135;
+              inputCPU.tackle = false;
+              inputCPU.dribble = false;
+              inputCPU.power = false;
+              inputCPU.shoot = false;
+            }
+
             // 3) Apply Physics movements and skills
             const applySkills = (p, input) => {
               if (p.stun > 0) return;
@@ -2332,6 +2350,7 @@ export const gameController = {
     this.pingMs = null;
     this.pingSamples = [];
     this.lastPingAt = 0;
+    this.lastGameStateSequence = 0;
     this.lastOnlineActionInput = {};
     this.localActionSoundUntil = {};
     if (this.pingInterval) clearInterval(this.pingInterval);
@@ -2370,6 +2389,9 @@ export const gameController = {
     this.applyFieldDimensions(this.activeRoom?.fieldSize || this.fieldSize || 'medium');
 
     socketService.onGameState((state) => {
+      const sequence = Number(state?.transportSequence || state?.sequence || 0);
+      if (sequence > 0 && sequence <= this.lastGameStateSequence) return;
+      if (sequence > 0) this.lastGameStateSequence = sequence;
       const pingEl = document.getElementById('ping-indicator');
       const pingStale = !!this.lastPingAt && Date.now() - this.lastPingAt > 4500;
       if (pingEl) {
@@ -2651,7 +2673,7 @@ export const gameController = {
         this.playbackReplay();
       } else {
         // Interpolate ball and players positions locally (LERP)
-        this.ball.interpolate(0.35);
+        this.ball.interpolate(0.28);
         this.drawShotPreview(this.ctx, me, this.ball, input, Math.max(localCharge, me?.kickCharge || 0));
         this.ball.draw(this.ctx);
 
@@ -2659,7 +2681,7 @@ export const gameController = {
           const localPrediction = p.id === localId && this.status === 'playing' && !this.matchHostPaused
             ? { input, pingMs: this.pingMs || 0 }
             : null;
-          p.interpolate(0.35, performance.now(), localPrediction);
+          p.interpolate(0.28, performance.now(), localPrediction);
           p.draw(this.ctx, this.ball.owner);
         });
       }
@@ -4208,6 +4230,7 @@ export const gameController = {
 
     const headRow = document.getElementById('leaderboard-head-row');
     const allColumns = [
+      ['overall', 'Overall', r => r.overall || 0],
       ['level', 'Nível', r => r.level || 1],
       ['matches', 'Jogos', r => r.matchesPlayed || 0],
       ['wins', 'Vitórias', r => r.wins || 0],
@@ -4224,13 +4247,13 @@ export const gameController = {
       ['coins', 'KX Coins', r => r.coins || 0],
       ['skins', 'Skins', r => r.skinCount || 0],
       ['winrate', 'Winrate', r => {
-        const games = (r.wins || 0) + (r.losses || 0);
+        const games = r.matchesPlayed || 0;
         return games > 0 ? `${Math.round(((r.wins || 0) / games) * 100)}%` : '0%';
       }]
     ];
     const visibleColumns = filter === 'general'
       ? allColumns
-      : allColumns.filter(([key]) => key === filter || (filter === 'overall' && key === 'winrate'));
+      : allColumns.filter(([key]) => key === filter);
     const colSpan = 2 + visibleColumns.length;
 
     if (headRow) {
@@ -4252,6 +4275,7 @@ export const gameController = {
     const btnMatches = document.getElementById('rank-filter-matches');
     const btnMvps = document.getElementById('rank-filter-mvps');
     const btnOverall = document.getElementById('rank-filter-overall');
+    const btnWinrate = document.getElementById('rank-filter-winrate');
     const btnLevel = document.getElementById('rank-filter-level');
     const btnGeneral = document.getElementById('rank-filter-general');
     const btnLosses = document.getElementById('rank-filter-losses');
@@ -4262,7 +4286,7 @@ export const gameController = {
     const btnCoins = document.getElementById('rank-filter-coins');
     const btnSkins = document.getElementById('rank-filter-skins');
 
-    [btnWins, btnGoals, btnShots, btnDribbles, btnAssists, btnMatches, btnMvps, btnOverall, btnLevel, btnGeneral, btnLosses, btnDraws, btnOwnGoals, btnTackles, btnPossession, btnCoins, btnSkins].forEach(b => b?.classList.remove('active'));
+    [btnWins, btnGoals, btnShots, btnDribbles, btnAssists, btnMatches, btnMvps, btnOverall, btnWinrate, btnLevel, btnGeneral, btnLosses, btnDraws, btnOwnGoals, btnTackles, btnPossession, btnCoins, btnSkins].forEach(b => b?.classList.remove('active'));
     if (filter === 'general') btnGeneral?.classList.add('active');
     if (filter === 'wins') btnWins?.classList.add('active');
     if (filter === 'losses') btnLosses?.classList.add('active');
@@ -4277,6 +4301,7 @@ export const gameController = {
     if (filter === 'matches') btnMatches?.classList.add('active');
     if (filter === 'mvps') btnMvps?.classList.add('active');
     if (filter === 'overall') btnOverall?.classList.add('active');
+    if (filter === 'winrate') btnWinrate?.classList.add('active');
     if (filter === 'level') btnLevel?.classList.add('active');
     if (filter === 'coins') btnCoins?.classList.add('active');
     if (filter === 'skins') btnSkins?.classList.add('active');

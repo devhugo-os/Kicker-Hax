@@ -53,10 +53,13 @@ export class TutorialSession {
     this.successes = 0;
     this.feedback = null;
     this.advanceTimer = null;
+    this.trajectoryAction = null;
+    this.trajectoryMoved = false;
+    this.pendingOutcome = null;
   }
 
   get step() { return TUTORIAL_STEPS[this.index]; }
-  get enemyActive() { return ['shoot', 'tackle', 'goal'].includes(this.step?.id); }
+  get enemyActive() { return ['shoot', 'dribble', 'tackle', 'goal'].includes(this.step?.id); }
   get isManual() { return !!this.step?.manual; }
 
   start() {
@@ -91,6 +94,9 @@ export class TutorialSession {
     this.attemptFrames = 0;
     this.successes = 0;
     this.feedback = null;
+    this.trajectoryAction = null;
+    this.trajectoryMoved = false;
+    this.pendingOutcome = null;
   }
 
   complete() {
@@ -111,15 +117,28 @@ export class TutorialSession {
       this.attemptFrames = 0;
     }
     if (id === 'shoot' && eventName === 'kick') {
-      this.attemptActive = true;
-      this.attemptFrames = 0;
+      this.startTrajectory('shoot');
     }
     if (id === 'shoot' && eventName === 'goal') {
-      if (payload.side === 'blue' && this.attemptActive) this.registerSuccess('Gol confirmado!');
-      else this.fail('Missão falhou: a CPU marcou o gol.');
+      if (payload.side === 'blue' && this.attemptActive) {
+        this.pendingOutcome = { type: 'success', message: 'Gol confirmado!' };
+      } else {
+        this.fail('Missão falhou: a CPU marcou o gol.');
+      }
+      return;
+    }
+    if (id === 'shoot' && eventName === 'botTackle') {
+      const outcome = { type: 'failed', message: 'Missão falhou: a CPU parou você com um desarme.' };
+      if (this.trajectoryAction === 'shoot') this.pendingOutcome = outcome;
+      else this.fail(outcome.message);
+      return;
     }
     if (id === 'dribble' && eventName === 'dribble') this.registerSuccess('Drible válido!');
-    if (id === 'power' && eventName === 'power') this.complete();
+    if (id === 'power' && eventName === 'power') this.startTrajectory('power');
+    if (id === 'power' && eventName === 'goal') {
+      this.pendingOutcome = { type: 'success', message: 'Super chute concluído!' };
+      return;
+    }
     if (id === 'tackle' && eventName === 'tackleSuccess') this.registerSuccess('Desarme confirmado!');
     if (id === 'tackle' && eventName === 'tackleFailed') this.fail(payload.message || 'Missão falhou: o desarme não tirou a bola.');
     if (id === 'tackle' && eventName === 'goal' && payload.side === 'red') this.fail('Missão falhou: a CPU marcou antes do desarme.');
@@ -128,6 +147,23 @@ export class TutorialSession {
       if (payload.side === 'blue') this.complete();
       else this.fail('Missão falhou: a CPU marcou. Tente novamente.');
     }
+  }
+
+  startTrajectory(action) {
+    this.trajectoryAction = action;
+    this.trajectoryMoved = false;
+    this.pendingOutcome = null;
+    this.attemptActive = true;
+    this.attemptFrames = 0;
+  }
+
+  finishTrajectory(outcome = this.pendingOutcome) {
+    this.trajectoryAction = null;
+    this.pendingOutcome = null;
+    this.attemptActive = false;
+    if (outcome?.type === 'failed') this.fail(outcome.message);
+    else if (this.step?.id === 'shoot') this.registerSuccess(outcome?.message || 'Gol confirmado!');
+    else this.complete();
   }
 
   registerSuccess(message) {
@@ -161,6 +197,9 @@ export class TutorialSession {
       this.attemptActive = false;
       this.attemptFrames = 0;
       this.passStarted = false;
+      this.trajectoryAction = null;
+      this.trajectoryMoved = false;
+      this.pendingOutcome = null;
       this.onFeedbackChange?.(false, this);
       this.render();
       this.onAttemptReset?.(this.step, this);
@@ -171,6 +210,25 @@ export class TutorialSession {
     this.updateOcclusion(players || player, canvas);
     if (!player || !ball || this.isManual || this.step?.celebration || this.progress >= 1 || this.feedback) return;
     const id = this.step?.id;
+    if (id === 'shoot' || id === 'power') {
+      if (this.trajectoryAction === id) {
+        const speed = Math.hypot(Number(ball.vx || 0), Number(ball.vy || 0));
+        this.attemptFrames += 1;
+        if (speed > 0.8) this.trajectoryMoved = true;
+        if (id === 'shoot' && ball.owner === 'cpu' && !this.pendingOutcome) {
+          this.pendingOutcome = { type: 'failed', message: 'Missão falhou: a CPU defendeu ou tomou a bola.' };
+        }
+        const trajectoryEnded = this.trajectoryMoved && (speed < 0.45 || !!ball.owner || !!this.pendingOutcome);
+        if (trajectoryEnded) this.finishTrajectory();
+        else if (this.attemptFrames > 300) {
+          this.finishTrajectory(id === 'power'
+            ? { type: 'success', message: 'Super chute concluído!' }
+            : { type: 'failed', message: 'Missão falhou: o chute não entrou.' });
+        }
+      }
+      this.refreshProgress();
+      return;
+    }
     if (id === 'move') {
       if (this.lastPosition) this.progress += Math.hypot(player.x - this.lastPosition.x, player.y - this.lastPosition.y) / 420;
       this.lastPosition = { x: player.x, y: player.y };
@@ -179,10 +237,6 @@ export class TutorialSession {
     } else if (id === 'control' && ball.owner === 'p1') this.progress = 1;
     else if (id === 'pass' && this.passStarted && ball.owner === 'tutorial-ally') this.registerSuccess('Passe completo!');
     else if (id === 'pass' && this.attemptActive && ++this.attemptFrames > 240) this.fail('Missão falhou: o passe não chegou ao parceiro.');
-    else if (id === 'shoot') {
-      if (ball.owner === 'cpu') this.fail('Missão falhou: a CPU defendeu ou tomou a bola.');
-      else if (this.attemptActive && ++this.attemptFrames > 300) this.fail('Missão falhou: o chute não entrou.');
-    }
     if (this.progress >= 1) this.complete(); else this.refreshProgress();
   }
 

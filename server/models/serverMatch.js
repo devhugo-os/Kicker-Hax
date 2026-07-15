@@ -627,10 +627,7 @@ export class ServerMatch {
           invuln: p.invuln,
           tackle_cd: p.tackle_cd,
           dribble_cd: p.dribble_cd,
-          power_cd: p.power_cd,
-          badge: p.badge,
-          name: p.name,
-          staffRole: p.staffRole || ''
+          power_cd: p.power_cd
         })),
         score: this.score,
         matchTime: this.matchTime,
@@ -856,15 +853,15 @@ export class ServerMatch {
           invuln: p.invuln,
           tackle_cd: p.tackle_cd,
           dribble_cd: p.dribble_cd,
-          power_cd: p.power_cd,
-          badge: p.badge,
-          name: p.name,
-          staffRole: p.staffRole || ''
+          power_cd: p.power_cd
         };
-        // Live statistics do not change at rendering frequency. Sending them
-        // at 5 Hz keeps the sidebar current while shrinking normal snapshots.
+        // Live statistics and identity do not change at rendering frequency.
+        // Sending them near 3 Hz keeps the HUD current and normal states small.
         if (includeExtendedState) {
           state.matchStats = this.playerStats.get(p.id) ? { ...this.playerStats.get(p.id) } : null;
+          state.badge = p.badge;
+          state.name = p.name;
+          state.staffRole = p.staffRole || '';
         }
         return state;
       }),
@@ -912,10 +909,11 @@ export class ServerMatch {
     const frames = Math.min(180, Math.max(1, Math.round(elapsed / (1000 / 60))));
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
-      // Physics remains at 60 Hz. A 30 Hz snapshot cadence keeps direct local
-      // connections feeling fluid without letting spectators flood PeerJS.
+      // Physics remains at 60 Hz. Velocity-aware rendering fills the gap
+      // between 20 Hz snapshots while the lower cadence leaves headroom for
+      // remote/mobile WebRTC links and rooms with several spectators.
       const finalFrame = frame === frames - 1;
-      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 33;
+      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 50;
       this.tick();
       if (!this.skipBroadcast) this.lastBroadcastAt = now;
       if (this.status === 'ended') break;

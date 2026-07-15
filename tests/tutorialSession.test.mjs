@@ -100,9 +100,23 @@ test('shooting mission counts only goals after a player kick', () => {
   const validAttempt = new TutorialSession({ root: null });
   validAttempt.index = TUTORIAL_STEPS.findIndex(step => step.id === 'shoot');
   validAttempt.record('kick');
+  validAttempt.update({ player: {}, ball: { owner: null, vx: 12, vy: 0 }, input: {} });
   validAttempt.record('goal', { side: 'blue' });
+  assert.equal(validAttempt.successes, 0, 'the ball trajectory must finish before feedback freezes the field');
+  validAttempt.update({ player: {}, ball: { owner: null, vx: 0, vy: 0 }, input: {} });
   assert.equal(validAttempt.successes, 1);
   validAttempt.destroy();
+});
+
+test('super chute completes only after the ball trajectory finishes', () => {
+  const session = new TutorialSession({ root: null });
+  session.index = TUTORIAL_STEPS.findIndex(step => step.id === 'power');
+  session.record('power');
+  session.update({ player: {}, ball: { owner: null, vx: 20, vy: 0 }, input: {} });
+  assert.equal(session.feedback, null);
+  session.update({ player: {}, ball: { owner: null, vx: 0.1, vy: 0 }, input: {} });
+  assert.equal(session.feedback?.type, 'success');
+  session.destroy();
 });
 
 test('a confirmed bot tackle immediately fails shooting practice', () => {

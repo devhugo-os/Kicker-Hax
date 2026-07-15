@@ -7,8 +7,8 @@ import { drawStaffTagOnCanvas } from '../utils/staffTags.js';
 export class ClientPlayer {
   constructor(serverPlayer) {
     this.id = serverPlayer.id;
-    this.name = serverPlayer.name;
-    this.badge = serverPlayer.badge;
+    this.name = serverPlayer.name || 'Jogador';
+    this.badge = serverPlayer.badge || '';
     this.skin = serverPlayer.skin || '';
     this.team = serverPlayer.team; // 0 (Red) or 1 (Blue)
     
@@ -43,8 +43,8 @@ export class ClientPlayer {
   }
 
   updateState(serverPlayer, receivedAt = performance.now(), extrapolateMotion = true) {
-    this.name = serverPlayer.name;
-    this.badge = serverPlayer.badge;
+    if (Object.hasOwn(serverPlayer, 'name')) this.name = serverPlayer.name;
+    if (Object.hasOwn(serverPlayer, 'badge')) this.badge = serverPlayer.badge;
     this.skin = serverPlayer.skin || this.skin || '';
     this.team = serverPlayer.team;
     
@@ -53,7 +53,7 @@ export class ClientPlayer {
     this.targetX = serverPlayer.x;
     this.targetY = serverPlayer.y;
     this.targetDir = serverPlayer.dir;
-    this.staffRole = serverPlayer.staffRole || '';
+    if (Object.hasOwn(serverPlayer, 'staffRole')) this.staffRole = serverPlayer.staffRole || '';
     this.extrapolateMotion = extrapolateMotion;
     this.stateReceivedAt = receivedAt;
     
@@ -82,7 +82,7 @@ export class ClientPlayer {
   interpolate(lerpFactor = 0.35, now = performance.now(), localPrediction = null) {
     const frameMs = 1000 / 60;
     const elapsedFrames = Math.max(0.25, Math.min(2, (now - this.lastRenderAt) / frameMs || 1));
-    const snapshotAgeFrames = Math.max(0, Math.min(6, (now - this.stateReceivedAt) / frameMs));
+    const snapshotAgeFrames = Math.max(0, Math.min(12, (now - this.stateReceivedAt) / frameMs));
     let expectedX = this.targetX + (this.extrapolateMotion ? this.vx * snapshotAgeFrames : 0);
     let expectedY = this.targetY + (this.extrapolateMotion ? this.vy * snapshotAgeFrames : 0);
     if (this.extrapolateMotion && localPrediction) {
@@ -99,8 +99,9 @@ export class ClientPlayer {
     }
     const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
 
-    // Advance the visual target between snapshots. The six-frame cap absorbs
-    // internet jitter without allowing prediction to become game authority.
+    // Advance the visual target between snapshots. The twelve-frame cap keeps
+    // remote movement continuous during a short mobile/network jitter burst;
+    // authoritative targets still correct every received snapshot.
     this.x += (expectedX - this.x) * correction;
     this.y += (expectedY - this.y) * correction;
     

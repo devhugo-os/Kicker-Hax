@@ -80,3 +80,18 @@ test('mantem estatisticas quando o snapshot compacto nao as repete', () => {
   }, 5000);
   assert.deepEqual(player.matchStats, { goals: 2 });
 });
+
+test('snapshot compacto preserva identidade visual recebida no estado estendido', () => {
+  const player = new ClientPlayer({
+    id: 'p1', name: 'Hugo', badge: 'KX', staffRole: 'developer', team: 1,
+    x: 10, y: 10, dir: 0, vx: 0, vy: 0, stamina: 1, staminaLock: 0,
+    stun: 0, shootHalo: 0, invuln: 0
+  });
+  player.updateState({
+    id: 'p1', team: 1, x: 12, y: 10, dir: 0, vx: 1, vy: 0,
+    stamina: 1, staminaLock: 0, stun: 0, shootHalo: 0, invuln: 0
+  });
+  assert.equal(player.name, 'Hugo');
+  assert.equal(player.badge, 'KX');
+  assert.equal(player.staffRole, 'developer');
+});
