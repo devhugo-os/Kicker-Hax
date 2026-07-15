@@ -992,6 +992,9 @@ export const gameController = {
     const mobileStatsToggle = document.getElementById('mobile-stats-toggle');
     const mobilePauseToggle = document.getElementById('mobile-pause-toggle');
     if (gameChat) {
+      // Existing lobby messages are already in this shared chat container.
+      // Scroll again after layout settles on every platform and app WebView.
+      requestAnimationFrame(() => requestAnimationFrame(() => this.scrollChatToLatest('game-chat-messages')));
       const mobileChat = this.isTouchDevice() && this.mode === 'multiplayer';
       gameChat.classList.toggle('hidden', this.mode !== 'multiplayer' || mobileChat);
       gameChat.classList.toggle('mobile-chat-box', mobileChat);
@@ -4253,7 +4256,9 @@ export const gameController = {
     ];
     const visibleColumns = filter === 'general'
       ? allColumns
-      : allColumns.filter(([key]) => key === filter);
+      : filter === 'winrate'
+        ? ['winrate', 'matches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
+        : allColumns.filter(([key]) => key === filter);
     const colSpan = 2 + visibleColumns.length;
 
     if (headRow) {

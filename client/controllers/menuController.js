@@ -9,6 +9,7 @@ import { getEquippedSkin, getSkinById, getSkinValue, usesProfileBadge } from '..
 import { createProfileDraft, profilesDiffer } from '../utils/profileDraft.js';
 import { PROFILE_BIO_MAX_LENGTH, USERNAME_MAX_LENGTH } from '../../shared/constants.js';
 import { appendStaffTag } from '../utils/staffTags.js';
+import { calculateOverallRating } from '../utils/rankingScore.js';
 
 function isVersionNewer(candidate, installed) {
   const parse = value => String(value).split('.').map(part => Number.parseInt(part, 10) || 0);
@@ -287,6 +288,7 @@ export const menuController = {
       document.getElementById('stats-possession').textContent = `${stats.matchesPlayed ? Math.round((stats.possessionTotal || 0) / stats.matchesPlayed) : 0}%`;
       document.getElementById('stats-own-goals').textContent = stats.ownGoals || 0;
       document.getElementById('stats-mvps').textContent = stats.mvps || 0;
+      document.getElementById('stats-overall').textContent = calculateOverallRating(stats);
       document.getElementById('stats-level').textContent = this.profileData.level || 1;
       document.getElementById('stats-xp').textContent = this.profileData.xp || 0;
     }
@@ -549,6 +551,7 @@ export const menuController = {
       appendStaffTag(publicTitle, profile.staffRole, { full: true });
       document.getElementById('public-profile-bio').textContent = profile.bio || 'Sem biografia.';
       document.getElementById('public-profile-level').textContent = profile.level || 1;
+      document.getElementById('public-profile-overall').textContent = calculateOverallRating(stats);
       this.renderSkin(document.getElementById('public-profile-avatar'), getEquippedSkin(profile), profile.badge);
       const publicWinrate = stats.matchesPlayed > 0
         ? Math.round(((stats.wins || 0) / stats.matchesPlayed) * 100)

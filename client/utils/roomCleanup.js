@@ -17,6 +17,15 @@ export function buildRoomCleanupPatch(roomCode) {
   };
 }
 
+/** The newest host-owned write keeps a room alive even if timers were throttled. */
+export function getRoomActivityTimestamp(room) {
+  return Math.max(
+    Number(room?.hostHeartbeatAt || 0),
+    Number(room?.updatedAt || 0),
+    Number(room?.createdAt || 0)
+  );
+}
+
 export function getOrphanRoomCodes(rooms, roomChats, matchChats) {
   const activeCodes = new Set(Object.keys(rooms || {}).map(normalizeRoomCode).filter(Boolean));
   return [...new Set([

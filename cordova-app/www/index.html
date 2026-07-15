@@ -3,8 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-	<meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com https://www.googletagmanager.com;">
-    <meta http-equiv="Content-Security-Policy" content="default-src * data: blob: gap: https://ssl.gstatic.com 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; media-src * data: blob:; img-src * data: blob:; connect-src * https://devhugo-os.github.io https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src https://devhugo-os.github.io; connect-src 'self' https://devhugo-os.github.io; object-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>Kicker Hax</title>
     <style>
       html, body {
@@ -53,6 +52,8 @@
         box-shadow: 0 12px 28px rgba(59, 130, 246, 0.28);
       }
 
+      .launcher button[hidden] { display: none; }
+
       #game-frame {
         width: 100%;
         height: 100%;
@@ -71,7 +72,7 @@
     <div class="launcher">
       <strong>Kicker Hax</strong>
       <span>Entre com sua conta Google para jogar diretamente no aplicativo.</span>
-      <button id="open-game" type="button">Entrar com Google</button>
+      <button id="open-game" type="button" hidden>Entrar com Google</button>
       <span id="launcher-status" aria-live="polite"></span>
     </div>
     <iframe id="game-frame" title="Kicker Hax" allow="autoplay; fullscreen"></iframe>
@@ -81,8 +82,7 @@
       const loginButton = document.getElementById('open-game');
       const launcherStatus = document.getElementById('launcher-status');
       const gameFrame = document.getElementById('game-frame');
-      const nativeTokenKey = 'kicker_hax_native_access_token';
-      let nativeAccessToken = localStorage.getItem(nativeTokenKey) || '';
+      let nativeAccessToken = '';
       let frameReady = false;
       let silentLoginPending = true;
       let interactiveLoginPending = false;
@@ -92,11 +92,18 @@
         launcherStatus.textContent = message || '';
       }
 
+      function showLoginRetry(message) {
+        launcher.style.display = 'flex';
+        gameFrame.style.display = 'none';
+        loginButton.hidden = false;
+        setStatus(message);
+      }
+
       function buildGameUrl() {
         const url = new URL(gameUrl);
         url.searchParams.set('app', '1');
         url.searchParams.set('native', '1');
-        url.searchParams.set('nativeAppVersion', '29.0');
+        url.searchParams.set('nativeAppVersion', '30.0');
         // Always request the latest document; Vite assets stay cacheable by hash.
         url.searchParams.set('build', String(Date.now()));
         return url.toString();
@@ -112,7 +119,6 @@
 
       function openGameWithToken(accessToken) {
         nativeAccessToken = accessToken;
-        localStorage.setItem(nativeTokenKey, accessToken);
         frameReady = false;
         launcher.style.display = 'none';
         gameFrame.style.display = 'block';
@@ -120,13 +126,8 @@
       }
 
       function resumeSavedGame() {
-        // Keep the private app token across APK updates. The silent Google
-        // refresh below replaces it when available, while this prevents an
-        // iframe reload from needlessly showing the login screen first.
-        if (nativeAccessToken) {
-          openGameWithToken(nativeAccessToken);
-          return;
-        }
+        // Firebase persists its own session in the trusted game origin. Open
+        // it immediately without briefly exposing a native login button.
         launcher.style.display = 'none';
         gameFrame.style.display = 'block';
         gameFrame.src = buildGameUrl();
@@ -136,7 +137,7 @@
         if (interactiveLoginPending) return;
         const googlePlus = window.plugins?.googleplus;
         if (!googlePlus) {
-          setStatus('O login nativo ainda está carregando. Tente novamente.');
+          showLoginRetry('O login nativo ainda está carregando. Tente novamente.');
           return;
         }
         interactiveLoginPending = true;
@@ -150,14 +151,14 @@
           interactiveLoginPending = false;
           loginButton.disabled = false;
           if (!result?.accessToken) {
-            setStatus('O Google não retornou o token de acesso.');
+            showLoginRetry('O Google não retornou o token de acesso.');
             return;
           }
           openGameWithToken(result.accessToken);
         }, error => {
           interactiveLoginPending = false;
           loginButton.disabled = false;
-          setStatus(`Não foi possível entrar: ${String(error || 'erro desconhecido')}`);
+          showLoginRetry(`Não foi possível entrar: ${String(error || 'erro desconhecido')}`);
         });
       }
 
@@ -180,12 +181,22 @@
         }
         if (event.data?.type === 'KICKER_HAX_NATIVE_AUTH_FAILED') {
           nativeAccessToken = '';
-          localStorage.removeItem(nativeTokenKey);
           loginWithNativeGoogle();
           return;
         }
         if (event.data?.type === 'KICKER_HAX_DOWNLOAD_UPDATE') {
           const url = String(event.data.url || 'https://devhugo-os.github.io/Kicker-Hax/downloads/kicker-hax.apk');
+          let parsedUrl;
+          try {
+            parsedUrl = new URL(url);
+          } catch {
+            setStatus('O endereço da atualização é inválido.');
+            return;
+          }
+          if (parsedUrl.origin !== 'https://devhugo-os.github.io' || parsedUrl.pathname !== '/Kicker-Hax/downloads/kicker-hax.apk') {
+            setStatus('Atualização bloqueada por origem não confiável.');
+            return;
+          }
           const updater = window.cordova?.plugins?.KickerHaxUpdater;
           if (updater) {
             updater.downloadAndInstall(url, () => {

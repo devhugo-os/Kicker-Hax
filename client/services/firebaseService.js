@@ -35,6 +35,7 @@ import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChest
 import { getWritableHistoryUids } from '../utils/matchHistory.js';
 import { findStaffProfileByRole } from '../utils/staffProfiles.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
+import { getFeaturedCycle } from '../utils/featuredCycle.js';
 
 const _dec = (val) => atob(val);
 const firebaseConfig = {
@@ -75,7 +76,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '29.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '30.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -487,7 +488,7 @@ export const firebaseService = {
     const assetRef = ref(rtdb, `skinAssets/${skin.id}`);
     const assetSnapshot = await get(assetRef);
     if (!assetSnapshot.exists()) {
-      await set(assetRef, { name: skin.name || 'Skin da comunidade', image: skin.image, creatorUid: skin.creatorUid || '' });
+      await set(assetRef, { name: skin.name || 'Skin da comunidade', image: skin.image, creatorUid: skin.creatorUid || '', value: Number(price || 0) });
     }
     const next = await runTransaction(db, async transaction => {
       const snap = await transaction.get(userRef);
@@ -500,7 +501,8 @@ export const firebaseService = {
       const owned = Array.isArray(profile.ownedSkins) ? [...profile.ownedSkins] : ['rookie'];
       if (owned.includes(skin.id)) throw new Error('Você já possui esta skin.');
       owned.push(skin.id);
-      const updated = { coins: coins - price, ownedSkins: owned };
+      const skinPurchaseValues = { ...(profile.skinPurchaseValues || {}), [skin.id]: Number(price || 0) };
+      const updated = { coins: coins - price, ownedSkins: owned, skinPurchaseValues };
       transaction.update(userRef, updated);
       return updated;
     });
@@ -537,30 +539,40 @@ export const firebaseService = {
   },
 
   skinPeriodKey(cadence, date = new Date()) {
-    if (cadence === 'daily') return this.skinDayKey(date);
-    if (cadence === 'monthly') return this.skinDayKey(date).slice(0, 7);
-    const local = new Date(`${this.skinDayKey(date)}T12:00:00`);
-    const weekday = (local.getDay() + 6) % 7;
-    local.setDate(local.getDate() - weekday);
-    return this.skinDayKey(local);
+    return getFeaturedCycle(cadence, date).period;
   },
 
   async getFeaturedSkin(cadence) {
-    const period = this.skinPeriodKey(cadence);
+    const cycle = getFeaturedCycle(cadence);
+    const period = cycle.period;
     const featuredRoot = ref(rtdb, `skinFeatured/${cadence}`);
     const featuredSnapshot = await get(featuredRoot);
     const featured = featuredSnapshot.val() || {};
     if (featured[period]) return featured[period];
-    const previous = Object.keys(featured).sort().map(key => featured[key]).at(-1) || null;
     const [requestsSnapshot, allFeaturedSnapshot] = await Promise.all([
       get(ref(rtdb, 'skinRequests')),
       get(ref(rtdb, 'skinFeatured'))
     ]);
     const requestsByDay = requestsSnapshot.val() || {};
-    const candidates = getPendingSkinRequests(requestsByDay, allFeaturedSnapshot.val() || {}, this.skinDayKey());
+    const allFeatured = allFeaturedSnapshot.val() || {};
+    const candidates = getPendingSkinRequests(requestsByDay, allFeatured, this.skinDayKey());
     if (!candidates.length) {
+      const previousEntries = Object.entries(allFeatured).flatMap(([sourceCadence, periods]) =>
+        Object.entries(periods || {}).map(([sourcePeriod, item]) => ({ sourceCadence, sourcePeriod, item }))
+      ).filter(entry => entry.item?.image).sort((a, b) => Number(a.item.createdAt || a.item.startsAt || 0) - Number(b.item.createdAt || b.item.startsAt || 0));
+      const previousEntry = previousEntries.at(-1) || null;
+      const previous = previousEntry?.item || null;
       if (!previous) return null;
-      const carried = { ...previous, period, carried: true };
+      const carried = {
+        ...previous,
+        cadence,
+        period,
+        startsAt: cycle.startsAt,
+        expiresAt: cycle.expiresAt,
+        carried: true,
+        sourceCadence: previousEntry.sourceCadence,
+        sourcePeriod: previousEntry.sourcePeriod
+      };
       const carryResult = await runRtdbTransaction(ref(rtdb, `skinFeatured/${cadence}/${period}`), current => current || carried);
       return carryResult.snapshot.val();
     }
@@ -576,7 +588,10 @@ export const firebaseService = {
       requestId,
       requestDay: winner.requestDay,
       cadence,
-      period
+      period,
+      startsAt: cycle.startsAt,
+      expiresAt: cycle.expiresAt,
+      createdAt: Date.now()
     };
     const committed = await runRtdbTransaction(ref(rtdb, `skinFeatured/${cadence}/${period}`), current => current || selected);
     return committed.snapshot.val();

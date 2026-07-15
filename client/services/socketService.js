@@ -5,7 +5,7 @@ import { ref, set, remove, get, update, onValue, off, onDisconnect, push, onChil
 import { ServerRoom } from '../../server/models/serverRoom.js';
 import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
-import { buildRoomCleanupPatch, getOrphanRoomCodes } from '../utils/roomCleanup.js';
+import { buildRoomCleanupPatch, getOrphanRoomCodes, getRoomActivityTimestamp } from '../utils/roomCleanup.js';
 import { shouldDropRealtimeState } from '../utils/realtimeTransport.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
 
@@ -102,7 +102,7 @@ class P2PSocketService {
 
   /** A playersCount alone is leftover data, never a joinable multiplayer room. */
   isActiveRoomRecord(room, now = Date.now()) {
-    const heartbeat = Number(room?.hostHeartbeatAt || room?.updatedAt || 0);
+    const heartbeat = getRoomActivityTimestamp(room);
     return !!room
       && /^[A-Z0-9]{6}$/.test(String(room.code || ''))
       && typeof room.name === 'string' && room.name.trim().length > 0
@@ -664,7 +664,12 @@ class P2PSocketService {
 
       // Update matchmaking metadata count
       const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
-      update(roomRef, { playersCount: this.serverRoom.players.length, updatedAt: Date.now() });
+      const joinedAt = Date.now();
+      update(roomRef, {
+        playersCount: this.serverRoom.players.length,
+        hostHeartbeatAt: joinedAt,
+        updatedAt: joinedAt
+      });
 
       const lobbyInfo = this.serverRoom.getLobbyInfo();
       if (conn) conn.send({ event: 'joinSuccess', data: { code: this.roomCode, lobbyInfo } });
@@ -1376,7 +1381,8 @@ class P2PSocketService {
     }
 
     const room = snapshot.val();
-    if (!this.isActiveRoomRecord(room)) {
+    const connectedToThisRoom = this.roomCode === roomCode && this.hasLiveHostConnection();
+    if (!this.isActiveRoomRecord(room) && !connectedToThisRoom) {
       await this.cleanupRoomData(roomCode).catch(() => {});
       return null;
     }

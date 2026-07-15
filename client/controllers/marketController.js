@@ -5,18 +5,19 @@ import { CHESTS, SKINS, getSkinById, getSkinValue, rollChest } from '../data/ski
 import { showToast } from '../utils/toast.js';
 import { buildChestReel, getReelTargetOffset } from '../utils/chestReel.js';
 import { escapeHtml, safeImageSource } from '../utils/safeHtml.js';
-import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
+import { getCommunitySkinInventoryValue, getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { createChestPurchaseId, markChestPurchaseCommitted } from '../utils/chestPurchase.js';
 import { normalizeCommunitySkinName } from '../utils/skinQueue.js';
 import { confirmDialog } from '../utils/dialog.js';
 import { encodeSkinCanvas, validateSkinImageFile } from '../utils/skinImage.js';
 import { SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { soundFx } from '../utils/soundFx.js';
+import { formatFeaturedTimeLeft } from '../utils/featuredCycle.js';
 
 const FEATURED = {
   daily: { label: 'Skin do dia', price: 90, reset: 'Troca diariamente' },
   weekly: { label: 'Skin da semana', price: 180, reset: 'Troca toda semana' },
-  monthly: { label: 'Skin do mês', price: 360, reset: 'Troca todo mês' }
+  monthly: { label: 'Skin do mês', price: 360, reset: 'Troca a cada 4 semanas' }
 };
 const rarityLabel = { none: 'Sem skin', common: 'Comum', rare: 'Rara', epic: 'Épica', legendary: 'Lendária', custom: 'Skin do dia' };
 
@@ -261,7 +262,8 @@ export const marketController = {
         return;
       }
       const owned = (menuController.profileData?.ownedSkins || []).includes(skin.id);
-      card.innerHTML = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name || config.label)}"><div><span class="market-eyebrow">${escapeHtml(config.label)} • ${escapeHtml(config.reset)}${skin.carried ? ' • mantida por falta de nova candidata' : ''}</span><h3>${escapeHtml(skin.name || 'Skin da comunidade')}</h3><p>Enviada por ${escapeHtml(skin.username || 'Jogador')}</p><strong>${config.price} KX Coins</strong><button class="btn btn-primary" type="button" ${owned ? 'disabled' : ''}>${owned ? 'Já adquirida' : 'Comprar'}</button></div>`;
+      const resetLabel = skin.expiresAt ? formatFeaturedTimeLeft(skin.expiresAt) : config.reset;
+      card.innerHTML = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name || config.label)}"><div><span class="market-eyebrow">${escapeHtml(config.label)} • ${escapeHtml(resetLabel)}${skin.carried ? ' • mantida por falta de nova candidata' : ''}</span><h3>${escapeHtml(skin.name || 'Skin da comunidade')}</h3><p>Enviada por ${escapeHtml(skin.username || 'Jogador')}</p><strong>${config.price} KX Coins</strong><button class="btn btn-primary" type="button" ${owned ? 'disabled' : ''}>${owned ? 'Já adquirida' : 'Comprar'}</button></div>`;
       card.querySelector('button')?.addEventListener('click', async () => {
         const purchaseButton = card.querySelector('button');
         if (purchaseButton?.disabled) return;
@@ -298,13 +300,18 @@ export const marketController = {
 
   async loadInventory() {
     if (!this.user) return;
-    menuController.profileData = await firebaseService.getUserProfile(this.user.uid);
+    const [profile, featured] = await Promise.all([
+      firebaseService.getUserProfile(this.user.uid),
+      firebaseService.getFeaturedSkins().catch(() => ({}))
+    ]);
+    menuController.profileData = profile;
     this.renderWallet();
     const owned = menuController.profileData?.ownedSkins?.length ? menuController.profileData.ownedSkins : ['rookie'];
     const ownedItems = (await Promise.all(owned.map(async id => {
       if (id.startsWith('community_')) {
         const custom = await firebaseService.getSkinAsset(id);
-        return custom ? { ...custom, rarity: 'custom', value: getSkinValue({ custom: true }) } : null;
+        const paidValue = getCommunitySkinInventoryValue(menuController.profileData, custom, featured);
+        return custom ? { ...custom, rarity: 'custom', value: paidValue } : null;
       }
       const skin = getSkinById(id);
       return { ...skin, value: getSkinValue(skin) };
@@ -454,6 +461,13 @@ export const marketController = {
     // propagating or temporarily unavailable in the Realtime Database.
     const sent = justSubmitted || await firebaseService.hasSkinRequestToday(this.user.uid).catch(() => false);
     this.requestSent = sent;
+    if (justSubmitted) this.resetRequestForm();
+    const file = document.getElementById('skin-request-file');
+    const zoom = document.getElementById('skin-crop-zoom');
+    const name = document.getElementById('skin-request-name');
+    const shell = document.querySelector('.skin-request-shell');
+    [file, zoom, name].forEach(control => { if (control) control.disabled = sent; });
+    shell?.classList.toggle('request-used', sent);
     if (status) {
       status.textContent = sent
         ? (justSubmitted ? 'Solicitação confirmada! Sua skin está na fila para aparecer no Mercado.' : 'Você já enviou a solicitação de hoje.')
@@ -461,6 +475,23 @@ export const marketController = {
       status.classList.toggle('request-confirmed', sent && justSubmitted);
     }
     if (button) this.updateRequestSubmitState();
+  },
+
+  resetRequestForm() {
+    const file = document.getElementById('skin-request-file');
+    const image = document.getElementById('skin-crop-image');
+    const zoom = document.getElementById('skin-crop-zoom');
+    const name = document.getElementById('skin-request-name');
+    const canvas = document.getElementById('skin-request-preview');
+    if (file) file.value = '';
+    if (name) name.value = '';
+    if (zoom) zoom.value = '1';
+    if (image) {
+      image.removeAttribute('src');
+      image.removeAttribute('style');
+    }
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+    this.crop = { image: null, x: 0, y: 0, zoom: 1, dragging: false, mimeType: null };
   },
 
   updateRequestSubmitState() {

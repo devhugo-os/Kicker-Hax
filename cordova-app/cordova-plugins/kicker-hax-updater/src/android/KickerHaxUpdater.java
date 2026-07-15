@@ -9,12 +9,18 @@ import android.app.PendingIntent;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageInfo;
+import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
 import android.provider.Settings;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.io.File;
+import java.security.MessageDigest;
+import java.util.HashSet;
+import java.util.Set;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
@@ -58,6 +64,12 @@ public class KickerHaxUpdater extends CordovaPlugin {
     final String downloadUrl = args.optString(0, "").trim();
     if (downloadUrl.isEmpty()) {
       callbackContext.error("URL da atualização ausente.");
+      return true;
+    }
+    try {
+      validateDownloadUrl(downloadUrl);
+    } catch (IllegalArgumentException error) {
+      callbackContext.error(error.getMessage());
       return true;
     }
 
@@ -167,6 +179,11 @@ public class KickerHaxUpdater extends CordovaPlugin {
       if (status != DownloadManager.STATUS_SUCCESSFUL) {
         throw new IllegalStateException("Download da atualização falhou (código " + reason + ").");
       }
+      File downloadedApk = new File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        "KickerHax/kicker-hax-update.apk"
+      );
+      validateDownloadedPackage(downloadedApk);
       Uri apkUri = manager.getUriForDownloadedFile(downloadId);
       if (apkUri == null) throw new IllegalStateException("Android não disponibilizou o APK baixado.");
       cordova.getActivity().runOnUiThread(() -> openInstaller(apkUri, callbackContext));
@@ -175,6 +192,51 @@ public class KickerHaxUpdater extends CordovaPlugin {
     } finally {
       UPDATE_IN_PROGRESS.set(false);
     }
+  }
+
+  private static void validateDownloadUrl(String downloadUrl) {
+    Uri uri = Uri.parse(downloadUrl);
+    boolean trusted = "https".equalsIgnoreCase(uri.getScheme())
+      && "devhugo-os.github.io".equalsIgnoreCase(uri.getHost())
+      && "/Kicker-Hax/downloads/kicker-hax.apk".equals(uri.getPath());
+    if (!trusted) throw new IllegalArgumentException("Atualização bloqueada por origem não confiável.");
+  }
+
+  /** Refuses packages that cannot update this exact signed application. */
+  private void validateDownloadedPackage(File apkFile) throws Exception {
+    if (!apkFile.isFile() || apkFile.length() < 1024L) {
+      throw new IllegalStateException("O APK baixado está vazio ou incompleto.");
+    }
+    PackageManager manager = cordova.getContext().getPackageManager();
+    int flags = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+      ? PackageManager.GET_SIGNING_CERTIFICATES
+      : PackageManager.GET_SIGNATURES;
+    PackageInfo archive = manager.getPackageArchiveInfo(apkFile.getAbsolutePath(), flags);
+    PackageInfo installed = manager.getPackageInfo(cordova.getContext().getPackageName(), flags);
+    if (archive == null || !cordova.getContext().getPackageName().equals(archive.packageName)) {
+      throw new SecurityException("O APK baixado não pertence ao Kicker Hax.");
+    }
+    Set<String> archiveSignatures = signatureDigests(archive);
+    Set<String> installedSignatures = signatureDigests(installed);
+    if (archiveSignatures.isEmpty() || installedSignatures.isEmpty() || !archiveSignatures.equals(installedSignatures)) {
+      throw new SecurityException("A assinatura do APK não corresponde ao aplicativo instalado.");
+    }
+  }
+
+  @SuppressWarnings("deprecation")
+  private static Set<String> signatureDigests(PackageInfo info) throws Exception {
+    Signature[] signatures = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && info.signingInfo != null
+      ? info.signingInfo.getApkContentsSigners()
+      : info.signatures;
+    Set<String> result = new HashSet<>();
+    if (signatures == null) return result;
+    for (Signature signature : signatures) {
+      byte[] digest = MessageDigest.getInstance("SHA-256").digest(signature.toByteArray());
+      StringBuilder value = new StringBuilder(digest.length * 2);
+      for (byte part : digest) value.append(String.format("%02x", part & 0xff));
+      result.add(value.toString());
+    }
+    return result;
   }
 
   /** Removes only the APK registered by this updater after Android replaces the app. */

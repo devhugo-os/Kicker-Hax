@@ -237,6 +237,11 @@
 .skin-request-info { grid-template-columns: 1fr; justify-items: stretch; }
 .skin-request-info .request-step { justify-self: stretch; }
 .skin-request-info .request-confirmed { color: #4ade80; font-weight: 700; }
+.skin-request-shell.request-used .skin-crop-workspace,
+.skin-request-shell.request-used .skin-request-info { opacity: .62; }
+.skin-request-shell.request-used .skin-crop-viewport,
+.skin-request-shell.request-used .skin-file-button { pointer-events: none; }
+.skin-request-shell.request-used #skin-request-status { opacity: 1; color: #4ade80; }
 .skin-request-name { display: grid; gap: 4px; color: #cbd5e1; font-size: 11px; font-weight: 800; text-transform: uppercase; }
 .skin-request-name input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #334155; border-radius: 6px; background: #070c1c; color: white; box-sizing: border-box; }
 .request-step { display: flex; align-items: center; gap: 10px; }
@@ -722,6 +727,38 @@ html.app-runtime #menu-btn-download-app {
   overflow-y: auto;
   padding-right: 4px;
 }
+
+.profile-rating-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 9px 0;
+}
+
+.profile-rating-card,
+.public-profile-rating {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 9px 6px;
+  border: 1px solid var(--border-light);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.profile-rating-card span,
+.public-profile-rating span {
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.profile-rating-card strong,
+.public-profile-rating strong { font-size: 23px; }
+.profile-rating-card.overall strong,
+.public-profile-rating.overall strong { color: #facc15; }
+.profile-rating-card.level strong,
+.public-profile-rating.level strong { color: #60a5fa; }
 
 .history-section {
   position: relative;
@@ -1753,15 +1790,13 @@ html.app-runtime #menu-btn-download-app {
 }
 .public-profile-header {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) 90px;
+  grid-template-columns: 82px minmax(0, 1fr) 174px;
   align-items: center;
   gap: 16px;
   padding-right: 42px;
 }
 .public-profile-header p { color: var(--text-secondary); overflow-wrap: anywhere; }
-.public-profile-level { display: grid; place-items: center; padding: 10px; border: 1px solid var(--border-light); border-radius: 7px; }
-.public-profile-level span { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; }
-.public-profile-level strong { color: #60a5fa; font-size: 24px; }
+.public-profile-ratings { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .public-profile-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .public-profile-stats > div { display: grid; place-items: center; gap: 2px; padding: 10px 5px; background: rgba(255,255,255,.035); border: 1px solid var(--border-light); border-radius: 6px; }
 .public-profile-stats strong { font-size: 20px; }
@@ -1781,12 +1816,14 @@ html.app-runtime #menu-btn-download-app {
 
 @media (max-width: 760px), (max-height: 520px) {
   .public-profile-card { width: 100vw; height: 100dvh; max-height: 100dvh; padding: 8px; gap: 7px; border-radius: 0; }
-  .public-profile-header { grid-template-columns: 54px minmax(0, 1fr) 58px; gap: 7px; padding-right: 44px; }
+  .public-profile-header { grid-template-columns: 54px minmax(0, 1fr) 108px; gap: 7px; padding-right: 44px; }
   .public-profile-header .avatar-preview { width: 50px; height: 50px; font-size: 25px; }
   .public-profile-header h2 { font-size: 17px; }
   .public-profile-header p { font-size: 9px; max-height: 28px; overflow: auto; }
-  .public-profile-level { padding: 4px; }
-  .public-profile-level strong { font-size: 16px; }
+  .public-profile-ratings { gap: 3px; }
+  .public-profile-rating { padding: 3px 2px; }
+  .public-profile-rating span { font-size: 6px; }
+  .public-profile-rating strong { font-size: 15px; }
   .public-profile-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
   .public-profile-stats > div { padding: 4px 2px; }
   .public-profile-stats strong { font-size: 13px; }

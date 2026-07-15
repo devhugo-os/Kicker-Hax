@@ -41,3 +41,6 @@ firebase.json
 skills/
 .agents/
 .codex/
+
+# Local automated verification (kept on developer machines only)
+tests/

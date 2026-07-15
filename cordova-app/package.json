@@ -3,7 +3,7 @@
     "com.kickerhax.updater": "file:cordova-plugins/kicker-hax-updater",
     "cordova": "^13.0.0",
     "cordova-android": "^13.0.0",
-    "cordova-plugin-inappbrowser": "^6.0.0"
+    "cordova-plugin-inappbrowser": "^6.0.1"
   },
   "cordova": {
     "platforms": [

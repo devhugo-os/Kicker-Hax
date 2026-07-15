@@ -5,6 +5,21 @@ export function getCompetitiveWinRate(player) {
 }
 
 /**
+ * Wilson lower bound keeps the visible percentage honest while ranking it
+ * with sample confidence. A perfect debut no longer outranks a proven season.
+ */
+export function getWinRateConfidenceScore(player) {
+  const matches = Math.max(0, Number(player?.matchesPlayed || 0));
+  if (matches === 0) return 0;
+  const rate = getCompetitiveWinRate(player);
+  const z = 1.96;
+  const zSquared = z * z;
+  const center = rate + (zSquared / (2 * matches));
+  const margin = z * Math.sqrt(((rate * (1 - rate)) + (zSquared / (4 * matches))) / matches);
+  return (center - margin) / (1 + (zSquared / matches));
+}
+
+/**
  * Produces a FIFA-style 40-99 card rating from competitive per-match output.
  * Ten matches provide full confidence; before that, the rating is pulled
  * toward 50 so one exceptional debut cannot dominate the global ranking.
@@ -18,6 +33,9 @@ export function calculateOverallRating(player) {
   const accuracy = Number(player?.shots || 0) > 0
     ? Math.min(1, Number(player?.goals || 0) / Number(player.shots))
     : 0;
+  const possessionAverage = Number(player?.possessionAvg ?? (matches > 0
+    ? Number(player?.possessionTotal || 0) / matches
+    : 0));
   const performance =
     (winRate * 32)
     + (cap(perMatch(player?.goals), 1.5) * 14)
@@ -25,7 +43,7 @@ export function calculateOverallRating(player) {
     + (cap(perMatch(player?.dribbles), 4) * 10)
     + (cap(perMatch(player?.tackles), 5) * 12)
     + (accuracy * 8)
-    + (cap(Number(player?.possessionAvg || 0), 65) * 6)
+    + (cap(possessionAverage, 65) * 6)
     + (cap(perMatch(player?.mvps), 0.5) * 8)
     - (cap(perMatch(player?.ownGoals), 0.5) * 4);
   const rawRating = 40 + (performance * 0.59);
@@ -46,7 +64,10 @@ export function compareOverallRanking(a, b) {
 }
 
 export function compareWinRateRanking(a, b) {
+  const confidenceDifference = getWinRateConfidenceScore(b) - getWinRateConfidenceScore(a);
+  if (Math.abs(confidenceDifference) > Number.EPSILON) return confidenceDifference;
   const rateDifference = getCompetitiveWinRate(b) - getCompetitiveWinRate(a);
   if (Math.abs(rateDifference) > Number.EPSILON) return rateDifference;
+  if ((b.matchesPlayed || 0) !== (a.matchesPlayed || 0)) return (b.matchesPlayed || 0) - (a.matchesPlayed || 0);
   return compareOverallRanking(a, b);
 }

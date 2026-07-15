@@ -10,7 +10,7 @@ export function keyLabel(value) {
 function buildControlChips(controls, mobile) {
   if (mobile) {
     return [
-      ['🕹️', 'Mover'], ['⚡', 'Correr'], ['🥾', 'Chutar / passar'],
+      ['🕹️', 'Mover'], ['⚡', 'Segure para correr'], ['🥾', 'Segure para chutar / passar'],
       ['✨', 'Driblar'], ['🛡️', 'Desarmar'], ['🔥', 'Super chute']
     ];
   }
@@ -29,14 +29,14 @@ export function tutorialNeedsAlly(stepId) {
 export const TUTORIAL_STEPS = [
   { id: 'intro', manual: true, speaker: 'Treinador KX', title: 'Bem-vindo ao campo!', text: 'Vou acompanhar você em uma sequência prática. Cada objetivo usa a mesma física das partidas reais.', objective: 'Conheça seus comandos e clique em Começar.', showControls: true },
   { id: 'move', speaker: 'Treinador KX', title: 'Movimentação', text: 'Mude de direção e conheça o espaço ao seu redor.', objective: 'Percorra o campo até completar a barra.' },
-  { id: 'sprint', speaker: 'Treinador KX', title: 'Corrida e stamina', text: 'Correr aumenta sua velocidade, mas consome stamina. Solte o comando para recuperá-la.', objective: 'Corra enquanto se movimenta.' },
+  { id: 'sprint', speaker: 'Treinador KX', title: 'Corrida e stamina', text: 'Correr aumenta sua velocidade, mas consome stamina. Solte o comando para recuperá-la.', mobileText: 'Segure o botão de correr enquanto usa o analógico. Solte o botão para recuperar stamina.', objective: 'Corra enquanto se movimenta.' },
   { id: 'control', speaker: 'Treinador KX', title: 'Domínio da bola', text: 'Aproxime-se da bola para dominá-la. O círculo preso ao jogador indica a posse.', objective: 'Pegue a bola.' },
   { id: 'pass', target: 3, speaker: 'CPU Parceiro', title: 'Passe', text: 'Um chute curto também é um passe. Mire no parceiro e solte antes de carregar toda a força.', objective: 'Complete 3 passes para a CPU amigável.' },
-  { id: 'shoot', target: 3, speaker: 'Treinador KX', title: 'Chute carregado', text: 'Segure o chute e vença a CPU. Defesa, desarme ou chute para fora reiniciam a tentativa.', objective: 'Marque 3 gols usando o chute.' },
-  { id: 'dribble', target: 3, speaker: 'Treinador KX', title: 'Drible', text: 'O drible dá um impulso curto e protege você de desarmes durante alguns instantes.', objective: 'Execute 3 dribles com a posse da bola.' },
+  { id: 'shoot', target: 3, speaker: 'Treinador KX', title: 'Chute carregado', text: 'Segure o chute e vença a CPU. Defesa, desarme ou chute para fora reiniciam a tentativa.', mobileText: 'Segure o botão de chute para carregar e solte para finalizar. Só um gol confirmado conta.', objective: 'Marque 3 gols usando o chute.' },
+  { id: 'dribble', target: 3, speaker: 'Treinador KX', title: 'Drible contínuo', text: 'Faça três dribles em sequência. Cada um só conta depois que todo o impulso termina com você ainda na posse.', objective: 'Complete 3 dribles seguidos com a posse da bola.' },
   { id: 'power', speaker: 'Treinador KX', title: 'Super chute', text: 'O super chute exige bastante stamina. Use quando tiver espaço e energia.', objective: 'Execute um super chute.' },
   { id: 'tackle', target: 3, speaker: 'CPU Rival', title: 'Desarme', text: 'Conclua o dash encostando de frente ou de lado. Só conta quando a física confirma que você tomou a bola.', objective: 'Faça 3 desarmes válidos na CPU rival.' },
-  { id: 'goal', speaker: 'Treinador KX', title: 'Objetivo final', text: 'Combine movimentação, corrida, drible e chute. Ataque o gol da esquerda.', objective: 'Marque um gol no time vermelho.' },
+  { id: 'goal', speaker: 'Treinador KX', title: 'Objetivo final', text: 'Combine movimentação, corrida e drible. Finalize com um chute carregado ou um super chute.', mobileText: 'Use o analógico, segure o botão de correr e finalize segurando o chute ou usando o super chute.', objective: 'Marque um gol confirmado no time vermelho.' },
   { id: 'finish', celebration: true, speaker: 'Treinador KX', title: 'Tutorial concluído!', text: 'Você dominou os fundamentos do Kicker Hax. Excelente trabalho!', objective: 'Voltando para a seleção de modos...' }
 ];
 
@@ -56,6 +56,7 @@ export class TutorialSession {
     this.trajectoryAction = null;
     this.trajectoryMoved = false;
     this.pendingOutcome = null;
+    this.dribblePending = false;
   }
 
   get step() { return TUTORIAL_STEPS[this.index]; }
@@ -97,6 +98,7 @@ export class TutorialSession {
     this.trajectoryAction = null;
     this.trajectoryMoved = false;
     this.pendingOutcome = null;
+    this.dribblePending = false;
   }
 
   complete() {
@@ -122,6 +124,8 @@ export class TutorialSession {
     if (id === 'shoot' && eventName === 'goal') {
       if (payload.side === 'blue' && this.attemptActive) {
         this.pendingOutcome = { type: 'success', message: 'Gol confirmado!' };
+      } else if (payload.side === 'blue') {
+        this.fail('Missão falhou: o gol só conta depois de um chute confirmado.');
       } else {
         this.fail('Missão falhou: a CPU marcou o gol.');
       }
@@ -133,7 +137,10 @@ export class TutorialSession {
       else this.fail(outcome.message);
       return;
     }
-    if (id === 'dribble' && eventName === 'dribble') this.registerSuccess('Drible válido!');
+    if (id === 'dribble' && eventName === 'dribble' && !this.dribblePending) {
+      this.dribblePending = true;
+      this.attemptActive = true;
+    }
     if (id === 'power' && eventName === 'power') this.startTrajectory('power');
     if (id === 'power' && eventName === 'goal') {
       this.pendingOutcome = { type: 'success', message: 'Super chute concluído!' };
@@ -144,9 +151,11 @@ export class TutorialSession {
     if (id === 'tackle' && eventName === 'goal' && payload.side === 'red') this.fail('Missão falhou: a CPU marcou antes do desarme.');
     if (['shoot', 'goal'].includes(id) && eventName === 'botTackle') this.fail('Missão falhou: a CPU parou você com um desarme.');
     if (id === 'goal' && eventName === 'goal') {
-      if (payload.side === 'blue') this.complete();
+      if (payload.side === 'blue' && this.attemptActive) this.complete();
+      else if (payload.side === 'blue') this.fail('Missão falhou: finalize a jogada com chute ou super chute.');
       else this.fail('Missão falhou: a CPU marcou. Tente novamente.');
     }
+    if (id === 'goal' && ['kick', 'power'].includes(eventName)) this.attemptActive = true;
   }
 
   startTrajectory(action) {
@@ -162,8 +171,23 @@ export class TutorialSession {
     this.pendingOutcome = null;
     this.attemptActive = false;
     if (outcome?.type === 'failed') this.fail(outcome.message);
-    else if (this.step?.id === 'shoot') this.registerSuccess(outcome?.message || 'Gol confirmado!');
+    else if (this.step?.id === 'shoot' && outcome?.type === 'success') this.registerSuccess(outcome.message || 'Gol confirmado!');
+    else if (this.step?.id === 'shoot') this.fail('Missão falhou: o chute não entrou no gol.');
     else this.complete();
+  }
+
+  registerContinuousSuccess(message) {
+    const target = Math.max(1, Number(this.step?.target || 1));
+    this.successes += 1;
+    this.progress = Math.min(1, this.successes / target);
+    this.dribblePending = false;
+    this.attemptActive = false;
+    if (this.successes >= target) {
+      this.complete();
+      return;
+    }
+    this.render();
+    this.refreshProgress();
   }
 
   registerSuccess(message) {
@@ -200,6 +224,7 @@ export class TutorialSession {
       this.trajectoryAction = null;
       this.trajectoryMoved = false;
       this.pendingOutcome = null;
+      this.dribblePending = false;
       this.onFeedbackChange?.(false, this);
       this.render();
       this.onAttemptReset?.(this.step, this);
@@ -237,6 +262,10 @@ export class TutorialSession {
     } else if (id === 'control' && ball.owner === 'p1') this.progress = 1;
     else if (id === 'pass' && this.passStarted && ball.owner === 'tutorial-ally') this.registerSuccess('Passe completo!');
     else if (id === 'pass' && this.attemptActive && ++this.attemptFrames > 240) this.fail('Missão falhou: o passe não chegou ao parceiro.');
+    else if (id === 'dribble' && this.dribblePending && Number(player.dash_time || 0) <= 0) {
+      if (ball.owner === 'p1') this.registerContinuousSuccess('Drible completo!');
+      else this.fail('Missão falhou: você perdeu a bola durante o drible.');
+    }
     if (this.progress >= 1) this.complete(); else this.refreshProgress();
   }
 
@@ -277,7 +306,7 @@ export class TutorialSession {
     count.textContent = `Etapa ${Math.min(this.index + 1, TUTORIAL_STEPS.length - 1)}/${TUTORIAL_STEPS.length - 1}`;
     top.append(speaker, count);
     const title = document.createElement('h3'); title.textContent = step.title;
-    const text = document.createElement('p'); text.textContent = step.text;
+    const text = document.createElement('p'); text.textContent = this.mobile && step.mobileText ? step.mobileText : step.text;
     const objective = document.createElement('div'); objective.className = 'tutorial-objective';
     const target = Math.max(1, Number(step.target || 1));
     objective.textContent = this.feedback?.text || (this.progress >= 1

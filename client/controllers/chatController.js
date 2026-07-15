@@ -27,11 +27,15 @@ export const chatController = {
       if (window.matchMedia('(pointer: coarse), (orientation: landscape) and (max-height: 560px)').matches) {
         chatContainer.classList.toggle('mobile-open');
         chatContainer.classList.toggle('minimized', !chatContainer.classList.contains('mobile-open'));
-        if (chatContainer.classList.contains('mobile-open')) chatInput.focus();
+        if (chatContainer.classList.contains('mobile-open')) {
+          this.scrollToLatest();
+          chatInput.focus();
+        }
         return;
       }
       chatContainer.classList.toggle('minimized');
       if (!chatContainer.classList.contains('minimized')) {
+        this.scrollToLatest();
         chatInput.focus();
       }
     });
@@ -55,6 +59,14 @@ export const chatController = {
       }
     });
 
+  },
+
+  scrollToLatest() {
+    const chatMessages = document.getElementById('global-chat-messages');
+    if (!chatMessages) return;
+    requestAnimationFrame(() => {
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
   },
 
   startGlobalChatSubscription() {
