@@ -3,11 +3,13 @@ import { menuController } from './menuController.js';
 import { showToast } from '../utils/toast.js';
 import { getEquippedSkin } from '../data/skins.js';
 import { appendStaffTag } from '../utils/staffTags.js';
+import { getSaoPauloChatDayWindow } from '../utils/chatRetention.js';
 
 export const chatController = {
   initialized: false,
   identityCache: new Map(),
   unsubscribeGlobalChat: null,
+  dailyCleanupTimer: null,
 
   init() {
     if (this.initialized) return;
@@ -78,6 +80,7 @@ export const chatController = {
     if (!chatMessages) return;
     chatMessages.replaceChildren();
     firebaseService.pruneOldChatMessages().catch(() => {});
+    this.scheduleDailyCleanup();
     this.unsubscribeGlobalChat = firebaseService.subscribeToGlobalChat(async (msg) => {
       if (!msg) return;
       let profile = null;
@@ -137,7 +140,20 @@ export const chatController = {
       chatMessages.replaceChildren();
     }, (error) => {
       console.warn('[GlobalChat] Listener indisponivel:', error);
+    }, (messageId) => {
+      const selector = `[data-message-id="${CSS.escape(String(messageId || ''))}"]`;
+      chatMessages.querySelector(selector)?.remove();
     });
+  },
+
+  scheduleDailyCleanup() {
+    if (this.dailyCleanupTimer) clearTimeout(this.dailyCleanupTimer);
+    const { endsAt } = getSaoPauloChatDayWindow();
+    const delay = Math.max(1000, endsAt - Date.now() + 1000);
+    this.dailyCleanupTimer = setTimeout(async () => {
+      await firebaseService.pruneOldChatMessages().catch(() => {});
+      this.scheduleDailyCleanup();
+    }, delay);
   },
 
   stopGlobalChatSubscription() {

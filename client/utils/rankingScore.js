@@ -19,6 +19,23 @@ export function getWinRateConfidenceScore(player) {
   return (center - margin) / (1 + (zSquared / matches));
 }
 
+export function getPossessionAverage(player) {
+  const matches = Math.max(0, Number(player?.possessionMatches ?? player?.matchesPlayed ?? 0));
+  const explicitAverage = Number(player?.possessionAvg);
+  if (Number.isFinite(explicitAverage)) return Math.min(100, Math.max(0, explicitAverage));
+  return matches > 0
+    ? Math.min(100, Math.max(0, Number(player?.possessionTotal || 0) / matches))
+    : 0;
+}
+
+/** Pulls small samples toward neutral possession so one match cannot lead. */
+export function getPossessionConfidenceScore(player) {
+  const matches = Math.max(0, Number(player?.possessionMatches ?? player?.matchesPlayed ?? 0));
+  if (matches === 0) return 0;
+  const priorMatches = 8;
+  return ((getPossessionAverage(player) * matches) + (50 * priorMatches)) / (matches + priorMatches);
+}
+
 /**
  * Produces a FIFA-style 40-99 card rating from competitive per-match output.
  * Ten matches provide full confidence; before that, the rating is pulled
@@ -69,5 +86,16 @@ export function compareWinRateRanking(a, b) {
   const rateDifference = getCompetitiveWinRate(b) - getCompetitiveWinRate(a);
   if (Math.abs(rateDifference) > Number.EPSILON) return rateDifference;
   if ((b.matchesPlayed || 0) !== (a.matchesPlayed || 0)) return (b.matchesPlayed || 0) - (a.matchesPlayed || 0);
+  return compareOverallRanking(a, b);
+}
+
+export function comparePossessionRanking(a, b) {
+  const confidenceDifference = getPossessionConfidenceScore(b) - getPossessionConfidenceScore(a);
+  if (Math.abs(confidenceDifference) > Number.EPSILON) return confidenceDifference;
+  const averageDifference = getPossessionAverage(b) - getPossessionAverage(a);
+  if (Math.abs(averageDifference) > Number.EPSILON) return averageDifference;
+  const aMatches = Number(a?.possessionMatches ?? a?.matchesPlayed ?? 0);
+  const bMatches = Number(b?.possessionMatches ?? b?.matchesPlayed ?? 0);
+  if (bMatches !== aMatches) return bMatches - aMatches;
   return compareOverallRanking(a, b);
 }

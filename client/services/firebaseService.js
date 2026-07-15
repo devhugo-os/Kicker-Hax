@@ -25,10 +25,10 @@ import {
   deleteDoc,
   runTransaction
 } from 'firebase/firestore';
-import { getDatabase, ref, push, onChildAdded, onValue, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update, set, remove, onDisconnect, runTransaction as runRtdbTransaction } from 'firebase/database';
+import { getDatabase, ref, push, onChildAdded, onChildRemoved, onValue, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update, set, remove, onDisconnect, runTransaction as runRtdbTransaction } from 'firebase/database';
 import { groupSeasonHistoryByUid, mergeCompetitiveHistoryStats } from '../utils/statReconciliation.js';
 import { getPendingSkinRequests, getSkinQueueCleanup, normalizeCommunitySkinName } from '../utils/skinQueue.js';
-import { calculateOverallRating, compareOverallRanking, compareWinRateRanking } from '../utils/rankingScore.js';
+import { calculateOverallRating, compareOverallRanking, comparePossessionRanking, compareWinRateRanking } from '../utils/rankingScore.js';
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
@@ -36,6 +36,7 @@ import { getWritableHistoryUids } from '../utils/matchHistory.js';
 import { findStaffProfileByRole } from '../utils/staffProfiles.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { getFeaturedCycle } from '../utils/featuredCycle.js';
+import { getSaoPauloChatDayWindow } from '../utils/chatRetention.js';
 
 const _dec = (val) => atob(val);
 const firebaseConfig = {
@@ -76,7 +77,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '30.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '30.5.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -795,8 +796,9 @@ export const firebaseService = {
           assists: statsData.assists || 0,
           ownGoals: statsData.ownGoals || 0,
           tackles: statsData.tackles || 0,
-          possessionAvg: (statsData.matchesPlayed || 0) > 0
-            ? Math.round((statsData.possessionTotal || 0) / (statsData.matchesPlayed || 1))
+          possessionMatches: statsData.possessionMatches || statsData.matchesPlayed || 0,
+          possessionAvg: (statsData.possessionMatches || statsData.matchesPlayed || 0) > 0
+            ? Math.round((statsData.possessionTotal || 0) / (statsData.possessionMatches || statsData.matchesPlayed || 1))
             : 0,
           mvps: statsData.mvps || 0,
           xp: seasonActive ? (userData.xp || 0) : 0,
@@ -864,7 +866,7 @@ export const firebaseService = {
       } else if (criteria === 'tackles') {
         ranking.sort((a, b) => b.tackles - a.tackles);
       } else if (criteria === 'possession') {
-        ranking.sort((a, b) => b.possessionAvg - a.possessionAvg);
+        ranking.sort(comparePossessionRanking);
       } else if (criteria === 'coins') {
         ranking.sort((a, b) => b.coins - a.coins);
       } else if (criteria === 'skins') {
@@ -900,10 +902,9 @@ export const firebaseService = {
   async pruneOldChatMessages() {
     try {
       const chatRef = ref(rtdb, 'globalChat');
-      const twoHoursAgo = Date.now() - 7200000;
-      const oldQuery = rtdbQuery(chatRef, orderByChild('timestamp'), endAt(twoHoursAgo));
+      const { startsAt } = getSaoPauloChatDayWindow();
+      const oldQuery = rtdbQuery(chatRef, orderByChild('timestamp'), endAt(startsAt - 1));
       const snapshot = await get(oldQuery);
-      const allSnapshot = await get(chatRef);
       if (snapshot.exists()) {
         const updates = {};
         snapshot.forEach(child => {
@@ -911,6 +912,7 @@ export const firebaseService = {
         });
         await update(chatRef, updates);
       }
+      const allSnapshot = await get(chatRef);
       if (allSnapshot.exists() && allSnapshot.size >= 450) {
         const updates = {};
         allSnapshot.forEach(child => {
@@ -955,7 +957,7 @@ export const firebaseService = {
     });
   },
 
-  subscribeToGlobalChat(callback, onReset, onError) {
+  subscribeToGlobalChat(callback, onReset, onError, onRemoved) {
     const chatRef = ref(rtdb, 'globalChat');
     const handleError = error => {
       console.warn('[GlobalChat] Realtime Database listener failed:', error);
@@ -967,9 +969,13 @@ export const firebaseService = {
     const unsubscribeChild = onChildAdded(chatRef, (snapshot) => {
       callback({ ...snapshot.val(), id: snapshot.key });
     }, handleError);
+    const unsubscribeRemoved = onChildRemoved(chatRef, (snapshot) => {
+      onRemoved?.(snapshot.key);
+    }, handleError);
     return () => {
       unsubscribeValue();
       unsubscribeChild();
+      unsubscribeRemoved();
     };
   }
 };

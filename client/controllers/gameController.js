@@ -19,6 +19,7 @@ import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
 import { TutorialSession, tutorialNeedsAlly } from '../tutorial/tutorialSession.js';
+import { getPossessionConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
 
 export const gameController = {
   currentUser: null,
@@ -4246,18 +4247,23 @@ export const gameController = {
       ['assists', 'Assistências', r => r.assists || 0],
       ['tackles', 'Desarmes', r => r.tackles || 0],
       ['possession', 'Posse Média', r => `${r.possessionAvg || 0}%`],
+      ['possessionScore', 'Índice', r => `${Math.round(getPossessionConfidenceScore(r))}%`],
+      ['possessionMatches', 'Jogos', r => r.possessionMatches || r.matchesPlayed || 0],
       ['mvps', 'MVPs', r => r.mvps || 0],
       ['coins', 'KX Coins', r => r.coins || 0],
       ['skins', 'Skins', r => r.skinCount || 0],
       ['winrate', 'Winrate', r => {
         const games = r.matchesPlayed || 0;
         return games > 0 ? `${Math.round(((r.wins || 0) / games) * 100)}%` : '0%';
-      }]
+      }],
+      ['winrateScore', 'Índice', r => `${Math.round(getWinRateConfidenceScore(r) * 100)}%`]
     ];
     const visibleColumns = filter === 'general'
       ? allColumns
       : filter === 'winrate'
-        ? ['winrate', 'matches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
+        ? ['winrate', 'winrateScore', 'matches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
+        : filter === 'possession'
+          ? ['possession', 'possessionScore', 'possessionMatches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
         : allColumns.filter(([key]) => key === filter);
     const colSpan = 2 + visibleColumns.length;
 

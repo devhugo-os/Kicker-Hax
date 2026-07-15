@@ -38,6 +38,7 @@ class P2PSocketService {
     this.isLeavingRoom = false;
     this.connectionInitialized = false;
     this.roomOperation = null;
+    this.joinResponseRetries = new Map();
     this.peerGeneration = 0;
     this.lastInputSentAt = 0;
     this.lastInputSignature = '';
@@ -406,12 +407,17 @@ class P2PSocketService {
     this.roomOperation = 'join';
     this.isHost = false;
     this.roomCode = roomCode;
+    let joinRequestInterval = null;
     const joinTimeout = window.setTimeout(() => {
       if (this.roomOperation !== 'join' || this.roomCode !== roomCode) return;
       this.triggerLocalEvent('joinError', 'A conexão com a sala demorou demais. Tente novamente.');
       this.leaveRoom();
     }, 15000);
-    const finishJoinOperation = () => window.clearTimeout(joinTimeout);
+    const finishJoinOperation = () => {
+      window.clearTimeout(joinTimeout);
+      if (joinRequestInterval) window.clearInterval(joinRequestInterval);
+      joinRequestInterval = null;
+    };
 
     // Fetch room from RTDB
     const roomRef = ref(rtdb, `multiplayerRooms/${roomCode}`);
@@ -459,6 +465,43 @@ class P2PSocketService {
         });
         this.hostConn = conn;
 
+        let joinAccepted = false;
+        const handleHostPayload = (payload) => {
+          const { event, data } = payload || {};
+          if (event === 'lobbyUpdate' && !joinAccepted
+            && data?.players?.some(player => player.id === this.clientId)) {
+            handleHostPayload({ event: 'joinSuccess', data: { code: roomCode, lobbyInfo: data } });
+            return;
+          }
+          if (event === 'joinSuccess') {
+            if (conn.open) conn.send({ event: 'joinConfirmed', data: { roomCode } });
+            if (joinAccepted) return;
+            joinAccepted = true;
+            finishJoinOperation();
+            this.roomOperation = null;
+            const lobbyInfo = data?.lobbyInfo || null;
+            if (lobbyInfo) this.triggerLocalEvent('lobbyUpdate', lobbyInfo);
+            this.listenToRoomChat(roomCode);
+            this.watchHostLifecycle(roomCode);
+            this.triggerLocalEvent('joinSuccess', { code: roomCode, lobbyInfo });
+          } else if (event === 'matchRejoined') {
+            if (conn.open) conn.send({ event: 'joinConfirmed', data: { roomCode } });
+            if (joinAccepted) return;
+            joinAccepted = true;
+            finishJoinOperation();
+            this.roomOperation = null;
+            this.listenToRoomChat(roomCode);
+            this.watchHostLifecycle(roomCode);
+            this.triggerLocalEvent('matchRejoined', data);
+          } else if (event === 'joinError') {
+            finishJoinOperation();
+            this.triggerLocalEvent('joinError', data);
+            this.leaveRoom();
+          } else if (event) {
+            this.triggerLocalEvent(event, data);
+          }
+        };
+
         // Fast replaceable traffic must not share head-of-line blocking with
         // chat, ping, replay and match lifecycle events.
         const realtimeConn = this.peer.connect(roomData.hostPeerId, {
@@ -469,6 +512,7 @@ class P2PSocketService {
         this.realtimeHostConn = realtimeConn;
         realtimeConn.on('data', (payload) => {
           if (payload?.event === 'gameState') this.triggerLocalEvent(payload.event, payload.data);
+          else if (['joinSuccess', 'matchRejoined', 'joinError'].includes(payload?.event)) handleHostPayload(payload);
         });
         realtimeConn.on('close', () => {
           if (this.realtimeHostConn === realtimeConn) this.realtimeHostConn = null;
@@ -479,36 +523,17 @@ class P2PSocketService {
 
         conn.on('open', () => {
           console.log('[P2PSocket] WebRTC aberto com Host. Enviando requisição de entrada...');
-          conn.send({
+          const sendJoinRequest = () => conn.open && conn.send({
             event: 'joinRoom',
             data: { profile, rejoin, password, matchId }
           });
+          sendJoinRequest();
+          joinRequestInterval = window.setInterval(() => {
+            if (this.roomOperation === 'join' && !joinAccepted) sendJoinRequest();
+          }, 2000);
         });
 
-        conn.on('data', (payload) => {
-          const { event, data } = payload;
-          if (event === 'joinSuccess') {
-            finishJoinOperation();
-            this.roomOperation = null;
-            const lobbyInfo = data?.lobbyInfo || null;
-            if (lobbyInfo) this.triggerLocalEvent('lobbyUpdate', lobbyInfo);
-            this.listenToRoomChat(roomCode);
-            this.watchHostLifecycle(roomCode);
-            this.triggerLocalEvent('joinSuccess', { code: roomCode, lobbyInfo });
-          } else if (event === 'matchRejoined') {
-            finishJoinOperation();
-            this.roomOperation = null;
-            this.listenToRoomChat(roomCode);
-            this.watchHostLifecycle(roomCode);
-            this.triggerLocalEvent('matchRejoined', data);
-          } else if (event === 'joinError') {
-            finishJoinOperation();
-            this.triggerLocalEvent('joinError', data);
-            this.leaveRoom();
-          } else {
-            this.triggerLocalEvent(event, data);
-          }
-        });
+        conn.on('data', handleHostPayload);
 
         conn.on('close', () => {
           if (this.isLeavingRoom) return;
@@ -601,6 +626,11 @@ class P2PSocketService {
     this.roomOperation = null;
     this.activeMatchId = null;
     this.gameStateSequence = 0;
+    this.joinResponseRetries.forEach(entry => {
+      window.clearInterval(entry.interval);
+      window.clearTimeout(entry.timeout);
+    });
+    this.joinResponseRetries.clear();
     // PeerJS can emit close either synchronously or after cleanup.
     setTimeout(() => { this.isLeavingRoom = false; }, 0);
   }
@@ -608,11 +638,52 @@ class P2PSocketService {
   // --------------------------------------------------------------------------
   // HOST NETWORK REQUEST PROCESSING
   // --------------------------------------------------------------------------
+  clearJoinResponseRetry(socketId) {
+    const retry = this.joinResponseRetries.get(socketId);
+    if (!retry) return;
+    window.clearInterval(retry.interval);
+    window.clearTimeout(retry.timeout);
+    this.joinResponseRetries.delete(socketId);
+  }
+
+  sendJoinResponseWithRetry(socketId, conn, event, data) {
+    this.clearJoinResponseRetry(socketId);
+    const payload = { event, data };
+    const send = () => {
+      const channels = [conn, this.realtimeConnections.get(socketId)].filter((channel, index, list) =>
+        channel?.open && list.indexOf(channel) === index
+      );
+      channels.forEach(channel => {
+        try { channel.send(payload); } catch { /* The next retry uses any surviving channel. */ }
+      });
+    };
+    send();
+    const interval = window.setInterval(send, 700);
+    const timeout = window.setTimeout(() => this.clearJoinResponseRetry(socketId), 12000);
+    this.joinResponseRetries.set(socketId, { interval, timeout });
+  }
+
   handleHostReceivedData(socketId, event, data, conn) {
     if (!this.serverRoom) return;
 
+    if (event === 'joinConfirmed') {
+      this.clearJoinResponseRetry(socketId);
+      return;
+    }
+
     if (event === 'joinRoom') {
       const { profile, rejoin, password, matchId } = data || {};
+      const alreadyRejoined = rejoin && this.serverRoom.status === 'playing'
+        ? this.serverRoom.players.find(player => player.id === socketId && !player.disconnected)
+        : null;
+      if (alreadyRejoined && this.serverRoom.match) {
+        this.sendJoinResponseWithRetry(socketId, conn, 'matchRejoined', {
+          roomCode: this.roomCode,
+          matchId: this.serverRoom.match.matchId,
+          lobbyInfo: this.serverRoom.getLobbyInfo()
+        });
+        return;
+      }
       const reconnecting = rejoin && this.serverRoom.status === 'playing'
         ? this.serverRoom.reconnectPlayer(profile?.uid, socketId, matchId)
         : null;
@@ -636,16 +707,29 @@ class P2PSocketService {
         update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { updatedAt: Date.now() }).catch(() => {});
         this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
         this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${reconnecting.player.username} voltou para a partida.` });
-        if (conn) conn.send({ event: 'matchRejoined', data: {
+        if (conn) this.sendJoinResponseWithRetry(socketId, conn, 'matchRejoined', {
           roomCode: this.roomCode,
           matchId: this.serverRoom.match.matchId,
           lobbyInfo: this.serverRoom.getLobbyInfo()
-        } });
+        });
         return;
       }
 
       if (this.serverRoom.password && this.serverRoom.password !== String(password || '')) {
         if (conn) conn.send({ event: 'joinError', data: 'Senha incorreta.' });
+        return;
+      }
+
+      const existingPlayer = this.serverRoom.players.find(player => player.id === socketId);
+      if (existingPlayer) {
+        if (conn && !this.connections.includes(conn)) {
+          conn.peerId = socketId;
+          this.connections.push(conn);
+        }
+        this.sendJoinResponseWithRetry(socketId, conn, 'joinSuccess', {
+          code: this.roomCode,
+          lobbyInfo: this.serverRoom.getLobbyInfo()
+        });
         return;
       }
 
@@ -672,7 +756,7 @@ class P2PSocketService {
       });
 
       const lobbyInfo = this.serverRoom.getLobbyInfo();
-      if (conn) conn.send({ event: 'joinSuccess', data: { code: this.roomCode, lobbyInfo } });
+      if (conn) this.sendJoinResponseWithRetry(socketId, conn, 'joinSuccess', { code: this.roomCode, lobbyInfo });
 
       this.broadcast('lobbyUpdate', lobbyInfo);
       this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${profile.username} entrou na sala.` });
@@ -937,6 +1021,7 @@ class P2PSocketService {
 
   handleHostPlayerDisconnect(conn) {
     const socketId = conn.peer;
+    this.clearJoinResponseRetry(socketId);
     this.connections = this.connections.filter(c => c !== conn);
     this.realtimeConnections.get(socketId)?.close();
     this.realtimeConnections.delete(socketId);
