@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-CmQ6hMM2.js"></script>
+  <script type="module" crossorigin src="./assets/index-CtajjtGK.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-ge5jg6nm.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-BAhizqUQ.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-cwxO87S8.css">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-DcXxzAPZ.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-C5DJf1Gz.css">
 </head>
 <body>
 
@@ -888,7 +888,23 @@
           <div class="adv-stat-row"><span>KX Coins ganhos</span> <strong class="text-warning" id="post-coins-gained">+0</strong></div>
         </div>
 
+        <div id="post-match-report" class="match-report" aria-label="Relatório detalhado da partida"></div>
+
         <button id="post-btn-continue" class="btn btn-primary btn-glow btn-lg w-full mt-4">Voltar ao Lobby</button>
+      </div>
+    </div>
+
+    <div id="match-details-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="match-details-title">
+      <div class="modal-card card-blur match-details-card">
+        <button id="match-details-close" class="modal-close-btn" type="button" aria-label="Fechar detalhes">×</button>
+        <div class="match-details-heading">
+          <div>
+            <h2 id="match-details-title">Detalhes da partida</h2>
+            <p id="match-details-meta" class="subtext"></p>
+          </div>
+          <strong id="match-details-score" class="match-details-score">0 : 0</strong>
+        </div>
+        <div id="match-details-report" class="match-report"></div>
       </div>
     </div>
 
@@ -973,7 +989,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v30.5</div>
+    <div id="game-version-badge" class="version-badge hidden">v31.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -997,7 +1013,8 @@
           <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
           <section><h3>Premiação Online</h3><ul><li>Vitória: 80 XP e, no competitivo, 30 KX Coins.</li><li>Empate: 30 XP e, no competitivo, 18 KX Coins.</li><li>Derrota: 15 XP e, no competitivo, 10 KX Coins.</li><li>Casual concede somente XP. Treino e partidas com CPU não concedem progresso.</li></ul></section>
           <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, assistências, chutes, dribles, desarmes, gols contra, posse média e MVP. A assistência pertence ao último companheiro que passou a bola quando o primeiro chute do recebedor vira gol; um toque adversário ou um segundo chute cancela a assistência. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
-          <section><h3>Overall, Geral, Winrate e Posse</h3><p><strong>Geral</strong> usa o Overall como critério principal e mostra as demais estatísticas para explicar a posição. O Overall é uma nota de carta entre 40 e 99 formada por resultados, gols, assistências, dribles, desarmes, precisão, posse, MVPs, gols contra e confiança pela quantidade de jogos. <strong>Winrate</strong> exibe porcentagem, índice de confiança e jogos; o limite inferior de Wilson impede que uma única vitória supere uma campanha consistente. <strong>Posse Média</strong> também exibe índice e jogos, aproximando amostras pequenas do valor neutro de 50% até existir histórico suficiente.</p></section>
+          <section><h3>Overall, Geral, Winrate e Posse</h3><p><strong>Geral</strong> usa o Overall como critério principal e mostra as demais estatísticas para explicar a posição. O Overall é uma nota de carta entre 40 e 99 formada por resultados, gols, assistências, dribles, desarmes, precisão, posse, MVPs, gols contra e confiança pela quantidade de jogos. <strong>Winrate</strong> exibe porcentagem, índice de confiança e jogos; o limite inferior de Wilson premia campanhas eficientes e consistentes. <strong>Posse Média</strong> também exibe índice e jogos, usando uma base neutra de vinte partidas para impedir que um pico isolado supere quem mantém boa posse por mais jogos.</p></section>
+          <section><h3>Resultado e histórico detalhado</h3><p>Ao terminar uma partida, o relatório mostra participantes, nota individual, gols, assistências, chutes, dribles, desarmes, posse e os totais de cada time. Os mesmos detalhes podem ser reabertos clicando em uma partida no histórico próprio ou público. Partidas casuais exibem o relatório e dão XP, mas apenas as competitivas alimentam estatísticas, ranking e KX Coins.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
           <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
@@ -1014,6 +1031,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v31.0 - Relat&oacute;rio de Partida</h4>
+            <p>Resultados e hist&oacute;ricos agora exibem participantes, notas, estat&iacute;sticas individuais e totais por time em uma interface responsiva. O ranking de posse ganhou prote&ccedil;&atilde;o maior para amostras pequenas, o tutorial remove o rival da miss&atilde;o de passe, mensagens corrompidas foram corrigidas e o descarte do perfil tamb&eacute;m desfaz a sele&ccedil;&atilde;o visual de skins.</p>
+          </section>
           <section>
             <h4>v30.5 - Ranking com Contexto</h4>
             <p>Winrate e Posse M&eacute;dia agora consideram a quantidade de partidas, exibem um &iacute;ndice ajustado e mostram os jogos usados na amostra. Uma estreia isolada n&atilde;o supera mais uma campanha consistente. O tutorial identifica claramente a miss&atilde;o de chute normal, a entrada em lobbies ganhou confirma&ccedil;&atilde;o redundante nos dois canais WebRTC e o Chat Global conserva somente as mensagens do dia atual, da meia-noite &agrave;s 23:59 no hor&aacute;rio de Bras&iacute;lia.</p>
