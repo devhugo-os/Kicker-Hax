@@ -18,8 +18,10 @@ import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
-import { TutorialSession, tutorialNeedsAlly } from '../tutorial/tutorialSession.js';
+import { TutorialSession, tutorialNeedsAlly, tutorialNeedsBall, tutorialNeedsEnemy } from '../tutorial/tutorialSession.js';
 import { getPossessionConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
+import { buildMatchReport } from '../../shared/matchReport.js';
+import { renderMatchReport } from '../components/matchReportView.js';
 
 export const gameController = {
   currentUser: null,
@@ -1727,11 +1729,11 @@ export const gameController = {
 
             // Resolve the tackle at the final dash frame before normal bodies
             // are separated, mirroring the authoritative multiplayer server.
-            this.resolveLocalTackleImpacts(activeLocalPlayers, localBallSim);
             Physics.resolvePlayerPlayer(activeLocalPlayers);
-            Physics.resolvePlayerBall(activeLocalPlayers, localBallSim, () => frameSfx.push('pickup'));
-
-            Physics.updateBallPhysics(
+            if (!localBallSim.tutorialHidden) {
+              this.resolveLocalTackleImpacts(activeLocalPlayers, localBallSim);
+              Physics.resolvePlayerBall(activeLocalPlayers, localBallSim, () => frameSfx.push('pickup'));
+              Physics.updateBallPhysics(
               localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, activeLocalPlayers,
               (sfx) => frameSfx.push(sfx),
               (side) => {
@@ -1770,8 +1772,9 @@ export const gameController = {
                   }
                 }
               },
-              w, h
-            );
+                w, h
+              );
+            }
             this.tutorialSession?.update({
               player: bluePlayer,
               players: activeLocalPlayers,
@@ -1807,8 +1810,10 @@ export const gameController = {
           this.ball.vy = localBallSim.vy;
           this.ball.lastStrikeType = localBallSim.lastStrikeType;
           this.ball.strikeTimer = localBallSim.strikeTimer;
-          this.drawShotPreview(this.ctx, bluePlayer, localBallSim, inputP1, bluePlayer.kickCharge || 0);
-          this.ball.draw(this.ctx);
+          if (!localBallSim.tutorialHidden) {
+            this.drawShotPreview(this.ctx, bluePlayer, localBallSim, inputP1, bluePlayer.kickCharge || 0);
+            this.ball.draw(this.ctx);
+          }
 
           this.players.forEach(p => {
             const phys = localPlayers.find(item => item.id === p.id);
@@ -1988,6 +1993,12 @@ export const gameController = {
         bluePlayer.dir = Math.PI;
         allyPlayer.dir = Math.PI;
         allyPlayer.tutorialHidden = !tutorialNeedsAlly(step.id);
+        redPlayer.tutorialHidden = !tutorialNeedsEnemy(step.id);
+        localBallSim.tutorialHidden = !tutorialNeedsBall(step.id);
+        if (localBallSim.tutorialHidden) {
+          localBallSim.x = -1000;
+          localBallSim.y = -1000;
+        }
 
         if (step.id === 'control') {
           bluePlayer.x = this.canvas.width * 0.68;
@@ -2096,7 +2107,7 @@ export const gameController = {
         tackler.vy = 0;
         tackler.stun = Math.max(tackler.stun, C.FAIL_STUN);
         if (tackler.id === 'p1') {
-          this.tutorialSession?.record('tackleFailed', { message: 'MissÃ£o falhou: o dash terminou sem tocar na bola.' });
+          this.tutorialSession?.record('tackleFailed', { message: 'Missão falhou: o dash terminou sem tocar na bola.' });
         }
         continue;
       }
@@ -2141,7 +2152,7 @@ export const gameController = {
           this.tutorialSession?.record('botTackle');
         }
         if (tackler.id === 'p1') {
-          this.tutorialSession?.record('tackleFailed', { message: 'MissÃ£o falhou: desarme por trÃ¡s nÃ£o concede a posse.' });
+          this.tutorialSession?.record('tackleFailed', { message: 'Missão falhou: desarme por trás não concede a posse.' });
         }
       }
       tackler.tackleSuccess = true;
@@ -2166,6 +2177,23 @@ export const gameController = {
     document.getElementById('post-mvp').textContent = score.blue >= score.red ?menuController.profileData.username : 'CPU Bot';
     document.getElementById('post-xp-gained').textContent = this.practiceMode ? '+0 XP (Treino)' : '+0 XP (com bot)';
     document.getElementById('post-coins-gained').textContent = '+0';
+    const localStats = this.players.map(player => ({
+      playerId: player.id,
+      username: player.name || (player.id === 'p1' ? menuController.profileData.username : 'CPU Bot'),
+      team: player.team,
+      goals: player.matchStats?.goals || 0,
+      assists: player.matchStats?.assists || 0,
+      ownGoals: player.matchStats?.ownGoals || 0,
+      shots: player.matchStats?.shots || 0,
+      dribbles: player.matchStats?.dribbles || 0,
+      tackles: player.matchStats?.tackles || 0,
+      possessionPct: player.matchStats?.possessionPct || 0
+    }));
+    renderMatchReport(document.getElementById('post-match-report'), {
+      score,
+      winnerTeam: score.red === score.blue ? 'draw' : score.red > score.blue ? C.Team.RED : C.Team.BLUE,
+      playerStats: localStats
+    });
     router.show('post-game-screen');
   },
 
@@ -2211,6 +2239,7 @@ export const gameController = {
         playerUids: activeHumans.map(player => player.uid),
         playerTeams,
         playerStats: resultStats,
+        teamStats: result?.teamStats || buildMatchReport(result).teamStats,
         mvp: result?.mvp || null,
         winner: winnerTeam,
         scoreRed: score.red,
@@ -2260,6 +2289,7 @@ export const gameController = {
       ? 'Espectador'
       : (result?.hasBots ? '+0 XP (com bot)' : `+${xpGained} XP`);
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
+    renderMatchReport(document.getElementById('post-match-report'), result);
     router.show('post-game-screen');
   },
 
@@ -2292,6 +2322,7 @@ export const gameController = {
         username: lobbyPlayer?.username || player.name || 'Jogador',
         team: player.team,
         goals: player.matchStats?.goals || 0,
+        assists: player.matchStats?.assists || 0,
         ownGoals: player.matchStats?.ownGoals || 0,
         shots: player.matchStats?.shots || 0,
         dribbles: player.matchStats?.dribbles || 0,
@@ -2300,17 +2331,19 @@ export const gameController = {
       };
     });
 
+    const report = buildMatchReport({ score, winnerTeam, playerStats });
     return {
       matchId: this.onlineMatchMeta?.matchId || `${this.activeRoom?.code || 'online'}-host-forfeit-${Date.now()}`,
       startedAt: this.onlineMatchMeta?.startedAt || null,
       endedAt: new Date().toISOString(),
       score,
       winnerTeam,
-      playerStats,
+      playerStats: report.playerStats,
+      teamStats: report.teamStats,
       competitive: !!this.activeRoom?.competitive,
       hasBots: false,
       forfeit: true,
-      mvp: playerStats.find(stats => stats.playerId === myId) || null
+      mvp: report.playerStats.slice().sort((a, b) => b.rating - a.rating)[0] || null
     };
   },
 

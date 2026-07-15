@@ -1318,7 +1318,7 @@ html.browser-immersive #match-canvas {
 }
 
 .post-card {
-  width: min(580px, calc(100vw - 24px));
+  width: min(920px, calc(100vw - 24px));
   max-height: calc(100dvh - 24px);
   overflow-y: auto;
 }
@@ -1384,7 +1384,7 @@ html.browser-immersive #match-canvas {
   }
 
   .post-card {
-    width: min(400px, calc(100vw - 16px));
+    width: min(860px, calc(100vw - 16px));
     max-height: calc(100dvh - 16px);
     gap: 12px;
     padding: 16px;

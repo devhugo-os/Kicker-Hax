@@ -26,6 +26,14 @@ export function tutorialNeedsAlly(stepId) {
   return stepId === 'pass';
 }
 
+export function tutorialNeedsEnemy(stepId) {
+  return ['shoot', 'dribble', 'tackle'].includes(stepId);
+}
+
+export function tutorialNeedsBall(stepId) {
+  return !['move', 'sprint'].includes(stepId);
+}
+
 export const TUTORIAL_STEPS = [
   { id: 'intro', manual: true, speaker: 'Treinador KX', title: 'Bem-vindo ao campo!', text: 'Vou acompanhar você em uma sequência prática. Cada objetivo usa a mesma física das partidas reais.', objective: 'Conheça seus comandos e clique em Começar.', showControls: true },
   { id: 'move', speaker: 'Treinador KX', title: 'Movimentação', text: 'Mude de direção e conheça o espaço ao seu redor.', objective: 'Percorra o campo até completar a barra.' },
@@ -60,7 +68,7 @@ export class TutorialSession {
   }
 
   get step() { return TUTORIAL_STEPS[this.index]; }
-  get enemyActive() { return ['shoot', 'dribble', 'tackle', 'goal'].includes(this.step?.id); }
+  get enemyActive() { return tutorialNeedsEnemy(this.step?.id); }
   get isManual() { return !!this.step?.manual; }
 
   start() {

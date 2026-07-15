@@ -1,6 +1,7 @@
 // Kicker Hax - Server-side Match Model
 import * as C from '../../shared/constants.js';
 import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
+import { buildMatchReport } from '../../shared/matchReport.js';
 import { ServerPhysics } from './serverPhysics.js';
 
 export class ServerMatch {
@@ -161,6 +162,11 @@ export class ServerMatch {
         stats.tackles = previous.tackles || 0;
         stats.possessionFrames = previous.possessionFrames || 0;
       }
+    });
+    // Keep the report entry of anyone who actually participated even if that
+    // player disconnected and the remaining team voted to continue.
+    previousStats.forEach((stats, id) => {
+      if (!this.playerStats.has(id)) this.playerStats.set(id, { ...stats });
     });
   }
 
@@ -1150,11 +1156,12 @@ export class ServerMatch {
         : (this.score.blue > this.score.red ? C.Team.BLUE : C.Team.RED)
     );
 
-    const mvp = playerStats
+    const report = buildMatchReport({ score: this.score, winnerTeam, playerStats });
+    const mvp = report.playerStats
       .filter(stats => winnerTeam !== 'draw' ? stats.team === winnerTeam : true)
       .sort((a, b) => {
-        const ratingA = (a.goals * 6) + ((a.assists || 0) * 3) + (a.shots * 2) + (a.dribbles * 2) + a.tackles - (a.ownGoals * 4);
-        const ratingB = (b.goals * 6) + ((b.assists || 0) * 3) + (b.shots * 2) + (b.dribbles * 2) + b.tackles - (b.ownGoals * 4);
+        const ratingA = Number(a.rating || 0);
+        const ratingB = Number(b.rating || 0);
         // A stable UID tie-breaker guarantees every client receives the same
         // MVP when players finish with identical match ratings.
         return (ratingB - ratingA) || String(a.uid || a.playerId).localeCompare(String(b.uid || b.playerId));
@@ -1167,7 +1174,8 @@ export class ServerMatch {
       score: { ...this.score },
       winnerTeam,
       mvp,
-      playerStats,
+      playerStats: report.playerStats,
+      teamStats: report.teamStats,
       hasBots: this.hasBots,
       competitive: this.competitive,
       forfeit: hasForfeitWinner

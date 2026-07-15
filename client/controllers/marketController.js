@@ -36,6 +36,7 @@ export const marketController = {
       this.renderInventory();
     }));
     document.getElementById('inventory-sort')?.addEventListener('change', () => this.renderInventory());
+    window.addEventListener('kicker:profile-draft-discarded', () => this.renderInventory());
     document.querySelectorAll('[data-market-tab]').forEach(button => button.addEventListener('click', () => this.selectTab(button.dataset.marketTab)));
     document.getElementById('chest-roulette-close')?.addEventListener('click', () => this.closeChestRoulette());
     this.bindCropEditor();

@@ -28,11 +28,15 @@ export function getPossessionAverage(player) {
     : 0;
 }
 
-/** Pulls small samples toward neutral possession so one match cannot lead. */
+/**
+ * Uses a twenty-match neutral baseline. Possession is a continuous value, so
+ * it needs stronger sample protection than binary wins/losses: a single 90%
+ * match must not outrank a player sustaining 60% across ten matches.
+ */
 export function getPossessionConfidenceScore(player) {
   const matches = Math.max(0, Number(player?.possessionMatches ?? player?.matchesPlayed ?? 0));
   if (matches === 0) return 0;
-  const priorMatches = 8;
+  const priorMatches = 20;
   return ((getPossessionAverage(player) * matches) + (50 * priorMatches)) / (matches + priorMatches);
 }
 

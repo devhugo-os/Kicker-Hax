@@ -10,6 +10,7 @@ import { createProfileDraft, profilesDiffer } from '../utils/profileDraft.js';
 import { PROFILE_BIO_MAX_LENGTH, USERNAME_MAX_LENGTH } from '../../shared/constants.js';
 import { appendStaffTag } from '../utils/staffTags.js';
 import { calculateOverallRating } from '../utils/rankingScore.js';
+import { renderMatchReport } from '../components/matchReportView.js';
 
 function isVersionNewer(candidate, installed) {
   const parse = value => String(value).split('.').map(part => Number.parseInt(part, 10) || 0);
@@ -143,12 +144,17 @@ export const menuController = {
     });
     document.getElementById('public-profile-history-open')?.addEventListener('click', () => this.openPublicHistory());
     document.getElementById('public-profile-inventory-open')?.addEventListener('click', () => this.openPublicInventory());
+    const matchDetailsModal = document.getElementById('match-details-modal');
+    document.getElementById('match-details-close')?.addEventListener('click', () => matchDetailsModal?.classList.add('hidden'));
+    matchDetailsModal?.addEventListener('click', event => {
+      if (event.target === matchDetailsModal) matchDetailsModal.classList.add('hidden');
+    });
 
     // Profile Back button
     const btnProfileBack = document.getElementById('profile-btn-back');
     if (btnProfileBack) btnProfileBack.onclick = async () => {
       if (!(await this.confirmDiscardProfileChanges())) return;
-      this.clearProfileDraft();
+      this.discardProfileChanges();
       router.show('menu-screen');
     };
 
@@ -314,7 +320,10 @@ export const menuController = {
         } else {
           const buildHistoryItem = (match) => {
               const item = document.createElement('div');
-              item.className = 'history-item';
+              item.className = 'history-item history-item-clickable';
+              item.tabIndex = 0;
+              item.setAttribute('role', 'button');
+              item.setAttribute('aria-label', 'Abrir detalhes da partida');
 
               let resultClass = 'draw';
               let resultText = 'Empate';
@@ -335,6 +344,13 @@ export const menuController = {
                 <span>${match.scoreRed} : ${match.scoreBlue}</span>
                 <span class="history-result ${resultClass}">${resultText}</span>
               `;
+              item.onclick = () => this.openMatchDetails(match, this.currentUser.uid);
+              item.onkeydown = event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  this.openMatchDetails(match, this.currentUser.uid);
+                }
+              };
               return item;
           };
 
@@ -506,6 +522,13 @@ export const menuController = {
     this.profileDirty = false;
   },
 
+  discardProfileChanges() {
+    this.clearProfileDraft();
+    // Inventory cards are long-lived DOM nodes. Notify their controller so a
+    // discarded cosmetic preview cannot remain marked as selected.
+    window.dispatchEvent(new CustomEvent('kicker:profile-draft-discarded'));
+  },
+
   async confirmDiscardProfileChanges() {
     if (!this.profileDirty) return true;
     return confirmDialog({
@@ -637,7 +660,10 @@ export const menuController = {
         const isDraw = match.winner === 'draw';
         const isWin = !isDraw && String(team) === String(match.winner);
         const item = document.createElement('article');
-        item.className = 'history-item public-history-item';
+        item.className = 'history-item public-history-item history-item-clickable';
+        item.tabIndex = 0;
+        item.setAttribute('role', 'button');
+        item.setAttribute('aria-label', 'Abrir detalhes da partida');
         const date = document.createElement('span');
         date.textContent = new Date(match.date || match.endedAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
         const mode = document.createElement('span');
@@ -648,6 +674,13 @@ export const menuController = {
         result.className = `history-result ${isDraw ? 'draw' : isWin ? 'win' : 'loss'}`;
         result.textContent = isDraw ? 'Empate' : isWin ? 'Vit\u00f3ria' : 'Derrota';
         item.append(date, mode, score, result);
+        item.onclick = () => this.openMatchDetails(match, uid);
+        item.onkeydown = event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            this.openMatchDetails(match, uid);
+          }
+        };
         column.appendChild(item);
       };
       groups.forEach(([title, matches]) => {
@@ -670,6 +703,24 @@ export const menuController = {
     } catch (error) {
       list.textContent = 'Não foi possível carregar este histórico.';
     }
+  },
+
+  openMatchDetails(match, viewerUid) {
+    const modal = document.getElementById('match-details-modal');
+    const report = document.getElementById('match-details-report');
+    if (!modal || !report || !match) return;
+    const competitive = match.competitive || match.category === 'competitive';
+    const date = new Date(match.date || match.endedAt || Date.now()).toLocaleString('pt-BR', {
+      dateStyle: 'short', timeStyle: 'short'
+    });
+    const team = match.playerTeams?.[viewerUid];
+    const draw = match.winner === 'draw';
+    const won = !draw && String(team) === String(match.winner);
+    document.getElementById('match-details-title').textContent = `${competitive ? 'Competitiva' : 'Casual'} · ${draw ? 'Empate' : won ? 'Vitória' : 'Derrota'}`;
+    document.getElementById('match-details-meta').textContent = `${date}${match.forfeit ? ' · Encerrada por W.O.' : ''}`;
+    document.getElementById('match-details-score').textContent = `${match.scoreRed ?? match.score?.red ?? 0} : ${match.scoreBlue ?? match.score?.blue ?? 0}`;
+    renderMatchReport(report, match);
+    modal.classList.remove('hidden');
   },
 };
 export default menuController;

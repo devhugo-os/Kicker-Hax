@@ -3355,6 +3355,100 @@ html.app-runtime #menu-btn-download-app {
   margin-bottom: 4px;
 }
 
+.match-report {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+  text-align: left;
+}
+
+.match-report-empty {
+  padding: 18px;
+  color: var(--text-muted);
+  text-align: center;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.match-report-teams {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.match-report-team,
+.match-report-players {
+  min-width: 0;
+  padding: 12px;
+  background: rgba(2, 6, 23, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+}
+
+.match-report-team-red { border-top: 3px solid #ef4444; }
+.match-report-team-blue { border-top: 3px solid #3b82f6; }
+.match-report-team h4,
+.match-report-players h4 { margin: 0 0 8px; font-size: 13px; }
+.match-report-team-score { float: right; margin-top: -28px; font: 900 24px 'Outfit', sans-serif; }
+.match-report-team-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.match-report-team-stats > div { display: grid; gap: 2px; font-size: 10px; color: var(--text-muted); }
+.match-report-value { font-size: 13px; font-weight: 800; color: var(--text-primary); }
+
+.match-report-table { min-width: 620px; }
+.match-report-players { overflow-x: auto; }
+.match-report-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.7fr) repeat(7, minmax(45px, .55fr));
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 7px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 11px;
+  text-align: center;
+}
+.match-report-header { min-height: 24px; border: 0; color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.match-report-player { overflow: hidden; color: var(--text-primary); font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.match-report-row.team-red .match-report-player { color: #fca5a5; }
+.match-report-row.team-blue .match-report-player { color: #93c5fd; }
+.match-report-rating { color: #facc15; font-size: 13px; font-weight: 900; }
+
+.history-item-clickable { cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.history-item-clickable:hover,
+.history-item-clickable:focus-visible { background: rgba(59, 130, 246, 0.12); border-color: rgba(96, 165, 250, 0.55); outline: none; }
+
+.match-details-card {
+  width: min(920px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 22px;
+}
+#match-details-modal { z-index: 2100; }
+.match-details-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
+.match-details-heading h2 { margin: 0; }
+.match-details-heading p { margin: 3px 0 0; }
+.match-details-score { flex: 0 0 auto; font: 900 30px 'Outfit', sans-serif; }
+
+@media (max-width: 720px), (pointer: coarse) {
+  .match-report { gap: 6px; }
+  .match-report-teams { gap: 6px; }
+  .match-report-team, .match-report-players { padding: 7px; }
+  .match-report-team h4, .match-report-players h4 { margin-bottom: 4px; font-size: 10px; }
+  .match-report-team-score { margin-top: -20px; font-size: 18px; }
+  .match-report-team-stats { gap: 2px; }
+  .match-report-team-stats > div { font-size: 7px; }
+  .match-report-value { font-size: 10px; }
+  .match-report-table { min-width: 500px; }
+  .match-report-row { grid-template-columns: minmax(110px, 1.6fr) repeat(7, minmax(38px, .5fr)); min-height: 26px; padding: 3px 4px; font-size: 9px; }
+  .match-report-header { min-height: 18px; font-size: 7px; }
+  .match-report-rating { font-size: 10px; }
+  .match-details-card { width: calc(100vw - 12px); max-height: calc(100dvh - 12px); padding: 10px; }
+  .match-details-heading { margin-bottom: 7px; }
+  .match-details-heading h2 { font-size: 15px; }
+  .match-details-heading p { font-size: 8px; }
+  .match-details-score { font-size: 21px; }
+}
+
 .version-badge {
   position: fixed;
   bottom: 12px;
