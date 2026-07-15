@@ -1,2 +1,2 @@
-Kicker Hax 29.0
-build: 2026-07-15T00:55:38.170Z
+Kicker Hax 30.0
+build: 2026-07-15T01:44:03.708Z

@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-BYIDQxAl.js"></script>
+  <script type="module" crossorigin src="./assets/index-CkD4Dl21.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-cf0QVCQg.js">
   <link rel="modulepreload" crossorigin href="./assets/game-engine-BAhizqUQ.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-DUbm4-Wy.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-cwxO87S8.css">
 </head>
 <body>
 
@@ -185,7 +185,10 @@
               <div class="adv-stat-row"><span>Posse Média</span> <strong id="stats-possession">0%</strong></div>
               <div class="adv-stat-row"><span>Gols Contra</span> <strong id="stats-own-goals">0</strong></div>
               <div class="adv-stat-row"><span>MVPs</span> <strong id="stats-mvps">0</strong></div>
-              <div class="adv-stat-row"><span>⚡ Nível Atual</span> <strong id="stats-level">1</strong></div>
+              <div class="profile-rating-pair" aria-label="Classificação e nível do jogador">
+                <div class="profile-rating-card overall"><span>Overall</span><strong id="stats-overall">0</strong></div>
+                <div class="profile-rating-card level"><span>Nível</span><strong id="stats-level">1</strong></div>
+              </div>
               <div class="adv-stat-row"><span>✨ Experiência (XP)</span> <strong id="stats-xp">0</strong></div>
             </div>
 
@@ -211,7 +214,10 @@
             <h2 id="public-profile-title">Jogador</h2>
             <p id="public-profile-bio">Sem biografia.</p>
           </div>
-          <div class="public-profile-level"><span>Nível</span><strong id="public-profile-level">1</strong></div>
+          <div class="public-profile-ratings">
+            <div class="public-profile-rating overall"><span>Overall</span><strong id="public-profile-overall">0</strong></div>
+            <div class="public-profile-rating level"><span>Nível</span><strong id="public-profile-level">1</strong></div>
+          </div>
         </header>
         <div class="public-profile-stats">
           <div><strong id="public-stats-played">0</strong><span>Jogos</span></div>
@@ -967,7 +973,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v29.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v30.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -979,6 +985,7 @@
         </header>
         <div class="game-rules-content">
           <section><h3>Onde encontrar cada modo</h3><p>No menu principal, selecione <strong>Jogar</strong>. A tela seguinte separa Jogar Sozinho, Treino Livre e Multiplayer Online. Mercado, perfil, ranking, configurações, controles e créditos possuem botões próprios no menu principal.</p></section>
+          <section><h3>Tutorial interativo</h3><p>Abra <strong>Jogar &gt; Tutorial</strong> para aprender em uma partida guiada. Movimentação, corrida, posse, passe, chute, drible, super chute, desarme e gol possuem objetivos reais. Tentativas inválidas se repetem; gols só contam quando a bola cruza a linha depois de um chute confirmado. No celular, siga os botões do HUD e segure correr ou chute quando a orientação pedir.</p></section>
           <section><h3>Controles no computador</h3><p>Abra <strong>Controles</strong> no menu principal para visualizar ou trocar as teclas de movimento, chute, super chute, drible, desarme e sprint. Selecione o comando que deseja alterar e pressione uma tecla livre. Enter permanece reservado ao chat e teclas do sistema não podem ser vinculadas.</p></section>
           <section><h3>HUD e controles no celular</h3><p>Abra <strong>Controles &gt; Editar HUD na partida</strong>. Um treino de configuração será aberto: arraste o analógico e todos os botões até a posição desejada; toque no lápis de cada controle para ajustar tamanho e opacidade. Use <strong>Confirmar HUD</strong> na parte inferior para salvar no perfil ou <strong>Restaurar padrões</strong> para recuperar o layout inicial.</p></section>
           <section><h3>Posse e chute</h3><p>Encoste na bola para dominá-la. Somente o jogador que está com a posse pode chutar, carregar o chute, driblar ou executar o super chute. Segure o comando de chute para aumentar a força e solte para finalizar; a seta mostra a direção antes do disparo. O super chute consome mais stamina, possui recarga e gera um disparo muito mais veloz.</p></section>
@@ -990,12 +997,14 @@
           <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
           <section><h3>Premiação Online</h3><ul><li>Vitória: 80 XP e, no competitivo, 30 KX Coins.</li><li>Empate: 30 XP e, no competitivo, 18 KX Coins.</li><li>Derrota: 15 XP e, no competitivo, 10 KX Coins.</li><li>Casual concede somente XP. Treino e partidas com CPU não concedem progresso.</li></ul></section>
           <section><h3>Estatísticas e Ranking</h3><p>Somente partidas competitivas concluídas contabilizam jogos, vitórias, derrotas, empates, gols, assistências, chutes, dribles, desarmes, gols contra, posse média e MVP. A assistência pertence ao último companheiro que passou a bola quando o primeiro chute do recebedor vira gol; um toque adversário ou um segundo chute cancela a assistência. A posse média soma a posse das partidas competitivas e divide pelo número de jogos.</p></section>
+          <section><h3>Overall, Geral e Winrate</h3><p><strong>Geral</strong> usa o Overall como critério principal e mostra as demais estatísticas para explicar a posição. O Overall é uma nota de carta entre 40 e 99 formada por resultados, gols, assistências, dribles, desarmes, precisão, posse, MVPs, gols contra e confiança pela quantidade de jogos. <strong>Winrate</strong> mostra porcentagem e jogos juntos, mas ordena por confiança estatística: uma amostra pequena vale menos que uma temporada consistente.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
           <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
           <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
           <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
           <section><h3>Vitrines e Solicitações</h3><p>Skins da comunidade custam 90 KX Coins na vitrine diária, 180 na semanal e 360 na mensal. Cada conta pode solicitar uma skin por dia. O recorte enviado participa das seleções e a vitrine mantém a skin atual quando não existe nova candidata válida para o período.</p></section>
+          <section><h3>Perfil, conta e atualização</h3><p>Nome, biografia, emblema, skin e HUD só são alterados definitivamente depois de salvar. Uma mesma conta não deve jogar simultaneamente em duas sessões. Atualizações obrigatórias aguardam partidas multiplayer em andamento; no aplicativo, o APK é baixado apenas do endereço oficial e precisa pertencer ao mesmo pacote assinado instalado.</p></section>
         </div>
       </div>
     </div>
@@ -1005,6 +1014,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v30.0 - Academia Segura</h4>
+            <p>O tutorial agora confirma a linha do gol antes de contabilizar chutes, aceita super chute no desafio final, orienta gestos mobile e exige tr&ecirc;s dribles completos em sequ&ecirc;ncia. Overall aparece nos perfis e ordena o ranking Geral; Winrate considera a confian&ccedil;a da quantidade de jogos e exibe a amostra. As vitrines iniciam ciclos de 1, 7 e 28 dias, compras preservam seu valor no invent&aacute;rio e solicita&ccedil;&otilde;es confirmadas limpam e bloqueiam a oficina. A entrada no lobby tolera o atraso de timers do host e todos os chats abrem na mensagem mais recente. O manual foi ampliado e o aplicativo restringe navega&ccedil;&atilde;o, protege o login restaurado e valida origem, pacote e assinatura de cada APK.</p>
+          </section>
           <section>
             <h4>v29.0 - Jogo sem Fronteiras</h4>
             <p>O multiplayer agora separa estados e comandos em um canal WebRTC r&aacute;pido, sem retransmitir quadros antigos, enquanto chat, ping, replay e resultados permanecem confi&aacute;veis. Snapshots fora de ordem s&atilde;o ignorados, a renderiza&ccedil;&atilde;o absorve oscila&ccedil;&otilde;es maiores e o tr&aacute;fego foi reduzido sem alterar a f&iacute;sica de 60 FPS. O tutorial ganhou press&atilde;o real na etapa de drible e aguarda toda a trajet&oacute;ria de chutes antes do feedback. Ranking de Winrate e nota Overall de 0 a 99 agora possuem crit&eacute;rios distintos, e o chat da partida ficou mais organizado.</p>
