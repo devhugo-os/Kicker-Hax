@@ -18,7 +18,7 @@ import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
-import { TutorialSession } from '../tutorial/tutorialSession.js';
+import { TutorialSession, tutorialNeedsAlly } from '../tutorial/tutorialSession.js';
 
 export const gameController = {
   currentUser: null,
@@ -397,7 +397,7 @@ export const gameController = {
         socketService.on('matchRejoined', (payload) => {
           this.activeRoom = payload?.lobbyInfo || this.activeRoom;
           this.fieldSize = this.activeRoom?.fieldSize || 'medium';
-          this.onlineMatchMeta = { rejoined: true };
+          this.onlineMatchMeta = { rejoined: true, matchId: payload?.matchId || null };
           router.show('match-screen');
           showToast('Voce voltou para a partida.', 'success');
         });
@@ -413,6 +413,7 @@ export const gameController = {
 
     router.register('lobby-screen', {
       onEnter: () => {
+        requestAnimationFrame(() => this.scrollChatToLatest('lobby-chat-messages'));
         if (this.activeRoom?.code) {
           const pendingRoom = this.activeRoom;
           socketService.getPublicRoomMeta(pendingRoom.code).then(roomMeta => {
@@ -447,7 +448,11 @@ export const gameController = {
         socketService.onMatchStarted((matchMeta) => {
           this.onlineMatchMeta = matchMeta || null;
           if (!socketService.isHost && this.currentUser?.uid && this.activeRoom?.code) {
-            localStorage.setItem(`kicker_hax_rejoin_${this.currentUser.uid}`, JSON.stringify({ code: this.activeRoom.code, savedAt: Date.now() }));
+            localStorage.setItem(`kicker_hax_rejoin_${this.currentUser.uid}`, JSON.stringify({
+              code: this.activeRoom.code,
+              matchId: matchMeta?.matchId || null,
+              savedAt: Date.now()
+            }));
           }
           showToast('A partida está começando!', 'success');
           router.show('match-screen');
@@ -456,7 +461,7 @@ export const gameController = {
         socketService.on('matchRejoined', (payload) => {
           this.activeRoom = payload?.lobbyInfo || this.activeRoom;
           this.fieldSize = this.activeRoom?.fieldSize || 'medium';
-          this.onlineMatchMeta = { rejoined: true };
+          this.onlineMatchMeta = { rejoined: true, matchId: payload?.matchId || null };
           showToast('Voce voltou para a partida.', 'success');
           router.show('match-screen');
         });
@@ -997,6 +1002,7 @@ export const gameController = {
           gameChat.classList.toggle('mobile-chat-modal', this.isTouchDevice() && willOpen);
           document.getElementById('game-chat-form')?.classList.toggle('active', willOpen);
           if (!gameChat.classList.contains('hidden')) {
+            requestAnimationFrame(() => this.scrollChatToLatest('game-chat-messages'));
             document.getElementById('game-chat-input')?.focus();
           }
         };
@@ -1030,6 +1036,7 @@ export const gameController = {
       }
       if (!this.isTouchDevice() && this.mode === 'multiplayer') {
         document.getElementById('game-chat-form')?.classList.add('active');
+        requestAnimationFrame(() => this.scrollChatToLatest('game-chat-messages'));
       }
     }
     }
@@ -1064,7 +1071,10 @@ export const gameController = {
             this.clearPressedKeys();
             document.getElementById('game-chat-overlay')?.classList.remove('hidden');
             form.classList.add('active');
-            requestAnimationFrame(() => input.focus({ preventScroll: true }));
+            requestAnimationFrame(() => {
+              this.scrollChatToLatest('game-chat-messages');
+              input.focus({ preventScroll: true });
+            });
           } else {
             // The match hotkey listener owns Enter, so submit explicitly.
             // This keeps chat usable while a replay overlay is displayed.
@@ -1685,20 +1695,22 @@ export const gameController = {
 
             Physics.updatePlayerPhysics(bluePlayer, inputP1, localBallSim, (sfx) => frameSfx.push(sfx));
             if (!this.practiceMode || this.tutorialMode) Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
-            if (this.tutorialMode) Physics.updatePlayerPhysics(allyPlayer, { x: 0, y: 0 }, localBallSim, (sfx) => frameSfx.push(sfx));
+            if (this.tutorialMode && !allyPlayer.tutorialHidden) Physics.updatePlayerPhysics(allyPlayer, { x: 0, y: 0 }, localBallSim, (sfx) => frameSfx.push(sfx));
 
             Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
             if (!this.practiceMode || this.tutorialMode) Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
-            if (this.tutorialMode) Physics.applyLimits(allyPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
+            if (this.tutorialMode && !allyPlayer.tutorialHidden) Physics.applyLimits(allyPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
+
+            const activeLocalPlayers = localPlayers.filter(player => !player.tutorialHidden);
 
             // Resolve the tackle at the final dash frame before normal bodies
             // are separated, mirroring the authoritative multiplayer server.
-            this.resolveLocalTackleImpacts(localPlayers, localBallSim);
-            Physics.resolvePlayerPlayer(localPlayers);
-            Physics.resolvePlayerBall(localPlayers, localBallSim, () => frameSfx.push('pickup'));
+            this.resolveLocalTackleImpacts(activeLocalPlayers, localBallSim);
+            Physics.resolvePlayerPlayer(activeLocalPlayers);
+            Physics.resolvePlayerBall(activeLocalPlayers, localBallSim, () => frameSfx.push('pickup'));
 
             Physics.updateBallPhysics(
-              localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, localPlayers,
+              localBallSim, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, activeLocalPlayers,
               (sfx) => frameSfx.push(sfx),
               (side) => {
                 // Goal triggered offline
@@ -1738,7 +1750,13 @@ export const gameController = {
               },
               w, h
             );
-            this.tutorialSession?.update({ player: bluePlayer, ball: localBallSim, input: inputP1, canvas: this.canvas });
+            this.tutorialSession?.update({
+              player: bluePlayer,
+              players: activeLocalPlayers,
+              ball: localBallSim,
+              input: inputP1,
+              canvas: this.canvas
+            });
           }
 
           // Record locally for replay frames
@@ -1772,7 +1790,7 @@ export const gameController = {
 
           this.players.forEach(p => {
             const phys = localPlayers.find(item => item.id === p.id);
-            if (!phys) return;
+            if (!phys || phys.tutorialHidden) return;
             p.x = phys.x;
             p.y = phys.y;
             p.dir = phys.dir;
@@ -1947,6 +1965,7 @@ export const gameController = {
         redPlayer.y = this.canvas.height * 0.22;
         bluePlayer.dir = Math.PI;
         allyPlayer.dir = Math.PI;
+        allyPlayer.tutorialHidden = !tutorialNeedsAlly(step.id);
 
         if (step.id === 'control') {
           bluePlayer.x = this.canvas.width * 0.68;
@@ -1973,7 +1992,7 @@ export const gameController = {
       };
 
       const recordLocalFrame = () => {
-        const snap = localPlayers.map(p => ({
+        const snap = localPlayers.filter(p => !p.tutorialHidden).map(p => ({
           x: p.x,
           y: p.y,
           dir: p.dir,
@@ -2017,6 +2036,11 @@ export const gameController = {
           mobile: this.isTouchDevice(),
           onStepChange: prepareTutorialStep,
           onAttemptReset: prepareTutorialStep,
+          onFeedbackChange: (locked) => {
+            if (!this.tutorialMode) return;
+            this.isPaused = locked;
+            if (locked) this.clearPressedKeys();
+          },
           onFinish: () => {
             this.tutorialMode = false;
             router.show('mode-select-screen');
@@ -2347,11 +2371,12 @@ export const gameController = {
 
     socketService.onGameState((state) => {
       const pingEl = document.getElementById('ping-indicator');
-      if (this.lastPingAt && Date.now() - this.lastPingAt > 4500) {
-        this.pingMs = null;
-        this.pingSamples = [];
+      const pingStale = !!this.lastPingAt && Date.now() - this.lastPingAt > 4500;
+      if (pingEl) {
+        pingEl.textContent = this.pingMs == null
+          ? (socketService.hasLiveHostConnection() ? 'Ping: medindo...' : 'Ping: sem conexão')
+          : `Ping: ${pingStale ? '>' : ''}${Math.min(500, this.pingMs)}ms`;
       }
-      if (pingEl) pingEl.textContent = this.pingMs == null ? 'Ping: --' : `Ping: ${Math.min(500, this.pingMs)}ms`;
       if (this.inReplay && state.status !== 'freeze' && state.status !== 'replay') {
         this.endReplayPlayback();
       }
@@ -2631,7 +2656,10 @@ export const gameController = {
         this.ball.draw(this.ctx);
 
         this.players.forEach(p => {
-          p.interpolate(0.35);
+          const localPrediction = p.id === localId && this.status === 'playing' && !this.matchHostPaused
+            ? { input, pingMs: this.pingMs || 0 }
+            : null;
+          p.interpolate(0.35, performance.now(), localPrediction);
           p.draw(this.ctx, this.ball.owner);
         });
       }
@@ -3787,12 +3815,13 @@ export const gameController = {
     if (!key) return;
     let saved;
     try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch { saved = null; }
-    if (!saved?.code || Date.now() - Number(saved.savedAt || 0) > 185000) {
+    if (!saved?.code || !saved?.matchId || Date.now() - Number(saved.savedAt || 0) > 185000) {
       localStorage.removeItem(key);
       return;
     }
     const room = await socketService.getPublicRoomMeta(saved.code).catch(() => null);
-    if (!room || room.status !== 'playing' || room.blockedRejoinUids?.[this.currentUser.uid] || room.bannedUids?.[this.currentUser.uid]) {
+    if (!room || room.status !== 'playing' || room.matchId !== saved.matchId
+      || room.blockedRejoinUids?.[this.currentUser.uid] || room.bannedUids?.[this.currentUser.uid]) {
       localStorage.removeItem(key);
       this.rejoinRoomMeta = null;
       return;
@@ -3814,7 +3843,7 @@ export const gameController = {
         const lastRoom = JSON.parse(localStorage.getItem(`kicker_hax_last_room_${this.currentUser.uid}`) || 'null');
         if (lastRoom?.code === saved.code) password = lastRoom.password || '';
       } catch { /* Rejoining a public room does not need a saved password. */ }
-      socketService.joinRoom(saved.code, password, profile, { rejoin: true });
+      socketService.joinRoom(saved.code, password, profile, { rejoin: true, matchId: saved.matchId });
     };
   },
 
@@ -4163,6 +4192,11 @@ export const gameController = {
       const el = document.getElementById(id);
       if (el) el.innerHTML = '';
     });
+  },
+
+  scrollChatToLatest(id) {
+    const chat = document.getElementById(id);
+    if (chat) chat.scrollTop = chat.scrollHeight;
   },
 
   // ==========================================================================

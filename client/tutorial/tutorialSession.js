@@ -22,6 +22,10 @@ function buildControlChips(controls, mobile) {
   ];
 }
 
+export function tutorialNeedsAlly(stepId) {
+  return stepId === 'pass';
+}
+
 export const TUTORIAL_STEPS = [
   { id: 'intro', manual: true, speaker: 'Treinador KX', title: 'Bem-vindo ao campo!', text: 'Vou acompanhar você em uma sequência prática. Cada objetivo usa a mesma física das partidas reais.', objective: 'Conheça seus comandos e clique em Começar.', showControls: true },
   { id: 'move', speaker: 'Treinador KX', title: 'Movimentação', text: 'Mude de direção e conheça o espaço ao seu redor.', objective: 'Percorra o campo até completar a barra.' },
@@ -38,8 +42,8 @@ export const TUTORIAL_STEPS = [
 
 /** Coordinates tutorial presentation, repetitions and failures independently from physics. */
 export class TutorialSession {
-  constructor({ root, controls, mobile = false, onStepChange, onAttemptReset, onFinish, onExit }) {
-    Object.assign(this, { root, controls: controls || {}, mobile, onStepChange, onAttemptReset, onFinish, onExit });
+  constructor({ root, controls, mobile = false, onStepChange, onAttemptReset, onFeedbackChange, onFinish, onExit }) {
+    Object.assign(this, { root, controls: controls || {}, mobile, onStepChange, onAttemptReset, onFeedbackChange, onFinish, onExit });
     this.index = 0;
     this.progress = 0;
     this.lastPosition = null;
@@ -93,6 +97,7 @@ export class TutorialSession {
     if (this.isManual || this.step?.celebration || this.advanceTimer) return;
     this.progress = 1;
     this.feedback = { type: 'success', text: 'Objetivo concluído!' };
+    this.onFeedbackChange?.(true, this);
     this.render();
     this.advanceTimer = setTimeout(() => this.next(), AUTO_ADVANCE_MS);
   }
@@ -134,6 +139,7 @@ export class TutorialSession {
       return;
     }
     this.feedback = { type: 'success', text: `${message} ${this.successes}/${target}` };
+    this.onFeedbackChange?.(true, this);
     this.render();
     this.scheduleAttemptReset();
   }
@@ -141,6 +147,7 @@ export class TutorialSession {
   fail(message) {
     if (this.feedback || this.advanceTimer) return;
     this.feedback = { type: 'failed', text: message || 'Missão falhou. Tente novamente.' };
+    this.onFeedbackChange?.(true, this);
     this.attemptActive = false;
     this.render();
     this.scheduleAttemptReset(1100);
@@ -154,13 +161,14 @@ export class TutorialSession {
       this.attemptActive = false;
       this.attemptFrames = 0;
       this.passStarted = false;
+      this.onFeedbackChange?.(false, this);
       this.render();
       this.onAttemptReset?.(this.step, this);
     }, delay);
   }
 
-  update({ player, ball, input, canvas }) {
-    this.updateOcclusion(player, canvas);
+  update({ player, players, ball, input, canvas }) {
+    this.updateOcclusion(players || player, canvas);
     if (!player || !ball || this.isManual || this.step?.celebration || this.progress >= 1 || this.feedback) return;
     const id = this.step?.id;
     if (id === 'move') {
@@ -178,18 +186,21 @@ export class TutorialSession {
     if (this.progress >= 1) this.complete(); else this.refreshProgress();
   }
 
-  updateOcclusion(player, canvas) {
+  updateOcclusion(players, canvas) {
     const card = this.root?.querySelector('.tutorial-card');
-    if (!card || !player || !canvas?.getBoundingClientRect) return;
+    const trackedPlayers = Array.isArray(players) ? players : [players].filter(Boolean);
+    if (!card || trackedPlayers.length === 0 || !canvas?.getBoundingClientRect) return;
     const canvasRect = canvas.getBoundingClientRect();
     const cardRect = card.getBoundingClientRect();
     const scaleX = canvasRect.width / Math.max(1, canvas.width || canvasRect.width);
     const scaleY = canvasRect.height / Math.max(1, canvas.height || canvasRect.height);
-    const x = canvasRect.left + player.x * scaleX;
-    const y = canvasRect.top + player.y * scaleY;
-    const radius = Math.max(12, (player.r || 22) * Math.max(scaleX, scaleY));
-    const under = x + radius >= cardRect.left && x - radius <= cardRect.right
-      && y + radius >= cardRect.top && y - radius <= cardRect.bottom;
+    const under = trackedPlayers.some(player => {
+      const x = canvasRect.left + player.x * scaleX;
+      const y = canvasRect.top + player.y * scaleY;
+      const radius = Math.max(12, (player.r || 22) * Math.max(scaleX, scaleY));
+      return x + radius >= cardRect.left && x - radius <= cardRect.right
+        && y + radius >= cardRect.top && y - radius <= cardRect.bottom;
+    });
     card.classList.toggle('is-player-under', under);
   }
 

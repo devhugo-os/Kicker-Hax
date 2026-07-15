@@ -6,6 +6,7 @@ import { ServerRoom } from '../../server/models/serverRoom.js';
 import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
 import { buildRoomCleanupPatch, getOrphanRoomCodes } from '../utils/roomCleanup.js';
+import { shouldDropRealtimeState } from '../utils/realtimeTransport.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
 
 class P2PSocketService {
@@ -37,6 +38,7 @@ class P2PSocketService {
     this.peerGeneration = 0;
     this.lastInputSentAt = 0;
     this.lastInputSignature = '';
+    this.activeMatchId = null;
     const isNativeFrame = new URLSearchParams(window.location.search).get('native') === '1' && window.parent !== window;
     const sessionStore = isNativeFrame ? localStorage : sessionStorage;
     this.sessionId = sessionStore.getItem('kicker_hax_session_id') || `session_${Date.now()}_${crypto.randomUUID()}`;
@@ -141,6 +143,7 @@ class P2PSocketService {
   }
 
   triggerLocalEvent(event, data) {
+    this.syncMatchLifecycle(event, data);
     const arr = this.listeners.get(event);
     if (arr) {
       arr.forEach(cb => {
@@ -168,9 +171,27 @@ class P2PSocketService {
     this.triggerLocalEvent(event, data);
     this.connections.forEach(conn => {
       if (conn.open) {
-        conn.send({ event, data });
+        const bufferedAmount = Number(conn.dataChannel?.bufferedAmount || 0);
+        if (shouldDropRealtimeState(event, bufferedAmount)) return;
+        try {
+          conn.send({ event, data });
+        } catch (error) {
+          if (event !== 'gameState') console.warn(`[P2PSocket] Falha ao enviar ${event}:`, error);
+        }
       }
     });
+  }
+
+  syncMatchLifecycle(event, data = {}) {
+    if (event === 'matchStarted' || event === 'matchRejoined') {
+      this.activeMatchId = data?.matchId || this.activeMatchId;
+      return;
+    }
+    if (!['matchEnded', 'matchAborted', 'kicked', 'hostLeft'].includes(event)) return;
+    this.activeMatchId = null;
+    if (auth.currentUser?.uid) {
+      localStorage.removeItem(`kicker_hax_rejoin_${auth.currentUser.uid}`);
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -341,6 +362,7 @@ class P2PSocketService {
   joinRoom(code, password, profile, options = {}) {
     const roomCode = code.toUpperCase();
     const rejoin = !!options.rejoin;
+    const matchId = String(options.matchId || '');
     if (this.roomOperation) {
       this.triggerLocalEvent('joinError', 'Aguarde a operacao atual terminar.');
       return;
@@ -401,7 +423,7 @@ class P2PSocketService {
           console.log('[P2PSocket] WebRTC aberto com Host. Enviando requisição de entrada...');
           conn.send({
             event: 'joinRoom',
-            data: { profile, rejoin, password }
+            data: { profile, rejoin, password, matchId }
           });
         });
 
@@ -460,9 +482,10 @@ class P2PSocketService {
     // The original timestamp is created when the match starts. Refresh it at
     // the actual disconnect so a late competitive dropout still receives the
     // full reconnect window in the arena list.
-    if (!this.isHost && this.roomCode && auth.currentUser?.uid) {
+    if (!this.isHost && this.roomCode && this.activeMatchId && auth.currentUser?.uid) {
       localStorage.setItem(`kicker_hax_rejoin_${auth.currentUser.uid}`, JSON.stringify({
         code: this.roomCode,
+        matchId: this.activeMatchId,
         savedAt: Date.now()
       }));
     }
@@ -514,6 +537,7 @@ class P2PSocketService {
     this.roomInstanceId = null;
     this.hostDepartureReported = false;
     this.roomOperation = null;
+    this.activeMatchId = null;
     // PeerJS can emit close either synchronously or after cleanup.
     setTimeout(() => { this.isLeavingRoom = false; }, 0);
   }
@@ -525,9 +549,9 @@ class P2PSocketService {
     if (!this.serverRoom) return;
 
     if (event === 'joinRoom') {
-      const { profile, rejoin, password } = data || {};
+      const { profile, rejoin, password, matchId } = data || {};
       const reconnecting = rejoin && this.serverRoom.status === 'playing'
-        ? this.serverRoom.reconnectPlayer(profile?.uid, socketId)
+        ? this.serverRoom.reconnectPlayer(profile?.uid, socketId, matchId)
         : null;
 
       if (rejoin && this.serverRoom.status === 'playing') {
@@ -549,7 +573,11 @@ class P2PSocketService {
         update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { updatedAt: Date.now() }).catch(() => {});
         this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
         this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${reconnecting.player.username} voltou para a partida.` });
-        if (conn) conn.send({ event: 'matchRejoined', data: { roomCode: this.roomCode, lobbyInfo: this.serverRoom.getLobbyInfo() } });
+        if (conn) conn.send({ event: 'matchRejoined', data: {
+          roomCode: this.roomCode,
+          matchId: this.serverRoom.match.matchId,
+          lobbyInfo: this.serverRoom.getLobbyInfo()
+        } });
         return;
       }
 
@@ -701,7 +729,12 @@ class P2PSocketService {
         const lobbyInfo = this.serverRoom.getLobbyInfo();
         this.broadcast('lobbyUpdate', lobbyInfo);
         this.broadcast('matchAborted', { lobbyInfo });
-        update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { status: 'lobby', updatedAt: Date.now() });
+        update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+          status: 'lobby',
+          matchId: null,
+          matchEndedAt: Date.now(),
+          updatedAt: Date.now()
+        });
       }
     }
 
@@ -1075,6 +1108,8 @@ class P2PSocketService {
         const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
         update(roomRef, {
           status: 'lobby',
+          matchId: null,
+          matchEndedAt: Date.now(),
           playersCount: 0,
           updatedAt: Date.now()
         });
@@ -1096,6 +1131,7 @@ class P2PSocketService {
     const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
     update(roomRef, {
       status: 'playing',
+      matchId: this.serverRoom.match.matchId,
       duration: this.serverRoom.duration,
       goalLimit: this.serverRoom.goalLimit,
       fieldSize: this.serverRoom.fieldSize,

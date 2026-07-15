@@ -47,3 +47,36 @@ test('pause desativa extrapolacao de movimento entre snapshots', () => {
 
   assert.equal(ball.x, 100);
 });
+
+test('previsao local reduz atraso visual sem alterar o alvo autoritativo', () => {
+  const player = new ClientPlayer({
+    id: 'local', name: 'Hugo', team: 1, x: 100, y: 100, dir: 0,
+    vx: 0, vy: 0, stamina: 1, staminaLock: 0, stun: 0,
+    shootHalo: 0, invuln: 0
+  });
+  player.lastRenderAt = 4000;
+  player.updateState({
+    id: 'local', name: 'Hugo', team: 1, x: 100, y: 100, dir: 0,
+    vx: 0, vy: 0, stamina: 1, staminaLock: 0, stun: 0,
+    shootHalo: 0, invuln: 0
+  }, 4000);
+
+  player.interpolate(0.35, 4000 + (1000 / 60), { input: { x: 1, y: 0, sprint: true }, pingMs: 260 });
+
+  assert.ok(player.x > 100, 'the local player should react before the host echo returns');
+  assert.equal(player.targetX, 100, 'prediction must remain visual only');
+});
+
+test('mantem estatisticas quando o snapshot compacto nao as repete', () => {
+  const player = new ClientPlayer({
+    id: 'p1', name: 'Hugo', team: 1, x: 10, y: 10, dir: 0,
+    vx: 0, vy: 0, stamina: 1, staminaLock: 0, stun: 0,
+    shootHalo: 0, invuln: 0, matchStats: { goals: 2 }
+  });
+  player.updateState({
+    id: 'p1', name: 'Hugo', team: 1, x: 11, y: 10, dir: 0,
+    vx: 1, vy: 0, stamina: 1, staminaLock: 0, stun: 0,
+    shootHalo: 0, invuln: 0
+  }, 5000);
+  assert.deepEqual(player.matchStats, { goals: 2 });
+});

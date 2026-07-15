@@ -76,20 +76,20 @@ export function registerRoomHandlers(io, socket) {
     io.to(code).emit('lobbyUpdate', room.getLobbyInfo());
   });
 
-  socket.on('joinRoom', ({ roomCode, password, profile, rejoin = false }) => {
+  socket.on('joinRoom', ({ roomCode, password, profile, rejoin = false, matchId = '' }) => {
     const room = db.getRoom(roomCode);
     if (!room) {
       return socket.emit('joinError', 'Sala nao encontrada.');
     }
     if (room.status === 'playing' && rejoin && profile?.uid) {
-      const reconnecting = room.reconnectPlayer(profile.uid, socket.id);
+      const reconnecting = room.reconnectPlayer(profile.uid, socket.id, matchId);
       if (reconnecting?.limitReached) return socket.emit('joinError', 'Limite de retornos atingido.');
       if (!reconnecting || !room.match) return socket.emit('joinError', 'A janela para voltar a partida expirou.');
       db.addConnection(socket.id, { uid: profile.uid, username: profile.username, roomCode: room.code });
       socket.join(room.code);
       room.match.reconnectPlayer(reconnecting.previousId, socket.id, reconnecting.player);
       room.match.resumeAfterReconnect(reconnecting.player.uid);
-      socket.emit('matchRejoined', { roomCode: room.code, lobbyInfo: room.getLobbyInfo() });
+      socket.emit('matchRejoined', { roomCode: room.code, matchId: room.match.matchId, lobbyInfo: room.getLobbyInfo() });
       io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
       return;
     }
@@ -401,7 +401,10 @@ export function registerRoomHandlers(io, socket) {
       { competitive: room.competitive, allowCasualForfeit: false }
     );
 
-    io.to(room.code).emit('matchStarted');
+    io.to(room.code).emit('matchStarted', {
+      matchId: room.match.matchId,
+      startedAt: room.match.startedAt
+    });
     broadcastLobbyList(io);
   });
 

@@ -19,3 +19,15 @@ test('normaliza tags oficiais antes de sincronizar lobby e partida', () => {
   assert.equal(invalid.staffRole, '');
   assert.equal(room.getLobbyInfo().players[0].staffRole, 'influencer');
 });
+
+test('retorno aceita somente a partida ativa correspondente', () => {
+  const room = new ServerRoom('RET280', 'Sala retorno', 'host');
+  room.addPlayer('old-peer', { uid: 'uid-return', username: 'Jogador' }, 'blue');
+  room.status = 'playing';
+  room.match = { matchId: 'match-current' };
+  room.markPlayerDisconnected('old-peer');
+
+  assert.equal(room.reconnectPlayer('uid-return', 'wrong-peer', 'match-old'), null);
+  const rejoined = room.reconnectPlayer('uid-return', 'new-peer', 'match-current');
+  assert.equal(rejoined.player.id, 'new-peer');
+});

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { keyLabel, TUTORIAL_STEPS, TutorialSession } from '../client/tutorial/tutorialSession.js';
+import { keyLabel, TUTORIAL_STEPS, TutorialSession, tutorialNeedsAlly } from '../client/tutorial/tutorialSession.js';
 
 test('tutorial covers every core gameplay mechanic in a stable order', () => {
   assert.deepEqual(
@@ -20,6 +20,42 @@ test('writes the desktop space key in full', () => {
   assert.equal(keyLabel(' '), 'Espaço');
   assert.equal(keyLabel('Space'), 'Espaço');
   assert.equal(keyLabel('Spacebar'), 'Espaço');
+});
+
+test('shows the friendly CPU only during passing practice', () => {
+  assert.equal(tutorialNeedsAlly('pass'), true);
+  for (const step of TUTORIAL_STEPS.filter(item => item.id !== 'pass')) {
+    assert.equal(tutorialNeedsAlly(step.id), false);
+  }
+});
+
+test('makes the tutorial card transparent for any player underneath it', () => {
+  let isUnder = false;
+  const card = {
+    getBoundingClientRect: () => ({ left: 400, right: 600, top: 50, bottom: 180 }),
+    classList: { toggle: (_name, active) => { isUnder = active; } }
+  };
+  const session = new TutorialSession({ root: { querySelector: () => card } });
+  const canvas = {
+    width: 1000,
+    height: 600,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 600 })
+  };
+
+  session.updateOcclusion([{ x: 900, y: 500, r: 16 }, { x: 500, y: 100, r: 16 }], canvas);
+  assert.equal(isUnder, true, 'the CPU should also fade the dialog');
+  session.updateOcclusion([{ x: 900, y: 500, r: 16 }], canvas);
+  assert.equal(isUnder, false);
+});
+
+test('locks the tutorial simulation while success or failure feedback is visible', () => {
+  const locks = [];
+  const session = new TutorialSession({ root: null, onFeedbackChange: locked => locks.push(locked) });
+  session.index = TUTORIAL_STEPS.findIndex(step => step.id === 'dribble');
+  session.record('dribble');
+  assert.equal(session.feedback?.type, 'success');
+  assert.deepEqual(locks, [true]);
+  session.destroy();
 });
 
 test('clears the previous transition before progressing beyond sprint', () => {

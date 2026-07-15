@@ -76,7 +76,8 @@ export class ServerRoom {
   }
 
   /** Rebinds the reserved roster entry to the new temporary PeerJS id. */
-  reconnectPlayer(uid, socketId) {
+  reconnectPlayer(uid, socketId, matchId = '') {
+    if (this.status !== 'playing' || !this.match || !matchId || this.match.matchId !== matchId) return null;
     const player = this.players.find(p => p.uid === uid && p.disconnected);
     if (!player) return null;
     if ((player.rejoinCount || 0) >= 2) return { limitReached: true, player };

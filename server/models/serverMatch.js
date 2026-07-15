@@ -90,6 +90,7 @@ export class ServerMatch {
     // worker-backed clock avoids Chrome's severe background timer clamp.
     this.lastScheduledTickAt = Date.now();
     this.lastBroadcastAt = 0;
+    this.snapshotSequence = 0;
     this.tickScheduler = createRealtimeTicker(timestamp => this.runScheduledTick(timestamp));
 
     // Initial kickoff setup
@@ -825,7 +826,11 @@ export class ServerMatch {
     if (this.skipBroadcast) return;
 
     // Broadcast current snapshot to all users in room
+    const sequence = ++this.snapshotSequence;
+    const includeExtendedState = sequence === 1 || sequence % 6 === 0;
     const snap = {
+      sequence,
+      serverSentAt: Date.now(),
       ball: {
         x: this.ball.x,
         y: this.ball.y,
@@ -834,31 +839,35 @@ export class ServerMatch {
         owner: this.ball.owner,
         lastTouch: this.ball.lastTouch
       },
-      players: this.players.map(p => ({
-        id: p.id,
-        team: p.team,
-        x: p.x,
-        y: p.y,
-        vx: p.vx,
-        vy: p.vy,
-        dir: p.dir,
-        stamina: p.stamina,
-        staminaLock: p.staminaLock,
-        stun: p.stun,
-        shootHalo: p.shootHalo,
-        kickCharge: p.kickCharge || 0,
-        invuln: p.invuln,
-        tackle_cd: p.tackle_cd,
-        dribble_cd: p.dribble_cd,
-        power_cd: p.power_cd,
-        // These values are authoritative and drive the live match panel. They
-        // are intentionally sent for casual games too, but persistence remains
-        // restricted to competitive results elsewhere in the server flow.
-        matchStats: this.playerStats.get(p.id) ? { ...this.playerStats.get(p.id) } : null,
-        badge: p.badge,
-        name: p.name,
-        staffRole: p.staffRole || ''
-      })),
+      players: this.players.map(p => {
+        const state = {
+          id: p.id,
+          team: p.team,
+          x: p.x,
+          y: p.y,
+          vx: p.vx,
+          vy: p.vy,
+          dir: p.dir,
+          stamina: p.stamina,
+          staminaLock: p.staminaLock,
+          stun: p.stun,
+          shootHalo: p.shootHalo,
+          kickCharge: p.kickCharge || 0,
+          invuln: p.invuln,
+          tackle_cd: p.tackle_cd,
+          dribble_cd: p.dribble_cd,
+          power_cd: p.power_cd,
+          badge: p.badge,
+          name: p.name,
+          staffRole: p.staffRole || ''
+        };
+        // Live statistics do not change at rendering frequency. Sending them
+        // at 5 Hz keeps the sidebar current while shrinking normal snapshots.
+        if (includeExtendedState) {
+          state.matchStats = this.playerStats.get(p.id) ? { ...this.playerStats.get(p.id) } : null;
+        }
+        return state;
+      }),
       score: this.score,
       matchTime: this.matchTime,
       status: this.status,
