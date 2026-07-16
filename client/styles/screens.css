@@ -1146,16 +1146,38 @@ html.app-runtime #menu-btn-download-app {
 }
 
 .multiplayer-header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
+  gap: 14px;
   border-bottom: 1px solid var(--border-light);
   padding-bottom: 16px;
 }
 
+.multiplayer-header h2 {
+  margin: 0;
+  text-align: center;
+}
+
+.multiplayer-header > .btn {
+  justify-self: start;
+  width: auto;
+  min-width: 92px;
+}
+
 .multiplayer-actions {
   display: flex;
-  gap: 10px;
+  justify-self: end;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.multiplayer-actions .btn {
+  min-height: 30px;
+  padding: 5px 7px;
+  font-size: 9px;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .rooms-section h3 {
@@ -2936,7 +2958,7 @@ html.app-runtime #menu-btn-download-app {
 
   .multiplayer-header {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
   }
 
@@ -3198,7 +3220,7 @@ html.app-runtime #menu-btn-download-app {
 
   .multiplayer-header {
     display: grid;
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: 6px;
   }

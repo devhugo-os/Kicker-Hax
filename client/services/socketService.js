@@ -211,6 +211,36 @@ class P2PSocketService {
     return this.isHost || !!(this.hostConn && this.hostConn.open && !this.hostDepartureReported);
   }
 
+  /**
+   * Validates the local return reservation against the authoritative RTDB
+   * room. A stale record is removed so it cannot block future matchmaking.
+   */
+  async getActiveMatchReservation(uid = auth.currentUser?.uid) {
+    if (!uid) return null;
+    const key = `kicker_hax_rejoin_${uid}`;
+    let saved;
+    try {
+      saved = JSON.parse(localStorage.getItem(key) || 'null');
+    } catch {
+      saved = null;
+    }
+    if (!saved?.code || !saved?.matchId) {
+      localStorage.removeItem(key);
+      return null;
+    }
+
+    const room = await this.getPublicRoomMeta(saved.code).catch(() => null);
+    const active = room?.status === 'playing'
+      && room.matchId === saved.matchId
+      && !room.blockedRejoinUids?.[uid]
+      && !room.bannedUids?.[uid];
+    if (!active) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    return { saved, room };
+  }
+
   // Socket-like Listener Registry
   on(event, callback) {
     if (!this.listeners.has(event)) {
@@ -333,6 +363,11 @@ class P2PSocketService {
       return;
     }
     this.roomOperation = 'create';
+    if (await this.getActiveMatchReservation(profile?.uid)) {
+      this.roomOperation = null;
+      this.triggerLocalEvent('createRoomError', 'Volte para a partida reservada ou abandone-a antes de criar outra sala.');
+      return;
+    }
     const normalizedName = String(name || '').trim().slice(0, ROOM_NAME_MAX_LENGTH);
     const normalizedPassword = String(password || '').slice(0, ROOM_PASSWORD_MAX_LENGTH);
     const isCompetitive = !!competitive && !normalizedPassword;
@@ -514,7 +549,7 @@ class P2PSocketService {
     });
   }
 
-  joinRoom(code, password, profile, options = {}) {
+  async joinRoom(code, password, profile, options = {}) {
     const roomCode = code.toUpperCase();
     const rejoin = !!options.rejoin;
     const abandon = !!options.abandon;
@@ -525,6 +560,11 @@ class P2PSocketService {
       return;
     }
     this.roomOperation = 'join';
+    if (!rejoin && !abandon && await this.getActiveMatchReservation(profile?.uid)) {
+      this.roomOperation = null;
+      this.triggerLocalEvent('joinError', 'Volte para a partida reservada ou abandone-a antes de entrar em outra sala.');
+      return;
+    }
     this.isHost = false;
     this.roomCode = roomCode;
     let joinRequestInterval = null;
@@ -1171,7 +1211,16 @@ class P2PSocketService {
       player.status = 'lobby';
       player.ready = false;
       player.team = 'spectator';
-      this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+      player.disconnected = false;
+      player.disconnectedAt = null;
+      const lobbyInfo = this.serverRoom.getLobbyInfo();
+      this.broadcast('lobbyUpdate', lobbyInfo);
+      const returnedPayload = { lobbyInfo };
+      if (socketId === this.clientId) {
+        this.triggerLocalEvent('returnedToLobby', returnedPayload);
+      } else if (conn?.open) {
+        conn.send({ event: 'returnedToLobby', data: returnedPayload });
+      }
       const lobbyCount = this.serverRoom.players.filter(item => item.status === 'lobby').length;
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { playersCount: lobbyCount, updatedAt: Date.now() }).catch(() => {});
     }
@@ -1626,6 +1675,10 @@ class P2PSocketService {
 
   hostEndMatchToLobby() {
     this.emit('hostEndMatchToLobby');
+  }
+
+  returnToLobby() {
+    this.emit('returnToLobby');
   }
 
   voteContinueWithoutDisconnected() {

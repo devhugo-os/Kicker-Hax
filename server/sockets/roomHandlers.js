@@ -419,8 +419,12 @@ export function registerRoomHandlers(io, socket) {
     if (player) {
       player.status = 'lobby';
       player.ready = false;
+      player.team = 'spectator';
+      player.disconnected = false;
+      player.disconnectedAt = null;
       const lobbyInfo = room.getLobbyInfo();
       io.to(room.code).emit('lobbyUpdate', lobbyInfo);
+      socket.emit('returnedToLobby', { lobbyInfo });
     }
   });
 

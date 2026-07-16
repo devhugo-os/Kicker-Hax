@@ -624,10 +624,16 @@ export const gameController = {
 
     // Multiplayer room join action triggers
     const btnMultiCreate = document.getElementById('multi-btn-create-room');
-    if (btnMultiCreate) btnMultiCreate.onclick = () => router.show('create-room-screen');
+    if (btnMultiCreate) btnMultiCreate.onclick = async () => {
+      if (await this.blockMatchmakingWhileReserved()) return;
+      router.show('create-room-screen');
+    };
 
     const btnMultiJoinCode = document.getElementById('multi-btn-join-code');
-    if (btnMultiJoinCode) btnMultiJoinCode.onclick = () => router.show('join-code-screen');
+    if (btnMultiJoinCode) btnMultiJoinCode.onclick = async () => {
+      if (await this.blockMatchmakingWhileReserved()) return;
+      router.show('join-code-screen');
+    };
 
     const btnRefreshRooms = document.getElementById('multi-btn-refresh-rooms');
     if (btnRefreshRooms) btnRefreshRooms.onclick = () => socketService.refreshPublicRooms();
@@ -635,8 +641,9 @@ export const gameController = {
     // Create room form submits
     const createRoomForm = document.getElementById('create-room-form');
     if (createRoomForm) {
-      createRoomForm.onsubmit = (e) => {
+      createRoomForm.onsubmit = async (e) => {
         e.preventDefault();
+        if (await this.blockMatchmakingWhileReserved()) return;
         const name = document.getElementById('room-name-input').value.trim();
         const pass = document.getElementById('room-password-input').value;
         if (!name || name.length > C.ROOM_NAME_MAX_LENGTH) return showToast(`O nome da sala deve ter entre 1 e ${C.ROOM_NAME_MAX_LENGTH} caracteres.`, 'error');
@@ -702,8 +709,9 @@ export const gameController = {
         });
       }
 
-      joinCodeForm.onsubmit = (e) => {
+      joinCodeForm.onsubmit = async (e) => {
         e.preventDefault();
+        if (await this.blockMatchmakingWhileReserved()) return;
         const code = document.getElementById('join-code-input').value.toUpperCase();
         const passContainer = document.getElementById('join-password-container');
         const pass = passContainer && !passContainer.classList.contains('hidden')
@@ -879,9 +887,24 @@ export const gameController = {
           }
           socketService.getPublicRoomMeta(this.activeRoom?.code).then(room => {
             if (room) {
-              socketService.getSocket().emit('returnToLobby');
-              router.show('lobby-screen');
+              btnPostContinue.disabled = true;
+              socketService.off('returnedToLobby');
+              const returnTimeout = window.setTimeout(() => {
+                socketService.off('returnedToLobby', handleReturned);
+                btnPostContinue.disabled = false;
+                showToast('Não foi possível confirmar o retorno ao lobby. Tente novamente.', 'error');
+              }, 5000);
+              const handleReturned = payload => {
+                window.clearTimeout(returnTimeout);
+                socketService.off('returnedToLobby', handleReturned);
+                btnPostContinue.disabled = false;
+                if (payload?.lobbyInfo) this.activeRoom = payload.lobbyInfo;
+                router.show('lobby-screen');
+              };
+              socketService.on('returnedToLobby', handleReturned);
+              socketService.returnToLobby();
             } else {
+              btnPostContinue.disabled = false;
               this.activeRoom = null;
               this.clearRoomChatViews();
               socketService.leaveRoom();
@@ -890,6 +913,7 @@ export const gameController = {
               socketService.refreshPublicRooms();
             }
           }).catch(() => {
+            btnPostContinue.disabled = false;
             this.activeRoom = null;
             this.clearRoomChatViews();
             socketService.leaveRoom();
@@ -3938,6 +3962,18 @@ export const gameController = {
     socket.on('joinError', errorHandler);
   },
 
+  async blockMatchmakingWhileReserved() {
+    const uid = this.currentUser?.uid;
+    if (!uid) return false;
+    const reservation = await socketService.getActiveMatchReservation(uid);
+    if (!reservation) return false;
+
+    this.rejoinRoomMeta = reservation.room;
+    await this.refreshRejoinMatchAction();
+    showToast('Você ainda está reservado em uma partida. Volte para ela ou abandone antes de entrar em outra sala.', 'error');
+    return true;
+  },
+
   async refreshRejoinMatchAction() {
     const button = document.getElementById('multi-btn-rejoin-match');
     const abandonButton = document.getElementById('multi-btn-abandon-match');
@@ -3949,19 +3985,9 @@ export const gameController = {
     this.rejoinRoomMeta = null;
     const key = this.currentUser?.uid ? `kicker_hax_rejoin_${this.currentUser.uid}` : null;
     if (!key) return;
-    let saved;
-    try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch { saved = null; }
-    if (!saved?.code || !saved?.matchId || Date.now() - Number(saved.savedAt || 0) > 185000) {
-      localStorage.removeItem(key);
-      return;
-    }
-    const room = await socketService.getPublicRoomMeta(saved.code).catch(() => null);
-    if (!room || room.status !== 'playing' || room.matchId !== saved.matchId
-      || room.blockedRejoinUids?.[this.currentUser.uid] || room.bannedUids?.[this.currentUser.uid]) {
-      localStorage.removeItem(key);
-      this.rejoinRoomMeta = null;
-      return;
-    }
+    const reservation = await socketService.getActiveMatchReservation(this.currentUser.uid);
+    if (!reservation) return;
+    const { saved, room } = reservation;
     this.rejoinRoomMeta = room;
     if (this.latestRooms) this.renderRoomsList(this.latestRooms);
     button.classList.remove('hidden');
@@ -4129,7 +4155,8 @@ export const gameController = {
     });
   },
 
-  joinRoomWithCode(code, password) {
+  async joinRoomWithCode(code, password) {
+    if (await this.blockMatchmakingWhileReserved()) return;
     const profile = {
       uid: this.currentUser.uid,
       username: menuController.profileData.username,
