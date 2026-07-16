@@ -10,9 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-CrejFJUb.js"></script>
+  <script type="module" crossorigin src="./assets/index-DB5mtzsK.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-ge5jg6nm.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-B56pDnmk.js">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-B0gggKcB.js">
   <link rel="stylesheet" crossorigin href="./assets/index-CNG9Am_U.css">
 </head>
 <body>
@@ -518,6 +518,7 @@
             <button id="multi-btn-create-room" class="btn btn-primary">Criar Sala</button>
             <button id="multi-btn-join-code" class="btn btn-secondary">Entrar por Código</button>
             <button id="multi-btn-rejoin-match" class="btn btn-success hidden">Voltar para Partida</button>
+            <button id="multi-btn-abandon-match" class="btn btn-danger hidden">Abandonar Partida</button>
             <button id="multi-btn-refresh-rooms" class="btn btn-secondary">Atualizar</button>
           </div>
         </div>
@@ -992,7 +993,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v32.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v35.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1019,7 +1020,7 @@
           <section><h3>Overall, Nota Média, Winrate e Posse</h3><p><strong>Geral</strong> usa o Overall como critério principal. O Overall vai de 40 a 99 e considera principalmente a Nota Média competitiva, além de resultados, gols, assistências, dribles, desarmes, precisão, posse, MVPs e gols contra. A <strong>Nota Média</strong> vai de 1,0 a 10,0, é mais rígida e possui ranking com índice ajustado e quantidade de jogos, evitando que uma partida isolada supere uma campanha consistente. <strong>Winrate</strong> usa o limite inferior de Wilson; <strong>Posse Média</strong> usa uma base neutra de vinte partidas.</p></section>
           <section><h3>Resultado e histórico detalhado</h3><p>Ao terminar uma partida, o relatório mostra participantes, nota individual, gols, assistências, chutes, dribles, desarmes, posse e os totais de cada time. Os mesmos detalhes podem ser reabertos clicando em uma partida no histórico próprio ou público. Partidas casuais exibem o relatório e dão XP, mas apenas as competitivas alimentam estatísticas, ranking e KX Coins.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
-          <section><h3>Desconexão e Retorno</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Quando o retorno não é mais permitido e ainda restam companheiros, o time vota se continua com um a menos.</p></section>
+          <section><h3>Desconexão, Retorno e Abandono</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Na Arena, <strong>Abandonar Partida</strong> encerra imediatamente a espera e bloqueia o retorno: se o time ainda tiver membros, começa a votação de 30 segundos para continuar com um a menos; se ficar vazio, ocorre W.O.</p></section>
           <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
           <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
           <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
@@ -1034,6 +1035,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v35.0 - Base Est&aacute;vel</h4>
+            <p>O jogo retorna integralmente &agrave; base est&aacute;vel da vers&atilde;o 32.0, incluindo Socket.IO, WebRTC e as regras correspondentes do Firebase. A Arena agora exibe <strong>Abandonar Partida</strong> ao lado do retorno: a desist&ecirc;ncia cancela imediatamente a reserva, impede novas reconex&otilde;es e inicia a vota&ccedil;&atilde;o de 30 segundos quando ainda existem companheiros; se o time ficar vazio, o advers&aacute;rio vence por W.O.</p>
+          </section>
           <section>
             <h4>v32.0 - Sincronia em Campo</h4>
             <p>Partidas online agora aguardam todos os jogadores abrirem o campo antes do relógio, enviam ações mobile imediatamente e evitam rajadas de física quando o host volta do segundo plano. Replay ganhou fallback no celular, menor carga e reprodução mais estável. O tutorial remove CPUs das finalizações técnicas, restaura a perseguição no desafio final e reconhece recuperações defensivas. Resultados mostram nomes completos das estatísticas e ordenam o time vencedor primeiro. Nota Média competitiva chegou aos perfis e ranking, imediatamente à esquerda do Overall, com critério rígido e peso principal na classificação geral. Nomes de jogador e sala agora aceitam até 20 caracteres.</p>
