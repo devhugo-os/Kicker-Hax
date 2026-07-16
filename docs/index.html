@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-B4zJb-he.js"></script>
+  <script type="module" crossorigin src="./assets/index-CYnBlKdn.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-ge5jg6nm.js">
   <link rel="modulepreload" crossorigin href="./assets/game-engine-DbTMSDlY.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-B_12YKMX.css">
+  <link rel="stylesheet" crossorigin href="./assets/index-B4BO8svU.css">
 </head>
 <body>
 
@@ -510,10 +510,11 @@
 
     <!-- 12. MULTIPLAYER SCREEN -->
     <div id="multiplayer-screen" class="screen-view hidden">
-      <div class="multiplayer-layout card-blur">
+      <div class="multiplayer-shell">
+        <h2 class="multiplayer-page-title">Arena Multiplayer</h2>
+        <div class="multiplayer-layout card-blur">
         <div class="multiplayer-header">
           <button id="multiplayer-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
-          <h2>Arena Multiplayer</h2>
           <div class="multiplayer-actions">
             <button id="multi-btn-create-room" class="btn btn-primary">Criar Sala</button>
             <button id="multi-btn-join-code" class="btn btn-secondary">Entrar por Código</button>
@@ -573,6 +574,7 @@
           </div>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- 13. CRIAR SALA MODAL / SCREEN -->
@@ -993,7 +995,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v39.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v39.5</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1035,6 +1037,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v39.5 - Retorno Confi&aacute;vel</h4>
+            <p>O retorno para partidas agora preserva a nova conex&atilde;o WebRTC ao substituir um canal antigo e s&oacute; encerra a pausa quando o jogador realmente abriu o campo. Nomes, skins, emblemas e tags deixam de piscar durante replays online. A Arena Multiplayer ganhou t&iacute;tulo externo, mais espa&ccedil;o para a lista de salas e bot&otilde;es compactos sem perder uma &aacute;rea de clique confort&aacute;vel no computador ou no celular.</p>
+          </section>
           <section>
             <h4>v39.0 - Lobby Organizado</h4>
             <p>As a&ccedil;&otilde;es da Arena Multiplayer ficaram menores e o t&iacute;tulo permanece centralizado mesmo quando retorno e abandono est&atilde;o dispon&iacute;veis. Jogadores reservados em uma partida agora precisam voltar ou confirmar o abandono antes de criar ou entrar em outra sala. Depois dos resultados, cada participante retorna individualmente ao lobby como espectador, com o estado de pronto desativado e a lista atualizada antes da tela ser exibida.</p>
