@@ -3918,9 +3918,12 @@ export const gameController = {
   // ==========================================================================
   async refreshRejoinMatchAction() {
     const button = document.getElementById('multi-btn-rejoin-match');
+    const abandonButton = document.getElementById('multi-btn-abandon-match');
     if (!button) return;
     button.classList.add('hidden');
     button.onclick = null;
+    abandonButton?.classList.add('hidden');
+    if (abandonButton) abandonButton.onclick = null;
     this.rejoinRoomMeta = null;
     const key = this.currentUser?.uid ? `kicker_hax_rejoin_${this.currentUser.uid}` : null;
     if (!key) return;
@@ -3940,7 +3943,8 @@ export const gameController = {
     this.rejoinRoomMeta = room;
     if (this.latestRooms) this.renderRoomsList(this.latestRooms);
     button.classList.remove('hidden');
-    button.onclick = () => {
+    abandonButton?.classList.remove('hidden');
+    const getRejoinCredentials = () => {
       const profile = {
         uid: this.currentUser.uid,
         username: menuController.profileData.username,
@@ -3954,7 +3958,41 @@ export const gameController = {
         const lastRoom = JSON.parse(localStorage.getItem(`kicker_hax_last_room_${this.currentUser.uid}`) || 'null');
         if (lastRoom?.code === saved.code) password = lastRoom.password || '';
       } catch { /* Rejoining a public room does not need a saved password. */ }
+      return { profile, password };
+    };
+    button.onclick = () => {
+      const { profile, password } = getRejoinCredentials();
+      socketService.once('joinError', (message) => showToast(message, 'error'));
       socketService.joinRoom(saved.code, password, profile, { rejoin: true, matchId: saved.matchId });
+    };
+    if (abandonButton) abandonButton.onclick = async () => {
+      const confirmed = await confirmDialog({
+        title: 'Abandonar esta partida?',
+        message: 'Você perderá o direito de voltar. Se ainda houver jogadores no seu time, eles votarão se desejam continuar; caso contrário, o adversário vence por W.O.',
+        confirmLabel: 'Abandonar partida',
+        danger: true
+      });
+      if (!confirmed) return;
+      const { profile, password } = getRejoinCredentials();
+      button.disabled = true;
+      abandonButton.disabled = true;
+      socketService.off('abandonAccepted');
+      socketService.once('abandonAccepted', () => {
+        localStorage.removeItem(key);
+        this.rejoinRoomMeta = null;
+        button.classList.add('hidden');
+        abandonButton.classList.add('hidden');
+        button.disabled = false;
+        abandonButton.disabled = false;
+        if (this.latestRooms) this.renderRoomsList(this.latestRooms);
+        showToast('Desistência registrada. Você não pode mais voltar a essa partida.', 'info');
+      });
+      socketService.once('joinError', (message) => {
+        button.disabled = false;
+        abandonButton.disabled = false;
+        showToast(message, 'error');
+      });
+      socketService.abandonMatch(saved.code, password, profile, saved.matchId);
     };
   },
 

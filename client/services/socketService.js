@@ -80,7 +80,50 @@ class P2PSocketService {
 
   blockRoomRejoin(uid) {
     if (!this.roomCode || !uid) return;
+    this.serverRoom?.blockedRejoinUids?.add(uid);
     update(ref(rtdb, `multiplayerRooms/${this.roomCode}/blockedRejoinUids`), { [uid]: true }).catch(() => {});
+  }
+
+  /** Applies one authoritative surrender for active or disconnected players. */
+  acceptPlayerSurrender(player, conn = null) {
+    if (!player || !this.serverRoom?.match || this.serverRoom.status !== 'playing'
+      || player.cpu || player.team === 'spectator') return false;
+    const match = this.serverRoom.match;
+    const team = player.team === 'red' ? 0 : 1;
+    const teammates = this.serverRoom.players.filter(item => !item.cpu && !item.disconnected
+      && item.team === player.team && item.id !== player.id);
+
+    this.blockRoomRejoin(player.uid);
+    const accepted = { roomCode: this.roomCode, matchId: match.matchId };
+    if (conn?.open) conn.send({ event: 'abandonAccepted', data: accepted });
+    else if (player.id === this.clientId) this.triggerLocalEvent('surrenderAccepted', accepted);
+
+    if (teammates.length === 0) {
+      this.sendRoomChatMessage({
+        username: 'Sistema',
+        badge: '',
+        text: `${player.username} desistiu. O time adversário venceu por W.O.`
+      });
+      match.forfeitAgainstTeam(team);
+      return true;
+    }
+
+    if (!player.disconnected) this.serverRoom.markPlayerDisconnected(player.id);
+    if (!match.disconnectPauseUntil) {
+      match.pauseForDisconnectedTeam(team, player.uid, player.username, {
+        allowRejoin: false,
+        timeoutMs: 30000
+      });
+    }
+    match.forceContinueVote(player.uid, player.username);
+    this.sendRoomChatMessage({
+      username: 'Sistema',
+      badge: '',
+      text: `${player.username} desistiu. O time tem 30 segundos para decidir se continua com um jogador a menos.`
+    });
+    this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
+    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { updatedAt: Date.now() }).catch(() => {});
+    return true;
   }
 
   connect(url = window.location.origin) {
@@ -413,6 +456,7 @@ class P2PSocketService {
   joinRoom(code, password, profile, options = {}) {
     const roomCode = code.toUpperCase();
     const rejoin = !!options.rejoin;
+    const abandon = !!options.abandon;
     const matchId = String(options.matchId || '');
     if (this.roomOperation) {
       this.triggerLocalEvent('joinError', 'Aguarde a operacao atual terminar.');
@@ -507,6 +551,17 @@ class P2PSocketService {
             this.listenToRoomChat(roomCode);
             this.watchHostLifecycle(roomCode);
             this.triggerLocalEvent('matchRejoined', data);
+          } else if (event === 'abandonAccepted') {
+            if (joinAccepted) return;
+            joinAccepted = true;
+            finishJoinOperation();
+            this.roomOperation = null;
+            this.activeMatchId = null;
+            if (auth.currentUser?.uid) {
+              localStorage.removeItem(`kicker_hax_rejoin_${auth.currentUser.uid}`);
+            }
+            this.triggerLocalEvent('abandonAccepted', data);
+            this.leaveRoom();
           } else if (event === 'joinError') {
             finishJoinOperation();
             this.triggerLocalEvent('joinError', data);
@@ -539,7 +594,7 @@ class P2PSocketService {
           console.log('[P2PSocket] WebRTC aberto com Host. Enviando requisição de entrada...');
           const sendJoinRequest = () => conn.open && conn.send({
             event: 'joinRoom',
-            data: { profile, rejoin, password, matchId }
+            data: { profile, rejoin, abandon, password, matchId }
           });
           sendJoinRequest();
           joinRequestInterval = window.setInterval(() => {
@@ -686,7 +741,25 @@ class P2PSocketService {
     }
 
     if (event === 'joinRoom') {
-      const { profile, rejoin, password, matchId } = data || {};
+      const { profile, rejoin, abandon, password, matchId } = data || {};
+      if (abandon && rejoin && this.serverRoom.status === 'playing') {
+        const player = this.serverRoom.players.find(item => item.uid && item.uid === profile?.uid);
+        if (!player || !this.serverRoom.match || (matchId && matchId !== this.serverRoom.match.matchId)) {
+          if (conn?.open) conn.send({ event: 'joinError', data: 'A partida para abandonar não está mais disponível.' });
+          return;
+        }
+        if (player.disconnected && this.serverRoom.match.disconnectVoting
+          && this.serverRoom.match.disconnectedUids.has(player.uid)) {
+          this.blockRoomRejoin(player.uid);
+          if (conn?.open) conn.send({
+            event: 'abandonAccepted',
+            data: { roomCode: this.roomCode, matchId }
+          });
+          return;
+        }
+        this.acceptPlayerSurrender(player, conn);
+        return;
+      }
       const alreadyRejoined = rejoin && this.serverRoom.status === 'playing'
         ? this.serverRoom.players.find(player => player.id === socketId && !player.disconnected)
         : null;
@@ -703,6 +776,10 @@ class P2PSocketService {
         : null;
 
       if (rejoin && this.serverRoom.status === 'playing') {
+        if (reconnecting?.blocked) {
+          if (conn) conn.send({ event: 'joinError', data: 'Você abandonou esta partida e não pode mais voltar.' });
+          return;
+        }
         if (reconnecting?.limitReached) {
           this.blockRoomRejoin(reconnecting.player.uid);
           if (conn) conn.send({ event: 'joinError', data: 'Limite de 2 retornos atingido. Voce nao pode mais voltar a esta partida.' });
@@ -837,24 +914,8 @@ class P2PSocketService {
       if (!this.serverRoom.match || this.serverRoom.status !== 'playing') return;
       const player = this.serverRoom.players.find(item => item.id === socketId);
       if (!player || player.cpu || player.team === 'spectator' || player.disconnected) return;
-      const team = player.team === 'red' ? 0 : 1;
-      const teammates = this.serverRoom.players.filter(item => !item.cpu && !item.disconnected
-        && item.team === player.team && item.id !== player.id);
-      this.blockRoomRejoin(player.uid);
-
-      if (teammates.length === 0) {
-        this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${player.username} desistiu. O time adversário venceu por W.O.` });
-        this.serverRoom.match.forfeitAgainstTeam(team);
-        return;
-      }
-
-      this.serverRoom.markPlayerDisconnected(player.id);
-      this.serverRoom.match.pauseForDisconnectedTeam(team, player.uid, player.username, { allowRejoin: false, timeoutMs: 30000 });
-      this.serverRoom.match.forceContinueVote(player.uid, player.username);
-      this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${player.username} desistiu. O time tem 30 segundos para decidir se continua com um jogador a menos.` });
-      this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
-      if (socketId === this.clientId) this.triggerLocalEvent('surrenderAccepted');
-      else if (conn?.open) conn.send({ event: 'surrenderAccepted' });
+      this.acceptPlayerSurrender(player, null);
+      if (socketId !== this.clientId && conn?.open) conn.send({ event: 'surrenderAccepted' });
     }
 
     else if (event === 'ping') {
@@ -1381,6 +1442,10 @@ class P2PSocketService {
 
   surrenderMatch() {
     this.emit('surrenderMatch');
+  }
+
+  abandonMatch(code, password, profile, matchId) {
+    this.joinRoom(code, password, profile, { rejoin: true, abandon: true, matchId });
   }
 
   voteSkipReplay() {

@@ -22,6 +22,7 @@ export class ServerRoom {
     this.players = []; // Array of lobby players
     this.chatHistory = [];
     this.bannedUids = new Set();
+    this.blockedRejoinUids = new Set();
     this.status = 'lobby'; // 'lobby' | 'playing'
     this.match = null; // ServerMatch instance
     this.spectators = []; // Spectators list
@@ -78,6 +79,7 @@ export class ServerRoom {
   /** Rebinds the reserved roster entry to the new temporary PeerJS id. */
   reconnectPlayer(uid, socketId, matchId = '') {
     if (this.status !== 'playing' || !this.match || !matchId || this.match.matchId !== matchId) return null;
+    if (this.blockedRejoinUids.has(uid)) return { blocked: true, player: this.players.find(p => p.uid === uid) };
     const player = this.players.find(p => p.uid === uid && p.disconnected);
     if (!player) return null;
     if ((player.rejoinCount || 0) >= 2) return { limitReached: true, player };
