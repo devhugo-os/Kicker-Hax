@@ -615,8 +615,10 @@ class P2PSocketService {
       // A fresh PeerJS ID prevents a stale signalling registration from a
       // previous room attempt from receiving the new host response.
       this.generateClientId();
-      if (this.peer) this.peer.destroy();
+      // Invalidate callbacks from the previous transport before destroying it.
+      // PeerJS may emit close synchronously during destroy().
       const peerGeneration = ++this.peerGeneration;
+      if (this.peer) this.peer.destroy();
       const peer = new Peer(this.clientId, PEER_OPTIONS);
       this.peer = peer;
 
@@ -771,7 +773,10 @@ class P2PSocketService {
         });
 
         conn.on('close', () => {
-          if (this.isLeavingRoom) return;
+          // A reconnect attempt replaces the old PeerJS transport. Its delayed
+          // close event must not tear down the newly accepted room connection.
+          if (this.isLeavingRoom || this.hostConn !== conn
+            || this.peer !== peer || this.peerGeneration !== peerGeneration) return;
           console.log('[P2PSocket] Host encerrou a conexão.');
           this.triggerLocalEvent('hostLeft', 'O host saiu. A sala foi encerrada.');
           this.leaveRoom();
@@ -1002,7 +1007,6 @@ class P2PSocketService {
           this.connections.push(conn);
         }
         this.serverRoom.match.reconnectPlayer(reconnecting.previousId, socketId, reconnecting.player);
-        this.serverRoom.match.resumeAfterReconnect(reconnecting.player.uid);
         this.publishJoinReceipt(reconnecting.player.uid, joinAttemptId, 'matchRejoined', this.serverRoom.match.matchId);
         update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { updatedAt: Date.now() }).catch(() => {});
         this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
@@ -1118,6 +1122,9 @@ class P2PSocketService {
       if (!match || (data?.matchId && data.matchId !== match.matchId)) return;
       match.touchPlayer(socketId);
       match.markClientReady(socketId);
+      // Resume only after the returning client has mounted the match view.
+      const readyPlayer = this.serverRoom.players.find(player => player.id === socketId);
+      if (readyPlayer?.uid) match.resumeAfterReconnect(readyPlayer.uid);
     }
 
     else if (event === 'voteContinueWithoutDisconnected') {

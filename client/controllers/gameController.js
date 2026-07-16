@@ -3504,7 +3504,39 @@ export const gameController = {
     clearTimeout(this.replayFallbackTimer);
     this.replayFallbackTimer = null;
     this.inReplay = true;
-    this.replayFrames = frames.slice();
+    // Compact live snapshots omit identity between periodic extended states.
+    // Carry the last known identity through every replay frame so names,
+    // badges, skins and staff tags never blink during online playback.
+    const identities = new Map();
+    this.players.forEach(player => identities.set(player.id, {
+      name: player.name || '',
+      badge: player.badge || '',
+      skin: player.skin || '',
+      staffRole: player.staffRole || ''
+    }));
+    this.activeRoom?.players?.forEach(player => {
+      const current = identities.get(player.id) || {};
+      identities.set(player.id, {
+        name: player.username || current.name || '',
+        badge: player.badge || current.badge || '',
+        skin: player.skin || current.skin || '',
+        staffRole: player.staffRole || current.staffRole || ''
+      });
+    });
+    this.replayFrames = frames.map(frame => ({
+      ...frame,
+      players: (frame.players || []).map(player => {
+        const known = identities.get(player.id) || {};
+        const identity = {
+          name: player.name || known.name || '',
+          badge: player.badge || known.badge || '',
+          skin: player.skin || known.skin || '',
+          staffRole: player.staffRole || known.staffRole || ''
+        };
+        identities.set(player.id, identity);
+        return { ...player, ...identity };
+      })
+    }));
     this.replayFrameIdx = 0;
     this.replayTimer = 0;
     this.lastGoal = goalInfo || this.lastGoal;
@@ -3540,20 +3572,24 @@ export const gameController = {
         lastStrikeType: state.ball.lastStrikeType,
         strikeTimer: state.ball.strikeTimer
       },
-      players: state.players.map(p => ({
-        id: p.id,
-        x: p.x,
-        y: p.y,
-        dir: p.dir,
-        team: p.team,
-        has: state.ball.owner === p.id,
-        name: p.name || '',
-        badge: p.badge || '',
-        staffRole: p.staffRole || '',
-        inv: p.invuln || 0,
-        stun: p.stun || 0,
-        halo: p.shootHalo || 0
-      })),
+      players: state.players.map(p => {
+        const known = this.players.find(player => player.id === p.id);
+        return {
+          id: p.id,
+          x: p.x,
+          y: p.y,
+          dir: p.dir,
+          team: p.team,
+          has: state.ball.owner === p.id,
+          name: p.name || known?.name || '',
+          badge: p.badge || known?.badge || '',
+          skin: p.skin || known?.skin || '',
+          staffRole: p.staffRole || known?.staffRole || '',
+          inv: p.invuln || 0,
+          stun: p.stun || 0,
+          halo: p.shootHalo || 0
+        };
+      }),
       score: { ...state.score },
       sfx: [...(state.soundEffects || [])]
     };
@@ -4010,6 +4046,26 @@ export const gameController = {
     };
     button.onclick = () => {
       const { profile, password } = getRejoinCredentials();
+      button.disabled = true;
+      if (abandonButton) abandonButton.disabled = true;
+      const cleanupRejoinActions = () => {
+        socketService.off('matchRejoined', handleRejoined);
+        socketService.off('joinError', handleJoinError);
+      };
+      const restoreActions = () => {
+        button.disabled = false;
+        if (abandonButton) abandonButton.disabled = false;
+      };
+      const handleRejoined = () => {
+        cleanupRejoinActions();
+        restoreActions();
+      };
+      const handleJoinError = () => {
+        cleanupRejoinActions();
+        restoreActions();
+      };
+      socketService.on('matchRejoined', handleRejoined);
+      socketService.on('joinError', handleJoinError);
       socketService.joinRoom(saved.code, password, profile, { rejoin: true, matchId: saved.matchId });
     };
     if (abandonButton) abandonButton.onclick = async () => {

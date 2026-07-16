@@ -1136,9 +1136,22 @@ html.app-runtime #menu-btn-download-app {
 /* ==========================================================================
    7. MULTIPLAYER SELECTION & LISTS
    ========================================================================== */
-.multiplayer-layout {
+.multiplayer-shell {
   width: 1120px;
   max-width: 95vw;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.multiplayer-page-title {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.multiplayer-layout {
+  width: 100%;
   padding: 30px;
   display: flex;
   flex-direction: column;
@@ -1146,9 +1159,9 @@ html.app-runtime #menu-btn-download-app {
 }
 
 .multiplayer-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14px;
   border-bottom: 1px solid var(--border-light);
   padding-bottom: 16px;
@@ -1160,22 +1173,21 @@ html.app-runtime #menu-btn-download-app {
 }
 
 .multiplayer-header > .btn {
-  justify-self: start;
   width: auto;
   min-width: 92px;
 }
 
 .multiplayer-actions {
   display: flex;
-  justify-self: end;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
 .multiplayer-actions .btn {
-  min-height: 30px;
-  padding: 5px 7px;
-  font-size: 9px;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 11px;
   line-height: 1.1;
   white-space: nowrap;
 }
@@ -3737,5 +3749,56 @@ html.app-runtime #menu-btn-download-app {
     height: 40px !important;
     padding: 0 !important;
     background: rgba(239, 68, 68, 0.92) !important;
+  }
+}
+
+/* Arena keeps its title outside the card and preserves usable touch targets. */
+@media (max-width: 900px), (pointer: coarse) {
+  .multiplayer-shell {
+    width: calc(100vw - 10px);
+    max-width: calc(100vw - 10px);
+    max-height: calc(100dvh - 6px);
+    gap: 5px;
+  }
+
+  .multiplayer-page-title {
+    flex: 0 0 auto;
+    font-size: clamp(17px, 5vh, 24px);
+    line-height: 1;
+  }
+
+  .multiplayer-shell .multiplayer-layout {
+    width: 100%;
+    max-width: 100%;
+    min-height: 0;
+    flex: 1;
+  }
+
+  .multiplayer-shell .multiplayer-header {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .multiplayer-shell .multiplayer-header > .btn {
+    min-width: 68px;
+    min-height: 30px;
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  .multiplayer-shell .multiplayer-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(74px, 1fr));
+    flex: 1;
+    gap: 4px;
+  }
+
+  .multiplayer-shell .multiplayer-actions .btn {
+    min-height: 30px;
+    padding: 5px 7px;
+    font-size: 10px;
   }
 }
