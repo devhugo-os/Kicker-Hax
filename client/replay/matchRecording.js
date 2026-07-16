@@ -72,7 +72,7 @@ function expandStats(values = []) {
  * phases are deliberately omitted, so playback cuts directly to kickoff.
  */
 export class MatchRecordingSession {
-  constructor({ fieldWidth = 1024, fieldHeight = 640 } = {}) {
+  constructor({ fieldWidth = 1024, fieldHeight = 640, players = [] } = {}) {
     this.field = [Number(fieldWidth) || 1024, Number(fieldHeight) || 640];
     this.frames = [];
     this.reports = [];
@@ -84,8 +84,17 @@ export class MatchRecordingSession {
     this.lastReportAt = -REPORT_INTERVAL_MS;
     this.lastGoalKey = '';
     this.lastImportantMarkerAt = -2000;
+    this.lastSoundKey = '';
     this.virtualTimeMs = 0;
     this.active = true;
+    players.forEach(player => this.ensurePlayer({
+      ...player,
+      id: player.id,
+      name: player.username || player.name,
+      skin: player.skin,
+      badge: player.badge,
+      staffRole: player.staffRole
+    }));
   }
 
   ensurePlayer(player = {}) {
@@ -97,13 +106,19 @@ export class MatchRecordingSession {
         id,
         uid: String(player.uid || ''),
         name: String(player.name || player.username || 'Jogador').slice(0, 20),
-        team: player.team
+        team: player.team,
+        badge: String(player.badge || ''),
+        skin: String(player.skin || ''),
+        staffRole: String(player.staffRole || '')
       });
     } else {
       const existing = this.players[this.playerIndexes.get(id)];
       if (player.name || player.username) existing.name = String(player.name || player.username).slice(0, 20);
       if (player.uid) existing.uid = String(player.uid);
       if (player.team !== undefined) existing.team = player.team;
+      if (player.badge) existing.badge = String(player.badge);
+      if (player.skin && player.skin !== 'custom') existing.skin = String(player.skin);
+      if (player.staffRole) existing.staffRole = String(player.staffRole);
     }
     if (player.matchStats) this.latestStats.set(id, { ...this.latestStats.get(id), ...player.matchStats });
     return this.playerIndexes.get(id);
@@ -113,6 +128,7 @@ export class MatchRecordingSession {
     if (!this.active || !state?.ball || !Array.isArray(state.players)) return;
     this.captureGoalMarker(state.goalInfo, state.score);
     this.captureImportantMarker(state);
+    this.captureSoundMarkers(state.soundEffects);
     if (!RECORDABLE_STATUSES.has(state.status)) return;
     if (this.lastCapturedAt && now - this.lastCapturedAt < SAMPLE_INTERVAL_MS) return;
     this.lastCapturedAt = now;
@@ -132,7 +148,11 @@ export class MatchRecordingSession {
       q(state.ball.y),
       q(state.ball.vx),
       q(state.ball.vy),
-      players
+      players,
+      Number(state.matchTime || 0),
+      Number(state.countdown || 0),
+      state.ball.lastStrikeType === 'power' ? 1 : 0,
+      Number(state.ball.strikeTimer || 0)
     ];
     this.frames.push(frame);
     if (this.virtualTimeMs - this.lastReportAt >= REPORT_INTERVAL_MS) {
@@ -168,6 +188,16 @@ export class MatchRecordingSession {
     });
   }
 
+  captureSoundMarkers(effects = []) {
+    const sounds = Array.isArray(effects) ? effects : [];
+    const batchKey = `${this.virtualTimeMs}:${sounds.join(',')}`;
+    if (!sounds.length || batchKey === this.lastSoundKey) return;
+    this.lastSoundKey = batchKey;
+    sounds.forEach(kind => {
+      this.markers.push({ t: this.virtualTimeMs, type: 'sound', sound: String(kind), label: String(kind) });
+    });
+  }
+
   captureReport(score = {}) {
     const stats = this.players.map(player => {
       const values = compactStats(this.latestStats.get(player.id) || {});
@@ -180,7 +210,7 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 1,
+      v: 2,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs - SAMPLE_INTERVAL_MS),
@@ -222,7 +252,13 @@ export async function decodeMatchRecording(documentData) {
       timeMs: frame[0],
       status: frame[1] === 1 ? 'countdown' : 'playing',
       score: { red: frame[2], blue: frame[3] },
-      ball: { x: uq(frame[4]), y: uq(frame[5]), vx: uq(frame[6]), vy: uq(frame[7]) },
+      ball: {
+        x: uq(frame[4]), y: uq(frame[5]), vx: uq(frame[6]), vy: uq(frame[7]),
+        lastStrikeType: frame[11] === 1 ? 'power' : null,
+        strikeTimer: Number(frame[12] || 0)
+      },
+      matchTime: Number(frame[9] || 0),
+      countdown: Number(frame[10] || 0),
       players: (frame[8] || []).map(player => ({
         index: player[0],
         x: uq(player[1]),
@@ -249,6 +285,8 @@ export function interpolateRecordingFrame(first, second, ratio) {
   const nextByIndex = new Map(second.players.map(player => [player.index, player]));
   return {
     ...first,
+    matchTime: mix(first.matchTime, second.matchTime),
+    countdown: mix(first.countdown, second.countdown),
     ball: {
       x: mix(first.ball.x, second.ball.x),
       y: mix(first.ball.y, second.ball.y),

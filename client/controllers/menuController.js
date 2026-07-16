@@ -162,6 +162,8 @@ export const menuController = {
       try {
         const recording = await firebaseService.getMatchRecording(match.recordingId);
         if (!recording) throw new Error('Gravação não encontrada.');
+        // Move directly from match details to the dedicated player.
+        matchDetailsModal?.classList.add('hidden');
         await this.recordingPlayer.open(recording, match);
       } catch (error) {
         showToast(error?.message || 'Não foi possível abrir a gravação.', 'error');

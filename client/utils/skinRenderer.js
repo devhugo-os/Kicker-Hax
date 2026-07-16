@@ -1,7 +1,8 @@
 const cache = new Map();
 
 export function drawSkinImage(ctx, source, x, y, radius) {
-  if (!source) return false;
+  // "custom" is a realtime transport placeholder, not an image URL.
+  if (!source || source === 'custom' || !/^(data:image\/|blob:|https?:\/\/|\/|\.\/|\.\.\/)/i.test(source)) return false;
   let image = cache.get(source);
   if (!image) {
     image = new Image();

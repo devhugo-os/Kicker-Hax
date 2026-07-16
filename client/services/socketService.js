@@ -912,6 +912,12 @@ class P2PSocketService {
 
   sendControlEvent(connection, event, data) {
     const serialized = JSON.stringify(data);
+    // Events such as replaySkipped intentionally have no payload. JSON.stringify
+    // returns undefined for them, so they must bypass the chunk length check.
+    if (serialized === undefined) {
+      connection.send({ event });
+      return;
+    }
     if (serialized.length <= CONTROL_CHUNK_SIZE) {
       connection.send({ event, data });
       return;
@@ -1115,7 +1121,7 @@ class P2PSocketService {
         playersCount: this.serverRoom.players.length,
         hostHeartbeatAt: joinedAt,
         updatedAt: joinedAt
-      });
+      }).catch(error => console.warn('[P2PSocket] Falha ao atualizar presença da sala:', error));
 
       const lobbyInfo = this.serverRoom.getLobbyInfo();
       this.publishJoinReceipt(profile?.uid, joinAttemptId, 'joinSuccess');

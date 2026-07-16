@@ -3,67 +3,39 @@ import { buildMatchReport } from '../../shared/matchReport.js';
 import { renderMatchReport } from '../components/matchReportView.js';
 import { decodeMatchRecording, interpolateRecordingFrame } from './matchRecording.js';
 import { showToast } from '../utils/toast.js';
+import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
 
 const SPEEDS = [0.5, 1, 1.5, 2];
+const SOUND_FREQUENCIES = {
+  goal: [480, 960], cheer: [360, 720], power: [180, 720], kick: [520, 260],
+  tackle: [140, 90], dribble: [800, 600], pickup: [330, 440], whistle: [1800, 1500], post: [900, 300]
+};
+
+function scheduleRecordingTone(context, destination, marker, volume, delaySeconds = 0) {
+  const sound = marker.sound || marker.type;
+  const [startFrequency, endFrequency] = SOUND_FREQUENCIES[sound] || [320, 520];
+  const startAt = context.currentTime + Math.max(0, delaySeconds);
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = sound === 'power' || sound === 'tackle' ? 'sawtooth' : 'triangle';
+  oscillator.frequency.setValueAtTime(startFrequency, startAt);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), startAt + .18);
+  gain.gain.setValueAtTime(Math.max(.0001, Math.min(.2, volume * .2)), startAt);
+  gain.gain.exponentialRampToValueAtTime(.0001, startAt + .24);
+  oscillator.connect(gain).connect(destination);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + .25);
+}
 
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-function drawField(ctx, width, height) {
-  ctx.fillStyle = '#23843a';
-  ctx.fillRect(0, 0, width, height);
-  const stripe = width / 10;
-  for (let index = 0; index < 10; index += 1) {
-    ctx.fillStyle = index % 2 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.045)';
-    ctx.fillRect(index * stripe, 0, stripe, height);
-  }
-  ctx.strokeStyle = 'rgba(255,255,255,.9)';
-  ctx.lineWidth = Math.max(2, width / 420);
-  ctx.strokeRect(width * 0.025, height * 0.035, width * 0.95, height * 0.93);
-  ctx.beginPath();
-  ctx.moveTo(width / 2, height * 0.035);
-  ctx.lineTo(width / 2, height * 0.965);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(width / 2, height / 2, height * 0.12, 0, Math.PI * 2);
-  ctx.stroke();
-  const boxW = width * 0.15;
-  const boxH = height * 0.4;
-  ctx.strokeRect(width * 0.025, (height - boxH) / 2, boxW, boxH);
-  ctx.strokeRect(width * 0.975 - boxW, (height - boxH) / 2, boxW, boxH);
-}
-
 export function renderRecordingFrame(canvas, recording, frame) {
-  if (!canvas || !recording || !frame) return;
-  const ctx = canvas.getContext('2d', { alpha: false });
-  const [fieldWidth, fieldHeight] = recording.field || [1024, 640];
-  canvas.width = Math.max(640, Math.round(fieldWidth));
-  canvas.height = Math.max(360, Math.round(fieldHeight));
-  drawField(ctx, canvas.width, canvas.height);
-  frame.players.forEach(state => {
-    const player = recording.players?.[state.index] || {};
-    const radius = Math.max(10, canvas.height * 0.022);
-    ctx.fillStyle = state.team === Team.RED ? '#ef4444' : '#3b82f6';
-    ctx.beginPath();
-    ctx.arc(state.x, state.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = state.hasBall ? '#facc15' : '#e2e8f0';
-    ctx.lineWidth = state.hasBall ? 4 : 2;
-    ctx.stroke();
-    ctx.fillStyle = '#fff';
-    ctx.font = `700 ${Math.max(11, canvas.height * 0.018)}px Outfit, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(player.name || 'Jogador', state.x, state.y - radius - 7);
+  renderMatchRecordingFrame(canvas, recording, frame, {
+    shake: frame.ball?.lastStrikeType === 'power' && Number(frame.ball?.strikeTimer || 0) > 0
   });
-  ctx.fillStyle = '#f8fafc';
-  ctx.beginPath();
-  ctx.arc(frame.ball.x, frame.ball.y, Math.max(7, canvas.height * 0.013), 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#0f172a';
-  ctx.lineWidth = 2;
-  ctx.stroke();
 }
 
 export class MatchRecordingPlayer {
@@ -85,6 +57,7 @@ export class MatchRecordingPlayer {
     this.raf = 0;
     this.lastAudioMarkerMs = 0;
     this.audioContext = null;
+    this.playbackRate = 1;
     this.bind();
   }
 
@@ -94,7 +67,11 @@ export class MatchRecordingPlayer {
       this.currentMs = Number(this.timeline.value || 0);
       this.render();
     });
-    this.speedSelect?.addEventListener('change', () => this.render());
+    this.speedSelect?.addEventListener('change', () => {
+      this.playbackRate = Math.max(.25, Number(this.speedSelect.value) || 1);
+      this.lastTick = performance.now();
+      this.render();
+    });
     this.exportButton?.addEventListener('click', () => this.exportVideo());
     this.root?.querySelector('#recording-close')?.addEventListener('click', () => this.close());
   }
@@ -114,6 +91,10 @@ export class MatchRecordingPlayer {
       if (speed === 1) option.selected = true;
       return option;
     }));
+    this.speedSelect.value = '1';
+    this.playbackRate = 1;
+    const [fieldWidth, fieldHeight] = this.recording.field || [1024, 640];
+    this.root.style.setProperty('--recording-aspect', `${fieldWidth} / ${fieldHeight}`);
     this.renderMarkers();
     this.root.classList.remove('hidden');
     this.render();
@@ -136,7 +117,7 @@ export class MatchRecordingPlayer {
 
   tick(now) {
     if (!this.playing) return;
-    const speed = Number(this.speedSelect?.value || 1);
+    const speed = this.playbackRate;
     const previousMs = this.currentMs;
     this.currentMs += Math.max(0, now - this.lastTick) * speed;
     this.lastTick = now;
@@ -193,7 +174,7 @@ export class MatchRecordingPlayer {
   renderMarkers() {
     this.markers.replaceChildren();
     const duration = Math.max(1, Number(this.recording.durationMs || 1));
-    (this.recording.markers || []).forEach(marker => {
+    (this.recording.markers || []).filter(marker => marker.type !== 'sound').forEach(marker => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `recording-marker recording-marker-${marker.type || 'event'}`;
@@ -210,23 +191,10 @@ export class MatchRecordingPlayer {
   playMarkerAudio(fromMs, toMs) {
     const volume = Number(this.volumeInput?.value || 0) / 100;
     if (volume <= 0) return;
-    const crossedMarker = (this.recording?.markers || []).find(marker =>
-      marker.t > fromMs && marker.t <= toMs
-    );
-    if (!crossedMarker) return;
+    const crossedMarkers = (this.recording?.markers || []).filter(marker => marker.t > fromMs && marker.t <= toMs);
+    if (!crossedMarkers.length) return;
     this.audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = this.audioContext.createOscillator();
-    const gain = this.audioContext.createGain();
-    oscillator.type = 'triangle';
-    const startFrequency = crossedMarker.type === 'goal' ? 420 : 260;
-    const endFrequency = crossedMarker.type === 'goal' ? 760 : 520;
-    oscillator.frequency.setValueAtTime(startFrequency, this.audioContext.currentTime);
-    oscillator.frequency.exponentialRampToValueAtTime(endFrequency, this.audioContext.currentTime + 0.18);
-    gain.gain.setValueAtTime(Math.min(0.2, volume * 0.2), this.audioContext.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.24);
-    oscillator.connect(gain).connect(this.audioContext.destination);
-    oscillator.start();
-    oscillator.stop(this.audioContext.currentTime + 0.25);
+    crossedMarkers.forEach(marker => scheduleRecordingTone(this.audioContext, this.audioContext.destination, marker, volume));
   }
 
   async exportVideo() {
@@ -237,27 +205,36 @@ export class MatchRecordingPlayer {
     const candidates = ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
     const mimeType = candidates.find(type => MediaRecorder.isTypeSupported(type));
     if (!mimeType) return showToast('Nenhum formato de vídeo compatível foi encontrado.', 'error');
-    const previousTime = this.currentMs;
-    const previousPlaying = this.playing;
-    this.playing = false;
     this.exportButton.disabled = true;
-    this.exportButton.textContent = 'Gravando...';
-    const stream = this.canvas.captureStream(30);
+    this.exportButton.textContent = 'Criando vídeo...';
+    // Render on an isolated canvas so exporting never moves the visible player.
+    const exportCanvas = document.createElement('canvas');
+    const [fieldWidth, fieldHeight] = this.recording.field || [1024, 640];
+    exportCanvas.width = fieldWidth;
+    exportCanvas.height = fieldHeight;
+    const stream = exportCanvas.captureStream(30);
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const audioDestination = audioContext.createMediaStreamDestination();
+    audioDestination.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+    const exportVolume = Number(this.volumeInput?.value || 0) / 100;
+    (this.recording.markers || []).forEach(marker => {
+      scheduleRecordingTone(audioContext, audioDestination, marker, exportVolume, Number(marker.t || 0) / 1000);
+    });
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_200_000 });
     recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
     const finished = new Promise(resolve => { recorder.onstop = resolve; });
     recorder.start(500);
     const exportStart = performance.now();
-    const exportSpeed = 2;
     const renderExport = now => {
-      this.currentMs = Math.min(this.recording.durationMs, (now - exportStart) * exportSpeed);
-      this.render();
-      if (this.currentMs < this.recording.durationMs) requestAnimationFrame(renderExport);
+      const exportMs = Math.min(this.recording.durationMs, now - exportStart);
+      renderRecordingFrame(exportCanvas, this.recording, this.getFrameAt(exportMs));
+      if (exportMs < this.recording.durationMs) requestAnimationFrame(renderExport);
       else recorder.stop();
     };
     requestAnimationFrame(renderExport);
     await finished;
+    audioContext.close().catch(() => {});
     const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
     const blob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -266,8 +243,6 @@ export class MatchRecordingPlayer {
     link.download = `Kicker-Hax-${this.match?.matchId || Date.now()}.${extension}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    this.currentMs = previousTime;
-    this.playing = previousPlaying;
     this.exportButton.disabled = false;
     this.exportButton.textContent = extension === 'mp4' ? 'Salvar MP4' : 'Salvar vídeo';
     this.render();

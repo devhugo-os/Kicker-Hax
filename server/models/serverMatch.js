@@ -362,10 +362,31 @@ export class ServerMatch {
       if (this.replayBuffer[idx]) list.push(this.replayBuffer[idx]);
     }
     const safeStride = Math.max(1, Math.floor(stride));
-    if (safeStride === 1) return list;
-    // Keep the final goal frame while reducing the reliable WebRTC payload.
-    const offset = Math.max(0, (list.length - 1) % safeStride);
-    return list.filter((_, index) => index % safeStride === offset);
+    const sampled = safeStride === 1
+      ? list
+      : list.filter((_, index) => index % safeStride === Math.max(0, (list.length - 1) % safeStride));
+    // Identity and profile cosmetics already exist in the lobby snapshot.
+    // Removing repeated strings from every frame keeps replay traffic small
+    // enough that it cannot compete with realtime position packets.
+    return sampled.map(frame => ({
+      ball: frame.ball,
+      score: frame.score,
+      sfx: frame.sfx,
+      // Retained for deterministic replay diagnostics/tests; absent in live frames.
+      ...(frame.marker === undefined ? {} : { marker: frame.marker }),
+      ...(frame.index === undefined ? {} : { index: frame.index }),
+      players: (frame.players || []).map(player => ({
+        id: player.id,
+        x: player.x,
+        y: player.y,
+        dir: player.dir,
+        team: player.team,
+        has: player.has,
+        inv: player.inv,
+        stun: player.stun,
+        halo: player.halo
+      }))
+    }));
   }
 
   triggerGoal(side, scorerId) {
@@ -710,9 +731,11 @@ export class ServerMatch {
         this.countdownTimer = Math.ceil(
           (C.REPLAY_SYNC_LEAD_MS / (1000 / 60))
           + (replayFrames.length * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor)
+          + (C.REPLAY_POST_GOAL_FREEZE_MS / (1000 / 60))
         );
         this.phaseEndsAt = replayStartAt + Math.ceil(replayFrames.length * (1000 / 60)
-          * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor);
+          * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor)
+          + C.REPLAY_POST_GOAL_FREEZE_MS;
       }
     } else if (this.status === 'replay') {
       this.countdownTimer--;

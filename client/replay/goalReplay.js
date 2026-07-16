@@ -6,7 +6,7 @@ export function getSynchronizedReplayStart(replayStartAt, serverClockOffsetMs = 
     : fallbackNow;
 }
 
-export function getReplayPosition(startedAtWall, frameMs, frameCount, now = Date.now()) {
+export function getReplayPosition(startedAtWall, frameMs, frameCount, now = Date.now(), holdMs = 0) {
   const safeFrameMs = Math.max(1, Number(frameMs) || 1);
   const elapsedMs = Math.max(0, Number(now) - Number(startedAtWall || now));
   const position = elapsedMs / safeFrameMs;
@@ -15,7 +15,8 @@ export function getReplayPosition(startedAtWall, frameMs, frameCount, now = Date
     position,
     index: Math.min(Math.max(0, frameCount - 1), Math.floor(position)),
     ratio: position - Math.floor(position),
-    ended: position >= frameCount
+    holding: position >= frameCount && elapsedMs < (frameCount * safeFrameMs) + Math.max(0, Number(holdMs) || 0),
+    ended: elapsedMs >= (frameCount * safeFrameMs) + Math.max(0, Number(holdMs) || 0)
   };
 }
 

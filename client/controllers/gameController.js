@@ -1000,7 +1000,7 @@ export const gameController = {
     this.canvas.width = dims.w;
     this.canvas.height = dims.h;
     this.matchRecording = this.mode === 'multiplayer'
-      ? new MatchRecordingSession({ fieldWidth: dims.w, fieldHeight: dims.h })
+      ? new MatchRecordingSession({ fieldWidth: dims.w, fieldHeight: dims.h, players: this.activeRoom?.players || [] })
       : null;
     this.recordingFinalizePromise = null;
     document.getElementById('live-match-report-modal')?.classList.add('hidden');
@@ -1484,7 +1484,8 @@ export const gameController = {
               }
               MatchSim.status = 'replay';
               // Set replay duration using the shared slow-motion factor.
-              MatchSim.countdownTimer = this.replayFrames.length * C.REPLAY_SLOWMO_FACTOR;
+              MatchSim.countdownTimer = (this.replayFrames.length * C.REPLAY_SLOWMO_FACTOR)
+                + Math.ceil(C.REPLAY_POST_GOAL_FREEZE_MS / (1000 / 60));
 
               // Start local recording
               this.startLocalReplayRecording();
@@ -1862,7 +1863,7 @@ export const gameController = {
 
         // Render Frame Canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        const replayCameraFrame = this.inReplay ? this.getCurrentReplayFrame() : null;
+        const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
         const cameraShaking = this.beginPowerKickCamera(
           this.ctx,
           this.inReplay ? replayCameraFrame?.ball : MatchSim.status === 'playing' ? localBallSim : null
@@ -2562,7 +2563,9 @@ export const gameController = {
       if (!this.inReplay && state.status !== 'replay') {
         this.recordOnlineReplayFrame(state);
       }
-      if (state.status === 'replay' && !this.inReplay && !this.replayFallbackTimer) {
+      const synchronizedNow = Date.now() + Number(this.serverClockOffsetMs || 0);
+      const replayStillActive = !this.phaseEndsAt || synchronizedNow < this.phaseEndsAt - 100;
+      if (state.status === 'replay' && replayStillActive && !this.inReplay && !this.replayFallbackTimer) {
         // The reliable replay payload may be delayed behind other control
         // packets on mobile. Start from buffered snapshots instead of freezing.
         this.replayFallbackTimer = setTimeout(() => {
@@ -2810,7 +2813,7 @@ export const gameController = {
 
       // 2) Render Frame
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      const replayCameraFrame = this.inReplay ? this.getCurrentReplayFrame() : null;
+      const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
       const cameraShaking = this.beginPowerKickCamera(
         this.ctx,
         this.inReplay ? replayCameraFrame?.ball : this.status === 'playing' ? this.ball : null
@@ -3555,7 +3558,8 @@ export const gameController = {
       this.replayStartedAtWall || now,
       this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
       this.replayFrames.length,
-      now
+      now,
+      C.REPLAY_POST_GOAL_FREEZE_MS
     );
     if (position.ended) {
       this.endReplayPlayback();
@@ -3609,13 +3613,25 @@ export const gameController = {
       this.replayStartedAtWall || now,
       this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
       this.replayFrames.length,
-      now
+      now,
+      C.REPLAY_POST_GOAL_FREEZE_MS
     );
     return interpolateReplayFrame(
       this.replayFrames[position.index],
       this.replayFrames[Math.min(this.replayFrames.length - 1, position.index + 1)],
       position.ratio
     );
+  },
+
+  isReplayPostGoalHold(now = Date.now()) {
+    if (!this.inReplay || !this.replayFrames.length) return false;
+    return getReplayPosition(
+      this.replayStartedAtWall || now,
+      this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
+      this.replayFrames.length,
+      now,
+      C.REPLAY_POST_GOAL_FREEZE_MS
+    ).holding;
   },
 
   endReplayPlayback() {
@@ -3799,6 +3815,7 @@ export const gameController = {
     }
     this.fieldCacheCanvas = null;
     this.fieldCacheKey = '';
+    if (this.matchRecording) this.matchRecording.field = [this.canvas.width, this.canvas.height];
     this.resizeCanvasContainer();
   },
 
@@ -4200,9 +4217,14 @@ export const gameController = {
         button.disabled = false;
         if (abandonButton) abandonButton.disabled = false;
       };
-      const handleRejoined = () => {
+      const handleRejoined = (payload = {}) => {
         cleanupRejoinActions();
         restoreActions();
+        this.activeRoom = payload.lobbyInfo || this.rejoinRoomMeta || room;
+        this.fieldSize = this.activeRoom?.fieldSize || 'medium';
+        this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
+        if (router.currentScreenId !== 'match-screen') router.show('match-screen');
+        showToast('Você voltou para a partida.', 'success');
       };
       const handleJoinError = () => {
         cleanupRejoinActions();

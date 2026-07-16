@@ -1,6 +1,6 @@
 {
   "name": "kicker-hax",
-  "version": "40.0.0",
+  "version": "41.0.0",
   "description": "Kicker Hax - Reestruturado com Multiplayer Socket.IO e Firebase",
   "main": "server/server.js",
   "type": "module",
