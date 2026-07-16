@@ -1,5 +1,6 @@
 // Kicker Hax - Server-side Room Model
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH, USERNAME_MAX_LENGTH } from '../../shared/constants.js';
+import { compactLobbyInfo } from '../../shared/multiplayerPayload.js';
 
 function normalizeStaffRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
@@ -162,7 +163,7 @@ export class ServerRoom {
   }
 
   getLobbyInfo() {
-    return {
+    return compactLobbyInfo({
       code: this.code,
       name: this.name,
       maxPlayers: this.maxPlayers,
@@ -174,8 +175,7 @@ export class ServerRoom {
       hostId: this.hostId,
       hostUsername: this.hostUsername,
       status: this.status,
-      players: this.players,
-      chatHistory: this.chatHistory
-    };
+      players: this.players
+    });
   }
 }

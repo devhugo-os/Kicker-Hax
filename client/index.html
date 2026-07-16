@@ -992,7 +992,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v36.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v37.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1034,6 +1034,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v37.0 - Canal Compacto</h4>
+            <p>Corrigido definitivamente o erro <strong>Message too big for JSON channel</strong> durante a entrada em salas. O estado interno da sala e o payload WebRTC agora s&atilde;o objetos separados: skins personalizadas podem ser carregadas localmente sem contaminar o pacote enviado aos convidados. Todo lobby transmitido passa por um contrato compacto, sem imagens Base64 nem hist&oacute;rico de chat duplicado, mantendo a entrada e as atualiza&ccedil;&otilde;es da sala abaixo do limite do canal.</p>
+          </section>
           <section>
             <h4>v36.0 - Entrada Confi&aacute;vel</h4>
             <p>A entrada em salas multiplayer foi refor&ccedil;ada para impedir o falso timeout quando o host j&aacute; enxergava o convidado. Cada tentativa agora usa uma identidade WebRTC nova, confirma&ccedil;&atilde;o exclusiva e recibo redundante no Realtime Database. O canal r&aacute;pido de estado s&oacute; inicia depois da aceita&ccedil;&atilde;o do lobby, evitando disputa durante a negocia&ccedil;&atilde;o. Skins personalizadas deixam de atravessar o handshake em Base64 e s&atilde;o recuperadas separadamente, reduzindo bastante o pacote inicial sem alterar a apar&ecirc;ncia dos jogadores.</p>

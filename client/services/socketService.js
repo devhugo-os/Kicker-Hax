@@ -7,7 +7,10 @@ import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
 import { buildRoomCleanupPatch, getOrphanRoomCodes, getRoomActivityTimestamp } from '../utils/roomCleanup.js';
 import { shouldDropRealtimeState } from '../utils/realtimeTransport.js';
-import { sanitizeMultiplayerProfile } from '../utils/multiplayerProfile.js';
+import {
+  compactMultiplayerPayload,
+  sanitizeMultiplayerProfile
+} from '../../shared/multiplayerPayload.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
 
 // Prefer direct WebRTC routes, including local-network candidates, and keep a
@@ -268,10 +271,21 @@ class P2PSocketService {
 
   // Broadcast helper for host to send to self + all connected guests
   broadcast(event, data) {
-    const payload = event === 'gameState'
-      ? { ...data, transportSequence: ++this.gameStateSequence }
+    // High-frequency game states must not be cloned. Only lifecycle payloads
+    // carrying lobby data pass through the compact control-channel boundary.
+    const hasLobbyData = event === 'lobbyUpdate' || data?.lobbyInfo;
+    const transportData = hasLobbyData
+      ? compactMultiplayerPayload(data)
       : data;
-    this.triggerLocalEvent(event, payload);
+    const transportPayload = event === 'gameState'
+      ? { ...transportData, transportSequence: ++this.gameStateSequence }
+      : transportData;
+    // Local skin hydration may replace "custom" with a cached Base64 image.
+    // It must never mutate the object reserved for the WebRTC channel.
+    const localPayload = hasLobbyData
+      ? compactMultiplayerPayload(transportPayload)
+      : transportPayload;
+    this.triggerLocalEvent(event, localPayload);
     this.connections.forEach(conn => {
       if (conn.open) {
         const realtimeConn = this.realtimeConnections.get(conn.peer);
@@ -279,7 +293,7 @@ class P2PSocketService {
         const bufferedAmount = Number(target.dataChannel?.bufferedAmount || 0);
         if (shouldDropRealtimeState(event, bufferedAmount)) return;
         try {
-          target.send({ event, data: payload });
+          target.send({ event, data: transportPayload });
         } catch (error) {
           if (event !== 'gameState') console.warn(`[P2PSocket] Falha ao enviar ${event}:`, error);
         }
@@ -816,7 +830,7 @@ class P2PSocketService {
 
   sendJoinResponseWithRetry(socketId, conn, event, data) {
     this.clearJoinResponseRetry(socketId);
-    const payload = { event, data };
+    const payload = { event, data: compactMultiplayerPayload(data) };
     const send = () => {
       const channels = [];
       if (conn) channels.push(conn);
@@ -1043,7 +1057,10 @@ class P2PSocketService {
       const player = this.serverRoom.players.find(item => item.id === socketId);
       if (!player) return;
       try {
-        conn.send({ event: 'lobbyUpdate', data: this.serverRoom.getLobbyInfo() });
+        conn.send({
+          event: 'lobbyUpdate',
+          data: compactMultiplayerPayload(this.serverRoom.getLobbyInfo())
+        });
       } catch { /* The next host broadcast will carry the same state. */ }
     }
 
