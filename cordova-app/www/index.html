@@ -103,7 +103,7 @@
         const url = new URL(gameUrl);
         url.searchParams.set('app', '1');
         url.searchParams.set('native', '1');
-        url.searchParams.set('nativeAppVersion', '35.0');
+        url.searchParams.set('nativeAppVersion', '36.0');
         // Always request the latest document; Vite assets stay cacheable by hash.
         url.searchParams.set('build', String(Date.now()));
         return url.toString();

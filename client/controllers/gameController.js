@@ -718,9 +718,8 @@ export const gameController = {
           staffRole: menuController.profileData.staffRole || ''
         };
 
-        const s = socketService.getSocket();
-        if (s) {
-          s.once('joinSuccess', (joinData) => {
+        this.registerJoinResult(
+          (joinData) => {
             const room = joinData?.lobbyInfo;
             if (room) {
               this.activeRoom = room;
@@ -728,12 +727,8 @@ export const gameController = {
             }
             showToast('Entrou no lobby com sucesso!', 'success');
             router.show('lobby-screen');
-          });
-
-          s.once('joinError', (err) => {
-            showToast(err, 'error');
-          });
-        }
+          }
+        );
         localStorage.setItem(`kicker_hax_last_room_${this.currentUser.uid}`, JSON.stringify({ code, password: pass }));
         socketService.joinRoom(code, pass, profile);
       };
@@ -2530,7 +2525,9 @@ export const gameController = {
       this.ball.updateState(state.ball, snapshotReceivedAt, extrapolateMotion);
 
       state.players.forEach(sp => {
-        sp.skin ||= this.activeRoom?.players?.find(player => player.id === sp.id)?.skin || '';
+        if (!sp.skin || sp.skin === 'custom') {
+          sp.skin = this.activeRoom?.players?.find(player => player.id === sp.id)?.skin || '';
+        }
         let p = this.players.find(x => x.id === sp.id);
         if (!p) {
           p = new ClientPlayer(sp);
@@ -3916,6 +3913,31 @@ export const gameController = {
   // ==========================================================================
   // MULTIPLAYER LOBBY UI RENDERERS
   // ==========================================================================
+  registerJoinResult(onSuccess) {
+    const socket = socketService.getSocket();
+    if (!socket) return;
+    if (this.pendingJoinSuccess) socket.off('joinSuccess', this.pendingJoinSuccess);
+    if (this.pendingJoinError) socket.off('joinError', this.pendingJoinError);
+    const successHandler = joinData => {
+      cleanup();
+      onSuccess(joinData);
+    };
+    const errorHandler = error => {
+      cleanup();
+      showToast(error, 'error');
+    };
+    const cleanup = () => {
+      socket.off('joinSuccess', successHandler);
+      socket.off('joinError', errorHandler);
+      if (this.pendingJoinSuccess === successHandler) this.pendingJoinSuccess = null;
+      if (this.pendingJoinError === errorHandler) this.pendingJoinError = null;
+    };
+    this.pendingJoinSuccess = successHandler;
+    this.pendingJoinError = errorHandler;
+    socket.on('joinSuccess', successHandler);
+    socket.on('joinError', errorHandler);
+  },
+
   async refreshRejoinMatchAction() {
     const button = document.getElementById('multi-btn-rejoin-match');
     const abandonButton = document.getElementById('multi-btn-abandon-match');
@@ -3962,7 +3984,6 @@ export const gameController = {
     };
     button.onclick = () => {
       const { profile, password } = getRejoinCredentials();
-      socketService.once('joinError', (message) => showToast(message, 'error'));
       socketService.joinRoom(saved.code, password, profile, { rejoin: true, matchId: saved.matchId });
     };
     if (abandonButton) abandonButton.onclick = async () => {
@@ -4116,8 +4137,7 @@ export const gameController = {
       skin: getEquippedSkin(menuController.profileData).image,
       staffRole: menuController.profileData.staffRole || ''
     };
-    const socket = socketService.getSocket();
-    socket.once('joinSuccess', (joinData) => {
+    this.registerJoinResult((joinData) => {
       const room = joinData?.lobbyInfo;
       if (room) {
         this.activeRoom = room;
@@ -4125,9 +4145,6 @@ export const gameController = {
       }
       showToast('Entrou na sala!', 'success');
       router.show('lobby-screen');
-    });
-    socket.once('joinError', (err) => {
-      showToast(err, 'error');
     });
     localStorage.setItem(`kicker_hax_last_room_${this.currentUser.uid}`, JSON.stringify({ code, password }));
     socketService.joinRoom(code, password, profile);
@@ -4280,7 +4297,9 @@ export const gameController = {
 
     const roomPlayer = this.activeRoom?.players?.find(player => player.uid === msg.uid);
     let profile = null;
-    if (msg.uid && !roomPlayer) profile = await firebaseService.getUserProfile(msg.uid).catch(() => null);
+    if (msg.uid && (!roomPlayer || roomPlayer.skin === 'custom')) {
+      profile = await firebaseService.getUserProfile(msg.uid).catch(() => null);
+    }
     const identity = profile || {
       equippedSkinId: roomPlayer?.skin ? 'room-skin' : 'rookie',
       equippedSkinImage: roomPlayer?.skin || null,
