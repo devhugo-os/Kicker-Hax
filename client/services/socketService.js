@@ -6,7 +6,11 @@ import { ServerRoom } from '../../server/models/serverRoom.js';
 import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
 import { buildRoomCleanupPatch, getOrphanRoomCodes, getRoomActivityTimestamp } from '../utils/roomCleanup.js';
-import { shouldDropRealtimeState } from '../utils/realtimeTransport.js';
+import {
+  decodeRealtimePacket,
+  encodeRealtimePacket,
+  shouldDropRealtimeState
+} from '../utils/realtimeTransport.js';
 import {
   compactMultiplayerPayload,
   sanitizeMultiplayerProfile
@@ -261,7 +265,7 @@ class P2PSocketService {
     } else if (['gameInput', 'ping'].includes(event) && this.realtimeHostConn?.open) {
       const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
       if (!shouldDropRealtimeState(event, bufferedAmount)) {
-        this.realtimeHostConn.send({ event, data });
+        this.realtimeHostConn.send(encodeRealtimePacket(event, data));
       }
     } else if (this.hostConn && this.hostConn.open) {
       // Send payload to host via WebRTC
@@ -289,11 +293,18 @@ class P2PSocketService {
     this.connections.forEach(conn => {
       if (conn.open) {
         const realtimeConn = this.realtimeConnections.get(conn.peer);
-        const target = event === 'gameState' && realtimeConn?.open ? realtimeConn : conn;
+        // State snapshots are replaceable and must never fall back to the
+        // reliable JSON channel. That fallback previously crossed PeerJS's
+        // 16 KB JSON limit and left guests with an empty frozen field.
+        if (event === 'gameState' && !realtimeConn?.open) return;
+        const target = event === 'gameState' ? realtimeConn : conn;
         const bufferedAmount = Number(target.dataChannel?.bufferedAmount || 0);
         if (shouldDropRealtimeState(event, bufferedAmount)) return;
         try {
-          target.send({ event, data: transportPayload });
+          const packet = event === 'gameState'
+            ? encodeRealtimePacket(event, transportPayload)
+            : { event, data: transportPayload };
+          target.send(packet);
         } catch (error) {
           if (event !== 'gameState') console.warn(`[P2PSocket] Falha ao enviar ${event}:`, error);
         }
@@ -445,8 +456,9 @@ class P2PSocketService {
         }
         conn.on('open', () => this.realtimeConnections.set(conn.peer, conn));
         conn.on('data', (payload) => {
-          if (['gameInput', 'ping'].includes(payload?.event)) {
-            this.handleHostReceivedData(conn.peer, payload.event, payload.data, conn);
+          const packet = decodeRealtimePacket(payload);
+          if (['gameInput', 'ping'].includes(packet?.event)) {
+            this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
           }
         });
         conn.on('close', () => {
@@ -589,19 +601,21 @@ class P2PSocketService {
           realtimeOpening = true;
           const realtimeConn = peer.connect(roomData.hostPeerId, {
             reliable: false,
-            serialization: 'json',
+            serialization: 'raw',
             metadata: { channel: 'realtime', joinAttemptId }
           });
           this.realtimeHostConn = realtimeConn;
           realtimeConn.on('open', () => { realtimeOpening = false; });
           realtimeConn.on('data', payload => {
-            if (['gameState', 'pong'].includes(payload?.event)) {
-              this.triggerLocalEvent(payload.event, payload.data);
+            const packet = decodeRealtimePacket(payload);
+            if (['gameState', 'pong'].includes(packet?.event)) {
+              this.triggerLocalEvent(packet.event, packet.data);
             }
           });
           const clearRealtime = () => {
             realtimeOpening = false;
             if (this.realtimeHostConn === realtimeConn) this.realtimeHostConn = null;
+            window.setTimeout(openRealtimeChannel, 600);
           };
           realtimeConn.on('close', clearRealtime);
           realtimeConn.on('error', clearRealtime);
@@ -832,13 +846,8 @@ class P2PSocketService {
     this.clearJoinResponseRetry(socketId);
     const payload = { event, data: compactMultiplayerPayload(data) };
     const send = () => {
-      const channels = [];
-      if (conn) channels.push(conn);
-      const realtimeConn = this.realtimeConnections.get(socketId);
-      if (realtimeConn?.open && realtimeConn !== conn) channels.push(realtimeConn);
-      channels.forEach(channel => {
-        try { channel.send(payload); } catch { /* The next retry uses any surviving channel. */ }
-      });
+      if (!conn?.open) return;
+      try { conn.send(payload); } catch { /* The next retry uses the control channel again. */ }
     };
     send();
     const interval = window.setInterval(send, 700);
@@ -1106,7 +1115,10 @@ class P2PSocketService {
       if (socketId === this.clientId) {
         this.triggerLocalEvent('pong', payload);
       } else if (conn?.open) {
-        conn.send({ event: 'pong', data: payload });
+        const packet = conn.metadata?.channel === 'realtime'
+          ? encodeRealtimePacket('pong', payload)
+          : { event: 'pong', data: payload };
+        conn.send(packet);
       }
     }
 
