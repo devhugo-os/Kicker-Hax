@@ -18,7 +18,7 @@ export class ServerMatch {
     this.allowCasualForfeit = !!options.allowCasualForfeit;
     this.onlineGoalFreezeFrames = Math.min(C.GOAL_FREEZE_FRAMES, options.goalFreezeFrames || C.GOAL_FREEZE_FRAMES);
     this.onlineReplaySlowmoFactor = options.replaySlowmoFactor || C.REPLAY_SLOWMO_FACTOR;
-    this.onlineReplayCaptureStride = 2;
+    this.onlineReplayCaptureStride = 3;
 
     if (this.fieldSize === 'small') {
       this.w = 896; this.h = 560;
@@ -32,6 +32,7 @@ export class ServerMatch {
     this.matchTime = duration * 60;
     this.status = 'loading'; // 'loading' | 'countdown' | 'playing' | 'freeze' | 'replay' | 'end-freeze' | 'ended'
     this.countdownTimer = 0;
+    this.phaseEndsAt = 0;
     this.readyPlayerIds = new Set();
     this.goalFreezeTimer = 0;
     this.endFreezeTimer = 0;
@@ -239,6 +240,13 @@ export class ServerMatch {
     }
   }
 
+  setTimedPhase(status, frames) {
+    const safeFrames = Math.max(0, Math.ceil(Number(frames) || 0));
+    this.status = status;
+    this.countdownTimer = safeFrames;
+    this.phaseEndsAt = Date.now() + Math.ceil((safeFrames / 60) * 1000);
+  }
+
   /** Starts the shared countdown only after every active player opened the match view. */
   markClientReady(socketId) {
     if (!this.inputs.has(socketId) || this.status !== 'loading') return false;
@@ -246,8 +254,7 @@ export class ServerMatch {
     const everyoneReady = [...this.inputs.keys()].every(id => this.readyPlayerIds.has(id));
     if (!everyoneReady) return false;
     this.startedAt = new Date().toISOString();
-    this.status = 'countdown';
-    this.countdownTimer = 180;
+    this.setTimedPhase('countdown', 180);
     this.soundEffects.push('whistle');
     return true;
   }
@@ -366,6 +373,7 @@ export class ServerMatch {
 
     this.status = 'freeze';
     this.goalFreezeTimer = this.onlineGoalFreezeFrames;
+    this.phaseEndsAt = Date.now() + Math.ceil((this.goalFreezeTimer / 60) * 1000);
 
     const scorer = this.players.find(p => p.id === scorerId);
     const scorerName = scorer ? scorer.name : 'Desconhecido';
@@ -658,6 +666,7 @@ export class ServerMatch {
         matchTime: this.matchTime,
         status: this.status,
         countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
+        phaseEndsAt: this.phaseEndsAt,
         goalInfo: this.lastGoal,
         soundEffects: [],
         isHostPaused: true
@@ -680,26 +689,30 @@ export class ServerMatch {
       this.countdownTimer--;
       if (this.countdownTimer <= 0) {
         this.status = 'playing';
+        this.phaseEndsAt = 0;
       }
-      this.recordFrame();
     } else if (this.status === 'freeze') {
       this.goalFreezeTimer--;
-      this.recordFrame();
       if (this.goalFreezeTimer <= 0) {
         const replayFrames = this.getReplayQueue(this.onlineReplayCaptureStride);
-        const replayStartAt = Date.now();
+        const replayStartAt = Date.now() + C.REPLAY_SYNC_LEAD_MS;
         this.replayVotes = new Set();
         // Send replay buffer to all clients
         this.io.to(this.roomCode).emit('playReplay', {
           replayFrames,
           goalInfo: this.lastGoal,
           replayStartAt,
-          replayDelayMs: 0,
+          replayDelayMs: C.REPLAY_SYNC_LEAD_MS,
           replayFrameMs: (1000 / 60) * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor
         });
         this.status = 'replay';
         // Keep the authoritative match paused while clients play the slow-motion replay.
-        this.countdownTimer = Math.ceil(replayFrames.length * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor) + 10;
+        this.countdownTimer = Math.ceil(
+          (C.REPLAY_SYNC_LEAD_MS / (1000 / 60))
+          + (replayFrames.length * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor)
+        );
+        this.phaseEndsAt = replayStartAt + Math.ceil(replayFrames.length * (1000 / 60)
+          * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor);
       }
     } else if (this.status === 'replay') {
       this.countdownTimer--;
@@ -709,14 +722,12 @@ export class ServerMatch {
           this.status = 'end-freeze';
           this.endFreezeTimer = C.END_FREEZE_FRAMES;
         } else {
-          this.status = 'countdown';
-          this.countdownTimer = C.RESTART_COUNTDOWN_FRAMES;
+          this.setTimedPhase('countdown', C.RESTART_COUNTDOWN_FRAMES);
           this.kickoff();
         }
       }
     } else if (this.status === 'end-freeze') {
       this.endFreezeTimer--;
-      this.recordFrame();
       if (this.endFreezeTimer <= 0) {
         this.status = 'ended';
         this.onMatchEnd(this.buildMatchResult());
@@ -859,7 +870,9 @@ export class ServerMatch {
         vx: this.ball.vx,
         vy: this.ball.vy,
         owner: this.ball.owner,
-        lastTouch: this.ball.lastTouch
+        lastTouch: this.ball.lastTouch,
+        lastStrikeType: this.ball.lastStrikeType,
+        strikeTimer: this.ball.strikeTimer
       },
       players: this.players.map(p => {
         const state = {
@@ -894,6 +907,7 @@ export class ServerMatch {
       matchTime: this.matchTime,
       status: this.status,
       countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
+      phaseEndsAt: this.phaseEndsAt,
       goalInfo: this.lastGoal,
       soundEffects: this.soundEffects,
       isHostPaused: this.isHostPaused
@@ -1092,6 +1106,7 @@ export class ServerMatch {
       matchTime: this.matchTime,
       status: this.status,
       countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
+      phaseEndsAt: this.phaseEndsAt,
       goalInfo: this.lastGoal,
       soundEffects: [],
       isHostPaused: false,
@@ -1269,8 +1284,7 @@ export class ServerMatch {
     this.score = { red: 0, blue: 0 };
     this.forfeitWinnerTeam = null;
     this.matchTime = this.duration * 60;
-    this.status = 'countdown';
-    this.countdownTimer = 300;
+    this.setTimedPhase('countdown', 300);
     this.goalFreezeTimer = 0;
     this.endFreezeTimer = 0;
     this.isHostPaused = false;
@@ -1295,6 +1309,7 @@ export class ServerMatch {
     if (this.status === 'freeze' || this.status === 'replay') {
       this.goalFreezeTimer = 0;
       this.countdownTimer = 0;
+      this.phaseEndsAt = Date.now();
     }
   }
 

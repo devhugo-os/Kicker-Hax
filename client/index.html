@@ -816,6 +816,15 @@
         <div class="replay-caption" id="replay-caption"></div>
       </div>
 
+      <div id="live-match-report-modal" class="live-match-report-modal hidden" role="dialog" aria-modal="true" aria-labelledby="live-match-report-title">
+        <div class="live-match-report-card">
+          <button id="live-match-report-close" class="mobile-modal-close" type="button" aria-label="Fechar relatório">&times;</button>
+          <h2 id="live-match-report-title">Estatísticas da partida</h2>
+          <p class="subtext">Dados ao vivo até este momento.</p>
+          <div id="live-match-report-content" class="match-report"></div>
+        </div>
+      </div>
+
       <div id="tutorial-guide" class="tutorial-guide hidden"></div>
 
       <!-- Ping Overlay -->
@@ -909,6 +918,34 @@
           <strong id="match-details-score" class="match-details-score">0 : 0</strong>
         </div>
         <div id="match-details-report" class="match-report"></div>
+        <button id="match-recording-open" class="btn btn-primary hidden" type="button">Assistir gravação</button>
+      </div>
+    </div>
+
+    <div id="match-recording-modal" class="modal-overlay hidden recording-modal" role="dialog" aria-modal="true" aria-labelledby="recording-title">
+      <div class="modal-card card-blur recording-card">
+        <div class="recording-heading">
+          <div>
+            <h2 id="recording-title">Gravação da partida</h2>
+            <p class="subtext">Visão completa, melhores momentos e estatísticas daquele instante.</p>
+          </div>
+          <button id="recording-close" class="modal-close-btn" type="button" aria-label="Fechar gravação">&times;</button>
+        </div>
+        <div class="recording-stage">
+          <canvas id="recording-canvas" width="1024" height="640"></canvas>
+        </div>
+        <div class="recording-timeline-wrap">
+          <div id="recording-markers" class="recording-markers"></div>
+          <input id="recording-timeline" type="range" min="0" max="0" value="0" step="50" aria-label="Linha do tempo da gravação">
+        </div>
+        <div class="recording-controls">
+          <button id="recording-play-toggle" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Reproduzir">&#9654;</button>
+          <span id="recording-time">0:00 / 0:00</span>
+          <label>Velocidade <select id="recording-speed"></select></label>
+          <label>Volume <input id="recording-volume" type="range" min="0" max="100" value="70"></label>
+          <button id="recording-export" class="btn btn-primary" type="button">Salvar MP4</button>
+        </div>
+        <div id="recording-live-report" class="match-report recording-report"></div>
       </div>
     </div>
 
@@ -994,7 +1031,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v39.6</div>
+    <div id="game-version-badge" class="version-badge hidden">v40.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1011,7 +1048,7 @@
           <section><h3>HUD e controles no celular</h3><p>Abra <strong>Controles &gt; Editar HUD na partida</strong>. Um treino de configuração será aberto: arraste o analógico e todos os botões até a posição desejada; toque no lápis de cada controle para ajustar tamanho e opacidade. Use <strong>Confirmar HUD</strong> na parte inferior para salvar no perfil ou <strong>Restaurar padrões</strong> para recuperar o layout inicial.</p></section>
           <section><h3>Posse e chute</h3><p>Encoste na bola para dominá-la. Somente o jogador que está com a posse pode chutar, carregar o chute, driblar ou executar o super chute. Segure o comando de chute para aumentar a força e solte para finalizar; a seta mostra a direção antes do disparo. O super chute consome mais stamina, possui recarga e gera um disparo muito mais veloz.</p></section>
           <section><h3>Movimentação e habilidades</h3><p>Sprint aumenta a velocidade enquanto consome stamina. Drible exige posse, avança o jogador e concede uma proteção curta contra desarmes. O desarme executa um avanço: ele precisa concluir o contato com o portador da bola para funcionar. No celular, a assistência de desarme direciona esse avanço para a bola; computadores e tablets não recebem essa ajuda.</p></section>
-          <section><h3>Chat, pausa e estatísticas</h3><p>Em partidas no computador, pressione Enter para entrar ou sair da digitação do chat. No celular, use o botão de chat do HUD. Pausa, chat e estatísticas podem ser reposicionados no editor mobile. Estatísticas da partida mostram posse, chutes, dribles e desarmes; somente as competitivas alimentam o ranking permanente.</p></section>
+          <section><h3>Chat, pausa e estatísticas</h3><p>Em partidas no computador, pressione Enter para entrar ou sair da digitação do chat e segure Tab para abrir o relatório completo ao vivo. No celular, use os botões de chat e estatísticas do HUD; dentro da caixa de estatísticas, toque em <strong>Relatório completo</strong>. Pausa, chat e estatísticas podem ser reposicionados no editor mobile. Somente partidas competitivas alimentam o ranking permanente.</p></section>
           <section><h3>Treino Livre</h3><p>Tempo e gols são ilimitados. Serve para praticar movimentação, chute, drible e desarme. Não concede XP, KX Coins, estatísticas, ranking ou histórico.</p></section>
           <section><h3>Jogar Sozinho</h3><p>Partida local contra CPU com dificuldade configurável. Replay é obrigatório após gols. Partidas com bot não concedem XP, KX Coins, estatísticas, ranking ou histórico online.</p></section>
           <section><h3>Multiplayer Casual</h3><p>O host organiza os times e pode usar o painel administrativo. Todos precisam estar prontos antes do início. Concede XP e entra no histórico casual, mas não altera estatísticas competitivas, ranking ou KX Coins.</p></section>
@@ -1022,7 +1059,8 @@
           <section><h3>Resultado e histórico detalhado</h3><p>Ao terminar uma partida, o relatório mostra participantes, nota individual, gols, assistências, chutes, dribles, desarmes, posse e os totais de cada time. Os mesmos detalhes podem ser reabertos clicando em uma partida no histórico próprio ou público. Partidas casuais exibem o relatório e dão XP, mas apenas as competitivas alimentam estatísticas, ranking e KX Coins.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão, Retorno e Abandono</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Na Arena, <strong>Abandonar Partida</strong> encerra imediatamente a espera e bloqueia o retorno: se o time ainda tiver membros, começa a votação de 30 segundos para continuar com um a menos; se ficar vazio, ocorre W.O.</p></section>
-          <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta. No multiplayer, jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
+          <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta com os seis segundos anteriores ao gol. No multiplayer, início, replay e reinício usam o relógio do host para todos assistirem juntos. Jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
+          <section><h3>Gravações das partidas</h3><p>Partidas multiplayer concluídas geram uma demo compacta sem repetir comemorações e replays. Abra o histórico, selecione a partida e toque em <strong>Assistir gravação</strong>. O player permite pausar, mudar velocidade e volume, avançar pela linha do tempo, saltar para gols marcados, consultar as estatísticas daquele instante e exportar um MP4 quando o dispositivo oferecer esse formato.</p></section>
           <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
           <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
           <section><h3>Vitrines e Solicitações</h3><p>Skins da comunidade custam 90 KX Coins na vitrine diária, 180 na semanal e 360 na mensal. Cada conta pode solicitar uma skin por dia. O recorte enviado participa das seleções e a vitrine mantém a skin atual quando não existe nova candidata válida para o período.</p></section>
@@ -1036,6 +1074,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v40.0 - Mem&oacute;ria de Jogo</h4>
+            <p>Replays agora preservam seis segundos completos antes do gol, rodam em c&acirc;mera lenta interpolada e usam um hor&aacute;rio compartilhado no multiplayer para sincronizar replay, in&iacute;cio e rein&iacute;cio. O tremor do super chute acompanha somente o instante correto da jogada. Tab abre o relat&oacute;rio completo ao vivo no computador e o HUD mobile ganhou o mesmo acesso. Partidas online conclu&iacute;das passam a oferecer uma demo compacta no hist&oacute;rico, com vis&atilde;o do campo inteiro, linha do tempo, marca&ccedil;&otilde;es de gols, velocidade, volume, estat&iacute;sticas daquele momento e exporta&ccedil;&atilde;o de v&iacute;deo.</p>
+          </section>
           <section>
             <h4>v39.6 - Hist&oacute;rico Compartilhado</h4>
             <p>Perfis pr&oacute;prios e p&uacute;blicos agora reconhecem partidas em que o jogador foi citado mesmo quando outro participante concluiu a grava&ccedil;&atilde;o do resultado, mantendo hist&oacute;rico e estat&iacute;sticas alinhados ao ranking. No tutorial, o super chute tamb&eacute;m pode completar passes para a CPU amiga. A notifica&ccedil;&atilde;o do aplicativo ganhou uma nova mensagem divertida relacionada ao campo.</p>

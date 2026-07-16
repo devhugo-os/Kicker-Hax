@@ -22,6 +22,9 @@ import { TutorialSession, tutorialNeedsAlly, tutorialNeedsBall, tutorialNeedsEne
 import { getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
 import { buildMatchReport } from '../../shared/matchReport.js';
 import { renderMatchReport } from '../components/matchReportView.js';
+import { buildLiveMatchReport } from '../replay/liveMatchReport.js';
+import { getReplayPosition, getSynchronizedReplayStart, interpolateReplayFrame } from '../replay/goalReplay.js';
+import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
 
 export const gameController = {
   currentUser: null,
@@ -65,6 +68,10 @@ export const gameController = {
   mediaRecorder: null,
   recordedChunks: [],
   isRecording: false,
+  matchRecording: null,
+  recordingFinalizePromise: null,
+  serverClockOffsetMs: 0,
+  phaseEndsAt: 0,
   fieldCacheCanvas: null,
   fieldCacheKey: '',
 
@@ -97,6 +104,11 @@ export const gameController = {
 
       // Disable browser scrolling keys inside active match
       if (router.currentScreenId === 'match-screen') {
+        if (k === 'tab') {
+          e.preventDefault();
+          this.showLiveMatchReport(true);
+          return;
+        }
         if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'enter'].includes(k)) {
           e.preventDefault();
         }
@@ -112,6 +124,10 @@ export const gameController = {
       }
       if (e.code) {
         this.codes.set(e.code, false);
+      }
+      if (router.currentScreenId === 'match-screen' && k === 'tab') {
+        e.preventDefault();
+        this.showLiveMatchReport(false);
       }
     });
 
@@ -765,6 +781,12 @@ export const gameController = {
         this.downloadReplay();
       };
     }
+    document.getElementById('live-match-report-close')?.addEventListener('click', () => {
+      this.showLiveMatchReport(false);
+    });
+    document.getElementById('live-match-report-modal')?.addEventListener('click', event => {
+      if (event.target?.id === 'live-match-report-modal') this.showLiveMatchReport(false);
+    });
 
     // In-game chat submit
     const gameChatForm = document.getElementById('game-chat-form');
@@ -977,6 +999,11 @@ export const gameController = {
     const dims = settingsController.dimensions;
     this.canvas.width = dims.w;
     this.canvas.height = dims.h;
+    this.matchRecording = this.mode === 'multiplayer'
+      ? new MatchRecordingSession({ fieldWidth: dims.w, fieldHeight: dims.h })
+      : null;
+    this.recordingFinalizePromise = null;
+    document.getElementById('live-match-report-modal')?.classList.add('hidden');
 
     // Layout resizing responsive hook
     this.resizeCanvasContainer();
@@ -1446,6 +1473,8 @@ export const gameController = {
               this.replayFrames = [...MatchSim.replayBuffer];
               this.replayFrameIdx = 0;
               this.replayTimer = 0;
+              this.replayFrameMs = (1000 / 60) * C.REPLAY_SLOWMO_FACTOR;
+              this.replayStartedAtWall = Date.now();
               document.getElementById('replay-overlay')?.classList.remove('hidden');
               const localSkip = document.getElementById('replay-vote-skip-btn');
               if (localSkip) {
@@ -1455,7 +1484,7 @@ export const gameController = {
               }
               MatchSim.status = 'replay';
               // Set replay duration using the shared slow-motion factor.
-              MatchSim.countdownTimer = (C.REPLAY_CAPTURE_FRAMES * C.REPLAY_SLOWMO_FACTOR) + 10;
+              MatchSim.countdownTimer = this.replayFrames.length * C.REPLAY_SLOWMO_FACTOR;
 
               // Start local recording
               this.startLocalReplayRecording();
@@ -1823,15 +1852,21 @@ export const gameController = {
             });
           }
 
-          // Record locally for replay frames
-          recordLocalFrame();
+          // The goal replay must contain actual play only. Capturing freeze,
+          // replay or countdown frames would replace part of the six seconds
+          // immediately preceding the goal.
+          if (MatchSim.status === 'playing') recordLocalFrame();
         }
         accumulator -= timeStep;
       }
 
         // Render Frame Canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        const cameraShaking = this.beginPowerKickCamera(this.ctx, localBallSim);
+        const replayCameraFrame = this.inReplay ? this.getCurrentReplayFrame() : null;
+        const cameraShaking = this.beginPowerKickCamera(
+          this.ctx,
+          this.inReplay ? replayCameraFrame?.ball : MatchSim.status === 'playing' ? localBallSim : null
+        );
         this.drawFieldGrid(this.ctx);
 
         // Update Client elements state LERP
@@ -1936,6 +1971,7 @@ export const gameController = {
         if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
         if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
         this.refreshMobileStatsModal();
+        this.refreshLiveMatchReportIfOpen();
 
         // Render Countdown Banners
         if (MatchSim.status === 'countdown') {
@@ -2244,6 +2280,9 @@ export const gameController = {
 
     const score = result?.score || result || { red: 0, blue: 0 };
     const matchId = result?.matchId || `${this.activeRoom?.code || 'online'}-${result?.endedAt || Date.now()}`;
+    const recordingId = this.matchRecording && this.currentUser?.uid
+      ? getMatchRecordingId(this.currentUser.uid, matchId)
+      : null;
     const myId = socketService.getSocket().id;
     const outcome = resolvePlayerMatchOutcome(result, this.currentUser?.uid, myId, this.players);
     const { stats: playerStats, localTeam, winnerTeam, isDraw, isSpectator: isSpec, isWin, isLoss } = outcome;
@@ -2286,7 +2325,8 @@ export const gameController = {
         scoreBlue: score.blue,
         competitive: isCompetitive,
         category: isCompetitive ? 'competitive' : 'casual',
-        forfeit: !!result?.forfeit
+        forfeit: !!result?.forfeit,
+        recordingId
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2312,7 +2352,8 @@ export const gameController = {
       // idempotent match IDs allow the complete result to be retried later.
       Promise.all([
         firebaseService.addMatchToHistory(matchDoc),
-        saveProgress()
+        saveProgress(),
+        this.finalizeMatchRecording(matchId, result, recordingId)
       ]).then(() => {
         localStorage.setItem(resultKey, '1');
       }).catch(err => {
@@ -2332,6 +2373,24 @@ export const gameController = {
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
     renderMatchReport(document.getElementById('post-match-report'), result);
     router.show('post-game-screen');
+  },
+
+  finalizeMatchRecording(matchId, result, recordingId = null) {
+    if (!this.matchRecording || !this.currentUser?.uid) return Promise.resolve(null);
+    if (this.recordingFinalizePromise) return this.recordingFinalizePromise;
+    const session = this.matchRecording;
+    const safeRecordingId = recordingId || getMatchRecordingId(this.currentUser.uid, matchId);
+    this.recordingFinalizePromise = session.finalize({
+      matchId,
+      ownerUid: this.currentUser.uid,
+      result
+    }).then(documentData => firebaseService.saveMatchRecording(safeRecordingId, documentData))
+      .then(() => safeRecordingId)
+      .catch(error => {
+        console.warn('[Kicker Recording] Gravação não foi persistida:', error);
+        return null;
+      });
+    return this.recordingFinalizePromise;
   },
 
   buildHostDepartureResult() {
@@ -2474,6 +2533,12 @@ export const gameController = {
       const sequence = Number(state?.transportSequence || state?.sequence || 0);
       if (sequence > 0 && sequence <= this.lastGameStateSequence) return;
       if (sequence > 0) this.lastGameStateSequence = sequence;
+      if (Number.isFinite(Number(state.serverSentAt))) {
+        const offsetSample = Number(state.serverSentAt) - Date.now();
+        this.serverClockOffsetMs = this.serverClockOffsetMs
+          ? (this.serverClockOffsetMs * 0.8) + (offsetSample * 0.2)
+          : offsetSample;
+      }
       const pingEl = document.getElementById('ping-indicator');
       const pingStale = !!this.lastPingAt && Date.now() - this.lastPingAt > 4500;
       if (pingEl) {
@@ -2486,12 +2551,14 @@ export const gameController = {
       }
       this.status = state.status;
       this.countdown = state.countdown;
+      this.phaseEndsAt = Number(state.phaseEndsAt || 0);
       this.score = state.score;
       this.matchTime = state.matchTime;
       this.matchHostPaused = !!state.isHostPaused;
       if (state.goalInfo) {
         this.lastGoal = state.goalInfo;
       }
+      this.matchRecording?.capture(state);
       if (!this.inReplay && state.status !== 'replay') {
         this.recordOnlineReplayFrame(state);
       }
@@ -2501,8 +2568,12 @@ export const gameController = {
         this.replayFallbackTimer = setTimeout(() => {
           this.replayFallbackTimer = null;
           if (this.status !== 'replay' || this.inReplay || !this.onlineReplayBuffer?.length) return;
-          this.beginOnlineReplay(this.onlineReplayBuffer, this.lastGoal, (1000 / 30) * C.REPLAY_SLOWMO_FACTOR);
-        }, 220);
+          const frameMs = (1000 / 30) * C.REPLAY_SLOWMO_FACTOR;
+          const replayStartAt = this.phaseEndsAt
+            ? this.phaseEndsAt - (this.onlineReplayBuffer.length * frameMs)
+            : 0;
+          this.beginOnlineReplay(this.onlineReplayBuffer, this.lastGoal, frameMs, replayStartAt);
+        }, C.REPLAY_SYNC_LEAD_MS + 150);
       }
 
       // Play sound effects triggered on server
@@ -2587,7 +2658,7 @@ export const gameController = {
         this.endReplayPlayback();
         return;
       }
-      this.beginOnlineReplay(frames, goalInfo, replayFrameMs);
+      this.beginOnlineReplay(frames, goalInfo, replayFrameMs, replayStartAt, replayDelayMs);
     });
 
     socketService.onMatchEnded((result) => {
@@ -2739,7 +2810,11 @@ export const gameController = {
 
       // 2) Render Frame
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      const cameraShaking = this.beginPowerKickCamera(this.ctx, this.ball);
+      const replayCameraFrame = this.inReplay ? this.getCurrentReplayFrame() : null;
+      const cameraShaking = this.beginPowerKickCamera(
+        this.ctx,
+        this.inReplay ? replayCameraFrame?.ball : this.status === 'playing' ? this.ball : null
+      );
       this.drawFieldGrid(this.ctx);
 
       if (this.inReplay) {
@@ -2771,6 +2846,11 @@ export const gameController = {
 
       if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       if (scoreEl) scoreEl.textContent = `${this.score.red} : ${this.score.blue}`;
+
+      if (this.status === 'countdown' && this.phaseEndsAt > 0) {
+        const serverNow = Date.now() + Number(this.serverClockOffsetMs || 0);
+        this.countdown = Math.max(0, Math.ceil((this.phaseEndsAt - serverNow) / 1000));
+      }
 
       // Refresh sidebars (stamina / power / speed / tackles / dribbles)
       const myId = localId;
@@ -2852,6 +2932,7 @@ export const gameController = {
         if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
         if (rightAssistsEl) rightAssistsEl.textContent = this.p1Assists || 0;
         this.refreshMobileStatsModal();
+        this.refreshLiveMatchReportIfOpen();
       }
 
       if (opp) {
@@ -3324,9 +3405,14 @@ export const gameController = {
         <div class="mobile-stat-row"><span>Chutes</span><strong data-mobile-stat="shots">0</strong></div>
         <div class="mobile-stat-row"><span>Desarmes</span><strong data-mobile-stat="tackles">0</strong></div>
         <div class="mobile-stat-row"><span>Assistências</span><strong data-mobile-stat="assists">0</strong></div>
+        <button type="button" class="btn btn-primary btn-block" id="mobile-live-report-open">Relatório completo</button>
       `;
       document.getElementById('match-screen')?.appendChild(modal);
       document.getElementById('mobile-stats-close')?.addEventListener('click', () => modal.classList.add('hidden'));
+      document.getElementById('mobile-live-report-open')?.addEventListener('click', () => {
+        modal.classList.add('hidden');
+        this.showLiveMatchReport(true);
+      });
     }
     modal.classList.toggle('hidden');
     this.refreshMobileStatsModal();
@@ -3344,6 +3430,45 @@ export const gameController = {
     set('shots', document.getElementById('right-stat-shots')?.textContent || '0');
     set('tackles', document.getElementById('right-stat-tackles')?.textContent || '0');
     set('assists', document.getElementById('right-stat-assists')?.textContent || '0');
+  },
+
+  refreshLiveMatchReportIfOpen() {
+    const modal = document.getElementById('live-match-report-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    const now = performance.now();
+    if (now - Number(this.lastLiveReportRefreshAt || 0) < 300) return;
+    this.lastLiveReportRefreshAt = now;
+    this.showLiveMatchReport(true);
+  },
+
+  showLiveMatchReport(show = true) {
+    const modal = document.getElementById('live-match-report-modal');
+    const content = document.getElementById('live-match-report-content');
+    if (!modal || !content) return;
+    if (!show) {
+      modal.classList.add('hidden');
+      return;
+    }
+    const report = this.mode === 'multiplayer'
+      ? buildLiveMatchReport(this.players, this.score)
+      : buildMatchReport({
+        score: this.localMatchSim?.score || this.score,
+        winnerTeam: 'draw',
+        playerStats: this.players.map(player => ({
+          playerId: player.id,
+          username: player.name || 'Jogador',
+          team: player.team,
+          goals: player.matchStats?.goals || 0,
+          assists: player.matchStats?.assists || 0,
+          ownGoals: player.matchStats?.ownGoals || 0,
+          shots: player.id === 'p1' ? this.p1Shots || 0 : player.matchStats?.shots || 0,
+          dribbles: player.id === 'p1' ? this.p1Dribbles || 0 : player.matchStats?.dribbles || 0,
+          tackles: player.id === 'p1' ? this.p1Tackles || 0 : player.matchStats?.tackles || 0,
+          possessionFrames: player.id === 'p1' ? this.p1PossessionFrames || 0 : this.cpuPossessionFrames || 0
+        }))
+      });
+    renderMatchReport(content, report);
+    modal.classList.remove('hidden');
   },
 
   // ==========================================================================
@@ -3417,31 +3542,31 @@ export const gameController = {
 
   playbackReplay() {
     if (this.replayFrames.length === 0) return;
-    if (this.matchHostPaused || this.isPaused) return;
-
-    if (this.mode === 'multiplayer' && this.replayStartedAtWall) {
-      const elapsedMs = Math.max(0, Date.now() - this.replayStartedAtWall);
-      this.replayFrameIdx = Math.floor(elapsedMs / (this.replayFrameMs || 1));
-      if (this.replayFrameIdx >= this.replayFrames.length) {
-        this.endReplayPlayback();
-        return;
-      }
-    } else {
-      this.replayTimer++;
-      // Tick playback speed in slow motion.
-      if (this.replayTimer % C.REPLAY_SLOWMO_FACTOR === 0) {
-        this.replayFrameIdx++;
-        if (this.replayFrameIdx >= this.replayFrames.length) {
-          this.endReplayPlayback();
-          if (this.mode === 'solo' && this.localMatchSim) {
-            this.localMatchSim.countdownTimer = 0;
-          }
-          return;
-        }
-      }
+    const now = Date.now();
+    if (this.matchHostPaused || this.isPaused) {
+      this.replayPauseStartedAt ||= now;
+      return;
     }
-
-    const frame = this.replayFrames[Math.min(this.replayFrameIdx, this.replayFrames.length - 1)];
+    if (this.replayPauseStartedAt) {
+      this.replayStartedAtWall += now - this.replayPauseStartedAt;
+      this.replayPauseStartedAt = null;
+    }
+    const position = getReplayPosition(
+      this.replayStartedAtWall || now,
+      this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
+      this.replayFrames.length,
+      now
+    );
+    if (position.ended) {
+      this.endReplayPlayback();
+      return;
+    }
+    this.replayFrameIdx = position.index;
+    const frame = interpolateReplayFrame(
+      this.replayFrames[position.index],
+      this.replayFrames[Math.min(this.replayFrames.length - 1, position.index + 1)],
+      position.ratio
+    );
     if (!frame) return;
 
     // Trigger local audio triggers synced with frames
@@ -3478,6 +3603,21 @@ export const gameController = {
     }
   },
 
+  getCurrentReplayFrame(now = Date.now()) {
+    if (!this.inReplay || !this.replayFrames.length) return null;
+    const position = getReplayPosition(
+      this.replayStartedAtWall || now,
+      this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
+      this.replayFrames.length,
+      now
+    );
+    return interpolateReplayFrame(
+      this.replayFrames[position.index],
+      this.replayFrames[Math.min(this.replayFrames.length - 1, position.index + 1)],
+      position.ratio
+    );
+  },
+
   endReplayPlayback() {
     clearTimeout(this.replayFallbackTimer);
     this.replayFallbackTimer = null;
@@ -3488,6 +3628,7 @@ export const gameController = {
     if (captionEl) captionEl.style.display = 'none';
     this.replayStartedAtWall = null;
     this.replayFrameMs = null;
+    this.replayPauseStartedAt = null;
     this.lastReplaySfxIdx = -1;
 
     // Resume persistent stadium audio
@@ -3500,7 +3641,7 @@ export const gameController = {
     }
   },
 
-  beginOnlineReplay(frames, goalInfo, replayFrameMs) {
+  beginOnlineReplay(frames, goalInfo, replayFrameMs, replayStartAt = 0) {
     if (!Array.isArray(frames) || frames.length === 0) return;
     clearTimeout(this.replayFallbackTimer);
     this.replayFallbackTimer = null;
@@ -3542,8 +3683,10 @@ export const gameController = {
     this.replayTimer = 0;
     this.lastGoal = goalInfo || this.lastGoal;
     this.replayFrameMs = Number(replayFrameMs) || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR);
-    // Device clocks are not synchronized. Start as soon as frames are local.
-    this.replayStartedAtWall = Date.now();
+    // The host schedules one shared future instant. The offset estimated from
+    // authoritative snapshots maps that instant to each device clock.
+    this.replayStartedAtWall = getSynchronizedReplayStart(replayStartAt, this.serverClockOffsetMs);
+    this.replayPauseStartedAt = null;
     this.lastReplaySfxIdx = -1;
     document.getElementById('replay-overlay')?.classList.remove('hidden');
 
@@ -3560,7 +3703,7 @@ export const gameController = {
   },
 
   recordOnlineReplayFrame(state) {
-    if (!state?.ball || !Array.isArray(state.players)) return;
+    if (state?.status !== 'playing' || !state?.ball || !Array.isArray(state.players)) return;
     if (!Array.isArray(this.onlineReplayBuffer)) {
       this.onlineReplayBuffer = [];
     }

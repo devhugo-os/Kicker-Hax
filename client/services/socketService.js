@@ -31,6 +31,7 @@ const PEER_OPTIONS = {
 };
 
 const customSkinCache = new Map();
+const CONTROL_CHUNK_SIZE = 9_000;
 
 function resolveCustomSkinsInLobbyInfo(lobbyInfo, triggerRedraw) {
   const target = lobbyInfo?.players ? lobbyInfo : lobbyInfo?.lobbyInfo;
@@ -87,6 +88,7 @@ class P2PSocketService {
     this.lastInputSignature = '';
     this.lastInputActionSignature = '';
     this.activeMatchId = null;
+    this.controlChunks = new Map();
     const isNativeFrame = new URLSearchParams(window.location.search).get('native') === '1' && window.parent !== window;
     const sessionStore = isNativeFrame ? localStorage : sessionStorage;
     this.sessionId = sessionStore.getItem('kicker_hax_session_id') || `session_${Date.now()}_${crypto.randomUUID()}`;
@@ -331,10 +333,11 @@ class P2PSocketService {
         const bufferedAmount = Number(target.dataChannel?.bufferedAmount || 0);
         if (shouldDropRealtimeState(event, bufferedAmount)) return;
         try {
-          const packet = event === 'gameState'
-            ? encodeRealtimePacket(event, transportPayload)
-            : { event, data: transportPayload };
-          target.send(packet);
+          if (event === 'gameState') {
+            target.send(encodeRealtimePacket(event, transportPayload));
+          } else {
+            this.sendControlEvent(target, event, transportPayload);
+          }
         } catch (error) {
           if (event !== 'gameState') console.warn(`[P2PSocket] Falha ao enviar ${event}:`, error);
         }
@@ -511,8 +514,9 @@ class P2PSocketService {
       console.log('[P2PSocket] Recebida tentativa de conexão de:', conn.peer);
       
       conn.on('data', (payload) => {
-        if (payload && payload.event) {
-          this.handleHostReceivedData(conn.peer, payload.event, payload.data, conn);
+        const packet = this.consumeControlChunk(payload);
+        if (packet?.event) {
+          this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
         }
       });
       
@@ -663,7 +667,9 @@ class P2PSocketService {
           realtimeConn.on('error', clearRealtime);
         };
         const handleHostPayload = (payload) => {
-          const { event, data } = payload || {};
+          const packet = this.consumeControlChunk(payload);
+          if (!packet) return;
+          const { event, data } = packet;
           if (data?.joinAttemptId && data.joinAttemptId !== joinAttemptId) return;
           if (event === 'lobbyUpdate' && !joinAccepted
             && data?.players?.some(player => player.id === this.clientId)) {
@@ -902,6 +908,55 @@ class P2PSocketService {
       timeout,
       joinAttemptId: String(data?.joinAttemptId || '')
     });
+  }
+
+  sendControlEvent(connection, event, data) {
+    const serialized = JSON.stringify(data);
+    if (serialized.length <= CONTROL_CHUNK_SIZE) {
+      connection.send({ event, data });
+      return;
+    }
+    const chunkId = `${event}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const total = Math.ceil(serialized.length / CONTROL_CHUNK_SIZE);
+    for (let index = 0; index < total; index += 1) {
+      connection.send({
+        event: '__controlChunk',
+        data: {
+          chunkId,
+          targetEvent: event,
+          index,
+          total,
+          payload: serialized.slice(index * CONTROL_CHUNK_SIZE, (index + 1) * CONTROL_CHUNK_SIZE)
+        }
+      });
+    }
+  }
+
+  consumeControlChunk(payload) {
+    if (payload?.event !== '__controlChunk') return payload;
+    const chunk = payload.data || {};
+    if (!chunk.chunkId || !Number.isInteger(chunk.index) || !Number.isInteger(chunk.total)) return null;
+    const current = this.controlChunks.get(chunk.chunkId) || {
+      event: chunk.targetEvent,
+      parts: new Array(chunk.total),
+      received: 0,
+      expiresAt: Date.now() + 30_000
+    };
+    if (current.parts[chunk.index] === undefined) {
+      current.parts[chunk.index] = chunk.payload || '';
+      current.received += 1;
+    }
+    this.controlChunks.set(chunk.chunkId, current);
+    for (const [id, pending] of this.controlChunks) {
+      if (pending.expiresAt < Date.now()) this.controlChunks.delete(id);
+    }
+    if (current.received < current.parts.length) return null;
+    this.controlChunks.delete(chunk.chunkId);
+    try {
+      return { event: current.event, data: JSON.parse(current.parts.join('')) };
+    } catch {
+      return null;
+    }
   }
 
   publishJoinReceipt(uid, joinAttemptId, event, matchId = '') {

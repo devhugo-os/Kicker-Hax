@@ -85,7 +85,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '39.6.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '40.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -720,6 +720,19 @@ export const firebaseService = {
     }));
   },
 
+  async saveMatchRecording(recordingId, recordingData) {
+    if (!auth.currentUser?.uid || !recordingId || !recordingData?.data) {
+      throw new Error('Gravação inválida.');
+    }
+    await setDoc(doc(db, 'matchRecordings', recordingId), recordingData);
+  },
+
+  async getMatchRecording(recordingId) {
+    if (!recordingId) return null;
+    const snapshot = await getDoc(doc(db, 'matchRecordings', recordingId));
+    return snapshot.exists() ? { id: snapshot.id, ...snapshot.data() } : null;
+  },
+
   async reconcileMatchHistory(uid) {
     if (!uid) return;
     const history = await this.getRecentHistory(uid, 20);
@@ -759,7 +772,12 @@ export const firebaseService = {
       .filter(match => match.seasonId === CURRENT_SEASON_ID)
       .filter(match => (match.competitive || match.category === 'competitive') ? category === 'competitive' : category === 'casual')
       .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-    await Promise.all(matches.slice(10).map(match => deleteDoc(match.ref)));
+    await Promise.all(matches.slice(10).map(async match => {
+      await deleteDoc(match.ref);
+      if (match.recordingId) {
+        await deleteDoc(doc(db, 'matchRecordings', match.recordingId)).catch(() => {});
+      }
+    }));
   },
 
   async getRecentHistory(uid, limitCount = 100) {

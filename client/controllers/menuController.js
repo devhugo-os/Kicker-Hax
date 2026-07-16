@@ -11,6 +11,7 @@ import { PROFILE_BIO_MAX_LENGTH, USERNAME_MAX_LENGTH } from '../../shared/consta
 import { appendStaffTag } from '../utils/staffTags.js';
 import { calculateOverallRating, getAverageMatchRating } from '../utils/rankingScore.js';
 import { renderMatchReport } from '../components/matchReportView.js';
+import { MatchRecordingPlayer } from '../replay/matchRecordingPlayer.js';
 
 function isVersionNewer(candidate, installed) {
   const parse = value => String(value).split('.').map(part => Number.parseInt(part, 10) || 0);
@@ -28,6 +29,8 @@ export const menuController = {
   profileData: null,
   profileDraft: null,
   profileDirty: false,
+  recordingPlayer: null,
+  selectedMatchDetails: null,
 
   async init(user) {
     this.currentUser = user;
@@ -145,9 +148,27 @@ export const menuController = {
     document.getElementById('public-profile-history-open')?.addEventListener('click', () => this.openPublicHistory());
     document.getElementById('public-profile-inventory-open')?.addEventListener('click', () => this.openPublicInventory());
     const matchDetailsModal = document.getElementById('match-details-modal');
+    this.recordingPlayer ||= new MatchRecordingPlayer(document.getElementById('match-recording-modal'));
     document.getElementById('match-details-close')?.addEventListener('click', () => matchDetailsModal?.classList.add('hidden'));
     matchDetailsModal?.addEventListener('click', event => {
       if (event.target === matchDetailsModal) matchDetailsModal.classList.add('hidden');
+    });
+    document.getElementById('match-recording-open')?.addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const match = this.selectedMatchDetails;
+      if (!match?.recordingId || !this.recordingPlayer) return;
+      button.disabled = true;
+      button.textContent = 'Carregando...';
+      try {
+        const recording = await firebaseService.getMatchRecording(match.recordingId);
+        if (!recording) throw new Error('Gravação não encontrada.');
+        await this.recordingPlayer.open(recording, match);
+      } catch (error) {
+        showToast(error?.message || 'Não foi possível abrir a gravação.', 'error');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Assistir gravação';
+      }
     });
 
     // Profile Back button
@@ -722,6 +743,8 @@ export const menuController = {
     document.getElementById('match-details-meta').textContent = `${date}${match.forfeit ? ' · Encerrada por W.O.' : ''}`;
     document.getElementById('match-details-score').textContent = `${match.scoreRed ?? match.score?.red ?? 0} : ${match.scoreBlue ?? match.score?.blue ?? 0}`;
     renderMatchReport(report, match);
+    this.selectedMatchDetails = match;
+    document.getElementById('match-recording-open')?.classList.toggle('hidden', !match.recordingId);
     modal.classList.remove('hidden');
   },
 };

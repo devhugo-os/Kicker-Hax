@@ -835,6 +835,33 @@ html.browser-immersive #match-canvas {
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55) !important;
 }
 
+.live-match-report-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(2, 6, 23, 0.72);
+}
+
+.live-match-report-card {
+  position: relative;
+  width: min(980px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 10px;
+  background: rgba(7, 11, 25, 0.98);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.55);
+}
+
+.live-match-report-card h2,
+.live-match-report-card p {
+  margin: 0 42px 8px 0;
+}
+
 .mobile-chat-modal {
   height: min(70dvh, 460px) !important;
   min-height: 220px;
@@ -892,6 +919,37 @@ html.browser-immersive #match-canvas {
   background: rgba(239, 68, 68, 0.32);
   color: #fff;
   font-weight: 900;
+}
+
+@media (max-width: 720px), (pointer: coarse) {
+  .live-match-report-modal {
+    padding: 5px;
+  }
+
+  .live-match-report-card {
+    width: calc(100vw - 10px);
+    max-height: calc(100dvh - 10px);
+    padding: 9px;
+  }
+
+  .live-match-report-card h2 {
+    font-size: 16px;
+  }
+
+  .live-match-report-card .match-report-table {
+    min-width: 0;
+  }
+
+  .live-match-report-card .match-report-row {
+    grid-template-columns: minmax(86px, 1.35fr) repeat(7, minmax(44px, .65fr));
+    gap: 2px;
+    padding-inline: 2px;
+    font-size: 8px;
+  }
+
+  .live-match-report-card .match-report-header {
+    font-size: 6px;
+  }
 }
 
 .paused-badge {

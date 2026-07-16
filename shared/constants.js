@@ -56,10 +56,14 @@ export const POWER_KICK_CD = 60;
 
 export const GOAL_FREEZE_FRAMES = 180;
 export const END_FREEZE_FRAMES = 180;
-export const REPLAY_CAPTURE_FRAMES = 240;
-// Two rendered frames per captured frame keeps slow motion readable without
-// turning a four-second play into an excessively long replay on mobile.
+// Six complete seconds before the goal are retained in every game mode.
+export const REPLAY_CAPTURE_FRAMES = 360;
+// Playback runs at half speed. Clients interpolate captured snapshots at the
+// display refresh rate instead of visibly repeating each frame.
 export const REPLAY_SLOWMO_FACTOR = 2;
+// Gives chunked control packets enough time to reach slower mobile peers while
+// every client still starts from the same authoritative wall-clock instant.
+export const REPLAY_SYNC_LEAD_MS = 700;
 export const RESTART_COUNTDOWN_FRAMES = 180;
 
 export const Team = {

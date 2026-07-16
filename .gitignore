@@ -44,3 +44,4 @@ skills/
 
 # Local automated verification (kept on developer machines only)
 tests/
+.codex-artifacts/
