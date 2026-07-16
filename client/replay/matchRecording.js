@@ -1,7 +1,7 @@
 const SAMPLE_INTERVAL_MS = 100;
 const REPORT_INTERVAL_MS = 1000;
 export const MAX_RECORDING_BASE64_LENGTH = 850_000;
-const RECORDABLE_STATUSES = new Set(['playing', 'countdown']);
+const RECORDABLE_STATUSES = new Set(['loading', 'playing', 'countdown']);
 
 const q = value => Math.round(Number(value || 0) * 10);
 const uq = value => Number(value || 0) / 10;
@@ -98,30 +98,42 @@ export class MatchRecordingSession {
   }
 
   ensurePlayer(player = {}) {
-    const id = String(player.id || player.playerId || player.uid || '');
-    if (!id) return -1;
-    if (!this.playerIndexes.has(id)) {
-      this.playerIndexes.set(id, this.players.length);
+    const id = String(player.id || player.playerId || '');
+    const uid = String(player.uid || '');
+    const stableKey = uid ? `uid:${uid}` : (id ? `id:${id}` : '');
+    if (!stableKey) return -1;
+    let index = this.playerIndexes.get(stableKey);
+    if (index === undefined && uid) index = this.players.findIndex(item => item.uid === uid);
+    if (index === undefined || index < 0) {
+      index = this.players.length;
       this.players.push({
         id,
-        uid: String(player.uid || ''),
+        uid,
         name: String(player.name || player.username || 'Jogador').slice(0, 20),
         team: player.team,
         badge: String(player.badge || ''),
-        skin: String(player.skin || ''),
+        // Embedded skins are resolved by id when playback opens. Keeping them
+        // out of every demo prevents one custom image from exceeding Firestore.
+        skin: /^(data:image\/|custom$)/i.test(String(player.skin || '')) ? '' : String(player.skin || ''),
+        skinId: String(player.skinId || player.equippedSkinId || ''),
         staffRole: String(player.staffRole || '')
       });
     } else {
-      const existing = this.players[this.playerIndexes.get(id)];
+      const existing = this.players[index];
+      if (id) existing.id = id;
       if (player.name || player.username) existing.name = String(player.name || player.username).slice(0, 20);
-      if (player.uid) existing.uid = String(player.uid);
+      if (uid) existing.uid = uid;
       if (player.team !== undefined) existing.team = player.team;
       if (player.badge) existing.badge = String(player.badge);
-      if (player.skin && player.skin !== 'custom') existing.skin = String(player.skin);
+      if (player.skin && player.skin !== 'custom' && !String(player.skin).startsWith('data:image/')) existing.skin = String(player.skin);
+      if (player.skinId || player.equippedSkinId) existing.skinId = String(player.skinId || player.equippedSkinId);
       if (player.staffRole) existing.staffRole = String(player.staffRole);
     }
-    if (player.matchStats) this.latestStats.set(id, { ...this.latestStats.get(id), ...player.matchStats });
-    return this.playerIndexes.get(id);
+    this.playerIndexes.set(stableKey, index);
+    if (id) this.playerIndexes.set(`id:${id}`, index);
+    if (uid) this.playerIndexes.set(`uid:${uid}`, index);
+    if (player.matchStats) this.latestStats.set(index, { ...this.latestStats.get(index), ...player.matchStats });
+    return index;
   }
 
   capture(state, now = performance.now()) {
@@ -139,9 +151,10 @@ export class MatchRecordingSession {
         state.ball.owner === player.id ? 1 : 0
       ];
     }).filter(player => player[0] >= 0);
+    const paused = !!state.isHostPaused || !!state.isDisconnectPaused || state.status === 'loading';
     const frame = [
       this.virtualTimeMs,
-      state.status === 'countdown' ? 1 : 0,
+      paused ? 2 : (state.status === 'countdown' ? 1 : 0),
       Number(state.score?.red || 0),
       Number(state.score?.blue || 0),
       q(state.ball.x),
@@ -152,7 +165,10 @@ export class MatchRecordingSession {
       Number(state.matchTime || 0),
       Number(state.countdown || 0),
       state.ball.lastStrikeType === 'power' ? 1 : 0,
-      Number(state.ball.strikeTimer || 0)
+      Number(state.ball.strikeTimer || 0),
+      paused ? String(state.disconnectedPlayerName || (state.isHostPaused ? 'Partida pausada pelo host' : 'Aguardando jogadores')) : '',
+      Number(state.disconnectPauseRemaining || 0),
+      state.isDisconnectVoting ? 1 : 0
     ];
     this.frames.push(frame);
     if (this.virtualTimeMs - this.lastReportAt >= REPORT_INTERVAL_MS) {
@@ -199,9 +215,9 @@ export class MatchRecordingSession {
   }
 
   captureReport(score = {}) {
-    const stats = this.players.map(player => {
-      const values = compactStats(this.latestStats.get(player.id) || {});
-      return [this.playerIndexes.get(player.id), ...values];
+    const stats = this.players.map((player, index) => {
+      const values = compactStats(this.latestStats.get(index) || {});
+      return [index, ...values];
     });
     this.reports.push([this.virtualTimeMs, Number(score.red || 0), Number(score.blue || 0), stats]);
   }
@@ -210,7 +226,7 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 2,
+      v: 3,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs - SAMPLE_INTERVAL_MS),
@@ -238,6 +254,8 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
+      recordingVersion: 3,
+      competitive: true,
       createdAt: new Date().toISOString()
     };
   }
@@ -250,7 +268,7 @@ export async function decodeMatchRecording(documentData) {
     ...compact,
     frames: (compact.frames || []).map(frame => ({
       timeMs: frame[0],
-      status: frame[1] === 1 ? 'countdown' : 'playing',
+      status: frame[1] === 2 ? 'paused' : (frame[1] === 1 ? 'countdown' : 'playing'),
       score: { red: frame[2], blue: frame[3] },
       ball: {
         x: uq(frame[4]), y: uq(frame[5]), vx: uq(frame[6]), vy: uq(frame[7]),
@@ -259,6 +277,9 @@ export async function decodeMatchRecording(documentData) {
       },
       matchTime: Number(frame[9] || 0),
       countdown: Number(frame[10] || 0),
+      pauseMessage: String(frame[13] || ''),
+      disconnectPauseRemaining: Number(frame[14] || 0),
+      isDisconnectVoting: frame[15] === 1,
       players: (frame[8] || []).map(player => ({
         index: player[0],
         x: uq(player[1]),

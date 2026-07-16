@@ -159,13 +159,14 @@ export const menuController = {
       if (!match?.recordingId || !this.recordingPlayer) return;
       button.disabled = true;
       button.textContent = 'Carregando...';
+      matchDetailsModal?.classList.add('hidden');
+      this.recordingPlayer.prepareOpen();
       try {
         const recording = await firebaseService.getMatchRecording(match.recordingId);
         if (!recording) throw new Error('Gravação não encontrada.');
-        // Move directly from match details to the dedicated player.
-        matchDetailsModal?.classList.add('hidden');
         await this.recordingPlayer.open(recording, match);
       } catch (error) {
+        this.recordingPlayer.close();
         showToast(error?.message || 'Não foi possível abrir a gravação.', 'error');
       } finally {
         button.disabled = false;
@@ -746,7 +747,10 @@ export const menuController = {
     document.getElementById('match-details-score').textContent = `${match.scoreRed ?? match.score?.red ?? 0} : ${match.scoreBlue ?? match.score?.blue ?? 0}`;
     renderMatchReport(report, match);
     this.selectedMatchDetails = match;
-    document.getElementById('match-recording-open')?.classList.toggle('hidden', !match.recordingId);
+    const hasCompatibleRecording = !!(match.competitive || match.category === 'competitive')
+      && Number(match.recordingVersion || 0) >= 3
+      && !!match.recordingId;
+    document.getElementById('match-recording-open')?.classList.toggle('hidden', !hasCompatibleRecording);
     modal.classList.remove('hidden');
   },
 };

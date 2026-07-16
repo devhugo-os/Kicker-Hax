@@ -184,6 +184,7 @@ export class ServerMatch {
       name: lobbyPlayer.username,
       badge: lobbyPlayer.badge,
       skin: lobbyPlayer.skin || '',
+      skinId: lobbyPlayer.skinId || '',
       staffRole: lobbyPlayer.staffRole || '',
       team: lobbyPlayer.team === 'red' ? C.Team.RED : C.Team.BLUE,
       cpu: !!lobbyPlayer.cpu,
@@ -900,6 +901,7 @@ export class ServerMatch {
       players: this.players.map(p => {
         const state = {
           id: p.id,
+          uid: p.uid || '',
           team: p.team,
           x: p.x,
           y: p.y,
@@ -922,6 +924,7 @@ export class ServerMatch {
           state.matchStats = this.playerStats.get(p.id) ? { ...this.playerStats.get(p.id) } : null;
           state.badge = p.badge;
           state.name = p.name;
+          state.skinId = p.skinId || '';
           state.staffRole = p.staffRole || '';
         }
         return state;
@@ -940,6 +943,56 @@ export class ServerMatch {
     // Effects remain queued across catch-up frames and are consumed only
     // after an actual network snapshot, preventing lost goal/tackle sounds.
     this.soundEffects = [];
+  }
+
+  /** Sends a complete authoritative bootstrap after a client remounts. */
+  emitCurrentState() {
+    if (this.disconnectPauseUntil) {
+      this.emitDisconnectPauseState(Math.max(0, this.disconnectPauseUntil - Date.now()));
+      return;
+    }
+    const sequence = ++this.snapshotSequence;
+    this.io.to(this.roomCode).emit('gameState', {
+      sequence,
+      serverSentAt: Date.now(),
+      ball: {
+        x: this.ball.x, y: this.ball.y, vx: this.ball.vx, vy: this.ball.vy,
+        owner: this.ball.owner, lastTouch: this.ball.lastTouch,
+        lastStrikeType: this.ball.lastStrikeType, strikeTimer: this.ball.strikeTimer
+      },
+      players: this.players.map(player => ({
+        id: player.id,
+        uid: player.uid || '',
+        team: player.team,
+        x: player.x,
+        y: player.y,
+        vx: player.vx,
+        vy: player.vy,
+        dir: player.dir,
+        stamina: player.stamina,
+        staminaLock: player.staminaLock,
+        stun: player.stun,
+        shootHalo: player.shootHalo,
+        kickCharge: player.kickCharge || 0,
+        invuln: player.invuln,
+        tackle_cd: player.tackle_cd,
+        dribble_cd: player.dribble_cd,
+        power_cd: player.power_cd,
+        matchStats: this.playerStats.get(player.id) ? { ...this.playerStats.get(player.id) } : null,
+        badge: player.badge,
+        name: player.name,
+        skinId: player.skinId || '',
+        staffRole: player.staffRole || ''
+      })),
+      score: this.score,
+      matchTime: this.matchTime,
+      status: this.status,
+      countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
+      phaseEndsAt: this.phaseEndsAt,
+      goalInfo: this.lastGoal,
+      soundEffects: [],
+      isHostPaused: this.isHostPaused
+    });
   }
 
   trackAssistCandidate() {
@@ -1064,6 +1117,8 @@ export class ServerMatch {
     player.uid = lobbyPlayer.uid || player.uid;
     player.name = lobbyPlayer.username || player.name;
     player.badge = lobbyPlayer.badge || player.badge;
+    player.skin = lobbyPlayer.skin || player.skin;
+    player.skinId = lobbyPlayer.skinId || player.skinId;
     player.lastSeenAt = Date.now();
     if (this.ball.owner === previousId) this.ball.owner = nextId;
     if (this.ball.lastTouch === previousId) this.ball.lastTouch = nextId;
@@ -1119,11 +1174,11 @@ export class ServerMatch {
     this.io.to(this.roomCode).emit('gameState', {
       ball: { ...this.ball },
       players: this.players.map(p => ({
-        id: p.id, team: p.team, x: p.x, y: p.y, vx: 0, vy: 0, dir: p.dir,
+        id: p.id, uid: p.uid || '', team: p.team, x: p.x, y: p.y, vx: 0, vy: 0, dir: p.dir,
         stamina: p.stamina, staminaLock: p.staminaLock, stun: p.stun,
         shootHalo: p.shootHalo, kickCharge: p.kickCharge || 0, invuln: p.invuln,
         tackle_cd: p.tackle_cd, dribble_cd: p.dribble_cd, power_cd: p.power_cd,
-        badge: p.badge, name: p.name, staffRole: p.staffRole || ''
+        badge: p.badge, name: p.name, skinId: p.skinId || '', staffRole: p.staffRole || ''
       })),
       score: this.score,
       matchTime: this.matchTime,

@@ -366,7 +366,14 @@ class P2PSocketService {
       return;
     }
     this.roomOperation = 'create';
-    if (await this.getActiveMatchReservation(profile?.uid)) {
+    const authenticatedUid = auth.currentUser?.uid || '';
+    if (!authenticatedUid) {
+      this.roomOperation = null;
+      this.triggerLocalEvent('createRoomError', 'Sua sessao expirou. Entre novamente antes de criar uma sala.');
+      return;
+    }
+    const hostProfile = { ...profile, uid: authenticatedUid };
+    if (await this.getActiveMatchReservation(authenticatedUid)) {
       this.roomOperation = null;
       this.triggerLocalEvent('createRoomError', 'Volte para a partida reservada ou abandone-a antes de criar outra sala.');
       return;
@@ -425,10 +432,10 @@ class P2PSocketService {
         fieldSize: roomFieldSize,
         showReplay: true,
         competitive: isCompetitive,
-        hostUsername: profile?.username || 'Host'
+        hostUsername: hostProfile.username || 'Host'
       });
       
-      this.serverRoom.addPlayer(this.clientId, sanitizeMultiplayerProfile(profile), 'spectator');
+      this.serverRoom.addPlayer(this.clientId, sanitizeMultiplayerProfile(hostProfile), 'spectator');
 
       // Add connection to mock database structure
       this.connections = [];
@@ -455,17 +462,15 @@ class P2PSocketService {
         fieldSize: roomFieldSize,
         competitive: isCompetitive,
         hostPeerId: id,
-        hostUid: profile?.uid || auth.currentUser?.uid || '',
-        hostUsername: profile?.username || 'Host',
+        hostUid: authenticatedUid,
+        hostUsername: hostProfile.username || 'Host',
         hostHeartbeatAt: now,
         createdAt: now,
         updatedAt: now
       }).then(() => {
         if (this.peer !== peer || this.peerGeneration !== peerGeneration || this.roomCode !== code) return;
-        // Keep all room-owned records in one server-side disconnect update.
-        // Separate removals can delete the room first and invalidate the host
-        // permission needed to remove its chats.
-        onDisconnect(ref(rtdb)).update(buildRoomCleanupPatch(code));
+        // A temporary RTDB transport reconnect must not delete a healthy
+        // WebRTC room. Explicit host exit plus the heartbeat reaper own cleanup.
         this.startRoomHeartbeat();
         this.listenToRoomChat(code);
         this.roomOperation = null;
@@ -557,6 +562,7 @@ class P2PSocketService {
     const roomCode = code.toUpperCase();
     const rejoin = !!options.rejoin;
     const abandon = !!options.abandon;
+    const onAccepted = typeof options.onAccepted === 'function' ? options.onAccepted : null;
     const matchId = String(options.matchId || '');
     const joinAttemptId = crypto.randomUUID();
     if (this.roomOperation) {
@@ -709,7 +715,8 @@ class P2PSocketService {
             openRealtimeChannel();
             this.listenToRoomChat(roomCode);
             this.watchHostLifecycle(roomCode);
-            this.triggerLocalEvent('matchRejoined', data);
+            if (onAccepted) onAccepted(data);
+            else this.triggerLocalEvent('matchRejoined', data);
             if (!data?.lobbyInfo) {
               try {
                 conn.send({ event: 'requestLobbySync', data: { joinAttemptId } });
@@ -1186,6 +1193,7 @@ class P2PSocketService {
       // Resume only after the returning client has mounted the match view.
       const readyPlayer = this.serverRoom.players.find(player => player.id === socketId);
       if (readyPlayer?.uid) match.resumeAfterReconnect(readyPlayer.uid);
+      match.emitCurrentState();
     }
 
     else if (event === 'voteContinueWithoutDisconnected') {

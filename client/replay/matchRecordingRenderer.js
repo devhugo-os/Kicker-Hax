@@ -122,5 +122,15 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
     ctx.fillStyle = 'rgba(2,6,23,.72)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '900 34px Outfit, system-ui'; ctx.fillText(`Começa em ${Math.ceil(frame.countdown)}...`, fieldWidth / 2, fieldHeight / 2);
+  } else if (frame.status === 'paused') {
+    const remaining = Number(frame.disconnectPauseRemaining || 0);
+    const title = frame.isDisconnectVoting ? 'Votacao em andamento' : (frame.pauseMessage || 'Partida pausada');
+    ctx.fillStyle = 'rgba(2,6,23,.74)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 30px Outfit, system-ui'; ctx.fillText(title, fieldWidth / 2, fieldHeight * .47);
+    if (remaining > 0) {
+      ctx.fillStyle = '#60a5fa'; ctx.font = '800 20px Outfit, system-ui';
+      ctx.fillText(`${remaining}s restantes`, fieldWidth / 2, fieldHeight * .56);
+    }
   }
 }

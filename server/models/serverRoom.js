@@ -39,6 +39,7 @@ export class ServerRoom {
       username: String(playerProfile.username || 'Jogador').slice(0, USERNAME_MAX_LENGTH),
       badge: playerProfile.badge || '🏳️',
       skin: playerProfile.skin || '',
+      skinId: playerProfile.skinId || playerProfile.equippedSkinId || '',
       staffRole: normalizeStaffRole(playerProfile.staffRole),
       team: team, // 'red' | 'blue' | 'spectator'
       ready: false,

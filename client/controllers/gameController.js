@@ -679,6 +679,7 @@ export const gameController = {
           username: menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️',
           skin: getEquippedSkin(menuController.profileData).image,
+          skinId: menuController.profileData.equippedSkinId || 'rookie',
           staffRole: menuController.profileData.staffRole || ''
         };
 
@@ -739,6 +740,7 @@ export const gameController = {
           username: menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️',
           skin: getEquippedSkin(menuController.profileData).image,
+          skinId: menuController.profileData.equippedSkinId || 'rookie',
           staffRole: menuController.profileData.staffRole || ''
         };
 
@@ -999,7 +1001,7 @@ export const gameController = {
     const dims = settingsController.dimensions;
     this.canvas.width = dims.w;
     this.canvas.height = dims.h;
-    this.matchRecording = this.mode === 'multiplayer'
+    this.matchRecording = this.mode === 'multiplayer' && !!this.activeRoom?.competitive
       ? new MatchRecordingSession({ fieldWidth: dims.w, fieldHeight: dims.h, players: this.activeRoom?.players || [] })
       : null;
     this.recordingFinalizePromise = null;
@@ -2327,7 +2329,8 @@ export const gameController = {
         competitive: isCompetitive,
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
-        recordingId
+        recordingId,
+        recordingVersion: recordingId ? 3 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2377,7 +2380,7 @@ export const gameController = {
   },
 
   finalizeMatchRecording(matchId, result, recordingId = null) {
-    if (!this.matchRecording || !this.currentUser?.uid) return Promise.resolve(null);
+    if (!this.matchRecording || !this.currentUser?.uid || !result?.competitive) return Promise.resolve(null);
     if (this.recordingFinalizePromise) return this.recordingFinalizePromise;
     const session = this.matchRecording;
     const safeRecordingId = recordingId || getMatchRecordingId(this.currentUser.uid, matchId);
@@ -2559,7 +2562,6 @@ export const gameController = {
       if (state.goalInfo) {
         this.lastGoal = state.goalInfo;
       }
-      this.matchRecording?.capture(state);
       if (!this.inReplay && state.status !== 'replay') {
         this.recordOnlineReplayFrame(state);
       }
@@ -2624,8 +2626,11 @@ export const gameController = {
       this.ball.updateState(state.ball, snapshotReceivedAt, extrapolateMotion);
 
       state.players.forEach(sp => {
+        const roomPlayer = this.activeRoom?.players?.find(player => player.id === sp.id || (sp.uid && player.uid === sp.uid));
+        if (!sp.uid && roomPlayer?.uid) sp.uid = roomPlayer.uid;
+        if (!sp.skinId && roomPlayer?.skinId) sp.skinId = roomPlayer.skinId;
         if (!sp.skin || sp.skin === 'custom') {
-          sp.skin = this.activeRoom?.players?.find(player => player.id === sp.id)?.skin || '';
+          sp.skin = roomPlayer?.skin || '';
         }
         let p = this.players.find(x => x.id === sp.id);
         if (!p) {
@@ -2636,6 +2641,9 @@ export const gameController = {
         p.renderTrail = !this.isTouchDevice();
         if (!p.renderTrail) p.trail.length = 0;
       });
+
+      // Capture after restoring cosmetics stripped from realtime snapshots.
+      this.matchRecording?.capture(state);
 
       // Clear disconnected players
       const serverIds = state.players.map(x => x.id);
@@ -4195,6 +4203,7 @@ export const gameController = {
         username: menuController.profileData.username,
         badge: menuController.profileData.badge || '🏳️',
         skin: getEquippedSkin(menuController.profileData).image,
+        skinId: menuController.profileData.equippedSkinId || 'rookie',
         staffRole: menuController.profileData.staffRole || ''
       };
       socketService.once('joinError', (message) => showToast(message, 'error'));
@@ -4230,9 +4239,12 @@ export const gameController = {
         cleanupRejoinActions();
         restoreActions();
       };
-      socketService.on('matchRejoined', handleRejoined);
       socketService.on('joinError', handleJoinError);
-      socketService.joinRoom(saved.code, password, profile, { rejoin: true, matchId: saved.matchId });
+      socketService.joinRoom(saved.code, password, profile, {
+        rejoin: true,
+        matchId: saved.matchId,
+        onAccepted: handleRejoined
+      });
     };
     if (abandonButton) abandonButton.onclick = async () => {
       const confirmed = await confirmDialog({
@@ -4384,6 +4396,7 @@ export const gameController = {
       username: menuController.profileData.username,
       badge: menuController.profileData.badge || '🏳️',
       skin: getEquippedSkin(menuController.profileData).image,
+      skinId: menuController.profileData.equippedSkinId || 'rookie',
       staffRole: menuController.profileData.staffRole || ''
     };
     this.registerJoinResult((joinData) => {

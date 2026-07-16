@@ -4,6 +4,8 @@ import { renderMatchReport } from '../components/matchReportView.js';
 import { decodeMatchRecording, interpolateRecordingFrame } from './matchRecording.js';
 import { showToast } from '../utils/toast.js';
 import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
+import firebaseService from '../services/firebaseService.js';
+import { getEquippedSkin, getSkinById } from '../data/skins.js';
 
 const SPEEDS = [0.5, 1, 1.5, 2];
 const SOUND_FREQUENCIES = {
@@ -65,6 +67,10 @@ export class MatchRecordingPlayer {
     this.playButton?.addEventListener('click', () => this.toggle());
     this.timeline?.addEventListener('input', () => {
       this.currentMs = Number(this.timeline.value || 0);
+      // Seeking must not reuse the elapsed time from before the pointer move.
+      // Otherwise 0.5x appears to jump at normal speed on the next frame.
+      this.lastTick = performance.now();
+      this.lastAudioMarkerMs = this.currentMs;
       this.render();
     });
     this.speedSelect?.addEventListener('change', () => {
@@ -78,6 +84,7 @@ export class MatchRecordingPlayer {
 
   async open(documentData, match = {}) {
     this.recording = await decodeMatchRecording(documentData);
+    await this.hydratePlayerSkins();
     this.match = match;
     this.currentMs = 0;
     this.lastAudioMarkerMs = 0;
@@ -98,6 +105,36 @@ export class MatchRecordingPlayer {
     this.renderMarkers();
     this.root.classList.remove('hidden');
     this.render();
+  }
+
+  prepareOpen() {
+    this.close();
+    this.recording = null;
+    this.root?.classList.remove('hidden');
+    if (this.report) this.report.textContent = 'Carregando gravacao...';
+  }
+
+  async hydratePlayerSkins() {
+    const players = this.recording?.players || [];
+    await Promise.all(players.map(async player => {
+      if (player.skin) return;
+      if (player.skinId?.startsWith('community_')) {
+        const asset = await firebaseService.getSkinAsset(player.skinId).catch(() => null);
+        if (asset?.image) player.skin = asset.image;
+        return;
+      }
+      if (player.skinId && player.skinId !== 'rookie' && player.skinId !== 'none') {
+        const builtIn = getSkinById(player.skinId);
+        if (builtIn?.id === player.skinId) player.skin = builtIn.image;
+        return;
+      }
+      if (!player.uid) return;
+      const profile = await firebaseService.getUserProfile(player.uid).catch(() => null);
+      if (!profile) return;
+      player.skinId = profile.equippedSkinId || player.skinId;
+      player.skin = getEquippedSkin(profile).image || '';
+      player.badge = profile.badge || player.badge;
+    }));
   }
 
   close() {
@@ -182,6 +219,8 @@ export class MatchRecordingPlayer {
       button.title = marker.label || 'Momento importante';
       button.addEventListener('click', () => {
         this.currentMs = marker.t;
+        this.lastTick = performance.now();
+        this.lastAudioMarkerMs = this.currentMs;
         this.render();
       });
       this.markers.appendChild(button);
