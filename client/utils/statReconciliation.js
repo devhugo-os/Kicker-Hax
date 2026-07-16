@@ -1,4 +1,5 @@
 import { calculateMatchRating } from '../../shared/matchReport.js';
+import { getMatchParticipantUids } from './matchHistory.js';
 
 export function safeResultMatchId(match) {
   return String(match?.matchId || match?.id || '').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
@@ -49,11 +50,7 @@ export function groupSeasonHistoryByUid(history, seasonId) {
   const grouped = new Map();
   (history || []).forEach(match => {
     if (match?.seasonId !== seasonId) return;
-    const participants = new Set([
-      ...(Array.isArray(match.playerUids) ? match.playerUids : []),
-      ...Object.keys(match.playerTeams || {})
-    ]);
-    participants.forEach(uid => {
+    getMatchParticipantUids(match).forEach(uid => {
       if (!uid) return;
       if (!grouped.has(uid)) grouped.set(uid, []);
       grouped.get(uid).push(match);

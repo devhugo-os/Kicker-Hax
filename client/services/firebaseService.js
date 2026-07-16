@@ -39,7 +39,7 @@ import {
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
-import { getWritableHistoryUids } from '../utils/matchHistory.js';
+import { getMatchParticipantUids, getWritableHistoryUids, matchIncludesPlayer } from '../utils/matchHistory.js';
 import { findStaffProfileByRole } from '../utils/staffProfiles.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { getFeaturedCycle } from '../utils/featuredCycle.js';
@@ -85,7 +85,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '39.5.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '39.6.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -693,17 +693,23 @@ export const firebaseService = {
       .replace(/[^a-zA-Z0-9_-]/g, '_')
       .slice(0, 120);
     const category = matchData.competitive || matchData.category === 'competitive' ? 'competitive' : 'casual';
+    const participantUids = getMatchParticipantUids(matchData);
     // Every participant writes only its own immutable receipt. This respects
     // Firestore ownership rules and avoids one unauthorized peer write
     // invalidating an otherwise successful casual result.
-    const writableUids = getWritableHistoryUids(matchData.playerUids, auth.currentUser?.uid);
+    const writableUids = getWritableHistoryUids(participantUids, auth.currentUser?.uid);
     if (!writableUids.length) throw new Error('Usuário atual não pertence ao resultado da partida.');
     await Promise.all(writableUids.map(async uid => {
       const historyRef = doc(db, 'history', `${uid}_${safeId}`);
       const existing = await getDoc(historyRef);
       if (!existing.exists()) {
         try {
-          await setDoc(historyRef, { ...matchData, playerUids: [uid], seasonId: CURRENT_SEASON_ID });
+          await setDoc(historyRef, {
+            ...matchData,
+            participantUids,
+            playerUids: [uid],
+            seasonId: CURRENT_SEASON_ID
+          });
         } catch (error) {
           // Host and guest can finish simultaneously. If the immutable record
           // now exists, the competing create succeeded and this is not a loss.
@@ -758,13 +764,14 @@ export const firebaseService = {
 
   async getRecentHistory(uid, limitCount = 100) {
     const historyRef = collection(db, 'history');
-    // Read the complete per-user receipt set before filtering by season. A
-    // pre-filter limit can let legacy documents hide the newest season games.
-    const q = query(historyRef, where('playerUids', 'array-contains', uid));
-    const querySnapshot = await getDocs(q);
+    // Legacy receipts contain only the UID of the client that persisted them.
+    // Scan once and recognize all cited participants so another player's
+    // successful receipt can restore this profile's history and statistics.
+    const querySnapshot = await getDocs(historyRef);
     const byMatch = new Map();
     querySnapshot.forEach(d => {
       const data = { id: d.id, ...d.data() };
+      if (!matchIncludesPlayer(data, uid)) return;
       const key = data.matchId || d.id;
       if (!byMatch.has(key)) byMatch.set(key, data);
     });

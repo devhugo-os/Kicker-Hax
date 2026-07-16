@@ -137,7 +137,7 @@ public class KickerHaxUpdater extends CordovaPlugin {
     builder.setSmallIcon(notificationIcon != 0 ? notificationIcon : cordova.getContext().getApplicationInfo().icon)
       .setLargeIcon(android.graphics.BitmapFactory.decodeResource(cordova.getContext().getResources(), cordova.getContext().getApplicationInfo().icon))
       .setContentTitle("Tem reforço chegando ao Kicker Hax!")
-      .setContentText("A versão" + suffix + " trouxe um HUD renovado. Toque para entrar em campo!")
+      .setContentText("A bola fugiu para o vestiário. Atualize e traga ela de volta ao campo!")
       .setAutoCancel(true);
     if (pendingIntent != null) builder.setContentIntent(pendingIntent);
     manager.notify(5506, builder.build());

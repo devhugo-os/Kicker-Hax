@@ -41,7 +41,7 @@ export const TUTORIAL_STEPS = [
   { id: 'move', speaker: 'Treinador KX', title: 'Movimentação', text: 'Mude de direção e conheça o espaço ao seu redor.', objective: 'Percorra o campo até completar a barra.' },
   { id: 'sprint', speaker: 'Treinador KX', title: 'Corrida e stamina', text: 'Correr aumenta sua velocidade, mas consome stamina. Solte o comando para recuperá-la.', mobileText: 'Segure o botão de correr enquanto usa o analógico. Solte o botão para recuperar stamina.', objective: 'Corra enquanto se movimenta.' },
   { id: 'control', speaker: 'Treinador KX', title: 'Domínio da bola', text: 'Aproxime-se da bola para dominá-la. O círculo preso ao jogador indica a posse.', objective: 'Pegue a bola.' },
-  { id: 'pass', target: 3, speaker: 'CPU Parceiro', title: 'Passe', text: 'Um chute curto também é um passe. Mire no parceiro e solte antes de carregar toda a força.', objective: 'Complete 3 passes para a CPU amigável.' },
+  { id: 'pass', target: 3, speaker: 'CPU Parceiro', title: 'Passe', text: 'Chute normal e super chute também podem virar passe. Mire no parceiro e entregue a bola.', objective: 'Complete 3 passes para a CPU amigável.' },
   { id: 'shoot', target: 3, speaker: 'Treinador KX', title: 'Chute normal carregado', text: 'Use somente o chute normal: segure o comando e vença a CPU. Não use o super chute nesta missão. Defesa, desarme ou chute para fora reiniciam a tentativa.', mobileText: 'Segure somente o botão da chuteira e solte para finalizar. O botão de super chute não vale nesta missão. Só um gol confirmado conta.', objective: 'Marque 3 gols usando apenas o chute normal.' },
   { id: 'dribble', target: 3, speaker: 'Treinador KX', title: 'Drible contínuo', text: 'Faça três dribles em sequência. Cada um só conta depois que todo o impulso termina com você ainda na posse.', objective: 'Complete 3 dribles seguidos com a posse da bola.' },
   { id: 'power', speaker: 'Treinador KX', title: 'Super chute', text: 'O super chute exige bastante stamina. Use quando tiver espaço e energia.', objective: 'Execute um super chute.' },
@@ -125,7 +125,7 @@ export class TutorialSession {
   record(eventName, payload = {}) {
     const id = this.step?.id;
     if (this.feedback || this.isManual || this.step?.celebration) return;
-    if (id === 'pass' && eventName === 'kick') {
+    if (id === 'pass' && ['kick', 'power'].includes(eventName)) {
       this.passStarted = true;
       this.attemptActive = true;
       this.attemptFrames = 0;

@@ -84,7 +84,7 @@ public final class UpdateCheckWorker extends Worker {
     builder.setSmallIcon(smallIcon != 0 ? smallIcon : context.getApplicationInfo().icon)
       .setLargeIcon(BitmapFactory.decodeResource(context.getResources(), context.getApplicationInfo().icon))
       .setContentTitle("Tem reforço chegando ao Kicker Hax!")
-      .setContentText("A versão " + version + " trouxe um HUD renovado. Toque para entrar em campo!")
+      .setContentText("A bola fugiu para o vestiário. Atualize e traga ela de volta ao campo!")
       .setAutoCancel(true);
     if (open != null) builder.setContentIntent(open);
     manager.notify(NOTIFICATION_ID, builder.build());

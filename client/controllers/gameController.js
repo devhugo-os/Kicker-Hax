@@ -2276,6 +2276,7 @@ export const gameController = {
         startedAt: result?.startedAt || null,
         endedAt: result?.endedAt || new Date().toISOString(),
         playerUids: activeHumans.map(player => player.uid),
+        participantUids: activeHumans.map(player => player.uid),
         playerTeams,
         playerStats: resultStats,
         teamStats: result?.teamStats || buildMatchReport(result).teamStats,
