@@ -173,11 +173,14 @@ export class MatchRecordingSession {
     this.virtualTimeMs += elapsedMs;
     const players = state.players.map(player => {
       const index = this.ensurePlayer(player);
+      const showActionEffects = state.status === 'playing';
       return [
         index, q(player.x), q(player.y), q(player.dir), Number(player.team),
         state.ball.owner === player.id ? 1 : 0,
-        [Number(player.shootHalo || 0), player.tackle_cd > 0 ? 1 : 0,
-          player.dribble_cd > 0 ? 1 : 0, Number(player.stun || 0)]
+        [showActionEffects ? Number(player.shootHalo || 0) : 0,
+          showActionEffects && player.tackle_cd > 0 ? 1 : 0,
+          showActionEffects && player.dribble_cd > 0 ? 1 : 0,
+          showActionEffects ? Number(player.stun || 0) : 0]
       ];
     }).filter(player => player[0] >= 0);
     const paused = !!state.isHostPaused || !!state.isDisconnectPaused || state.status === 'loading';
@@ -193,15 +196,18 @@ export class MatchRecordingSession {
       players,
       Number(state.matchTime || 0),
       Number(state.countdown || 0),
-      state.ball.lastStrikeType === 'power' ? 1 : 0,
-      Number(state.ball.strikeTimer || 0),
+      state.status === 'playing' && state.ball.lastStrikeType === 'power' ? 1 : 0,
+      state.status === 'playing' ? Number(state.ball.strikeTimer || 0) : 0,
       paused ? String(state.disconnectedPlayerName || (state.isHostPaused ? 'Partida pausada pelo host' : 'Aguardando jogadores')) : '',
       Number(state.disconnectPauseRemaining || 0),
       state.isDisconnectVoting ? 1 : 0,
       state.goalInfo
         ? [String(state.goalInfo.scorerName || 'Jogador'), state.goalInfo.ownGoal ? 1 : 0,
           String(state.goalInfo.assistName || '')]
-        : null
+        : null,
+      Number(state.continueVotes || 0),
+      Number(state.continueVotesRequired || 0),
+      state.disconnectAllowsRejoin === false ? 0 : 1
     ];
     this.frames.push(frame);
     if (this.virtualTimeMs - this.lastReportAt >= REPORT_INTERVAL_MS) {
@@ -258,7 +264,7 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 4,
+      v: 5,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs),
@@ -286,7 +292,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 4,
+      recordingVersion: 5,
       competitive: true,
       createdAt: new Date().toISOString()
     };
@@ -317,6 +323,9 @@ export async function decodeMatchRecording(documentData) {
         ownGoal: frame[16][1] === 1,
         assistName: String(frame[16][2] || '')
       } : null,
+      continueVotes: Number(frame[17] || 0),
+      continueVotesRequired: Number(frame[18] || 0),
+      disconnectAllowsRejoin: frame[19] !== 0,
       players: (frame[8] || []).map(player => ({
         index: player[0],
         x: uq(player[1]),

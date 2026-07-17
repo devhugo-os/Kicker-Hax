@@ -884,7 +884,7 @@ export class ServerMatch {
 
     // Broadcast current snapshot to all users in room
     const sequence = ++this.snapshotSequence;
-    const includeExtendedState = sequence === 1 || sequence % 10 === 0;
+    const includeExtendedState = sequence === 1 || sequence % 30 === 0;
     const snap = {
       sequence,
       serverSentAt: Date.now(),
@@ -919,7 +919,8 @@ export class ServerMatch {
           power_cd: p.power_cd
         };
         // Live statistics and identity do not change at rendering frequency.
-        // Sending them near 3 Hz keeps the HUD current and normal states small.
+        // Sending them at 1 Hz keeps the HUD current without periodic bandwidth
+        // spikes on distant/mobile WebRTC links.
         if (includeExtendedState) {
           state.matchStats = this.playerStats.get(p.id) ? { ...this.playerStats.get(p.id) } : null;
           state.badge = p.badge;
@@ -946,13 +947,12 @@ export class ServerMatch {
   }
 
   /** Sends a complete authoritative bootstrap after a client remounts. */
-  emitCurrentState() {
+  getCurrentState() {
     if (this.disconnectPauseUntil) {
-      this.emitDisconnectPauseState(Math.max(0, this.disconnectPauseUntil - Date.now()));
-      return;
+      return this.buildDisconnectPauseState(Math.max(0, this.disconnectPauseUntil - Date.now()));
     }
     const sequence = ++this.snapshotSequence;
-    this.io.to(this.roomCode).emit('gameState', {
+    return {
       sequence,
       serverSentAt: Date.now(),
       ball: {
@@ -992,7 +992,12 @@ export class ServerMatch {
       goalInfo: this.lastGoal,
       soundEffects: [],
       isHostPaused: this.isHostPaused
-    });
+    };
+  }
+
+  /** Sends a complete authoritative bootstrap after a client remounts. */
+  emitCurrentState() {
+    this.io.to(this.roomCode).emit('gameState', this.getCurrentState());
   }
 
   trackAssistCandidate() {
@@ -1170,8 +1175,10 @@ export class ServerMatch {
     return true;
   }
 
-  emitDisconnectPauseState(remaining) {
-    this.io.to(this.roomCode).emit('gameState', {
+  buildDisconnectPauseState(remaining) {
+    return {
+      sequence: ++this.snapshotSequence,
+      serverSentAt: Date.now(),
       ball: { ...this.ball },
       players: this.players.map(p => ({
         id: p.id, uid: p.uid || '', team: p.team, x: p.x, y: p.y, vx: 0, vy: 0, dir: p.dir,
@@ -1196,7 +1203,11 @@ export class ServerMatch {
       continueVotesRequired: Math.floor(this.players.filter(player => !player.cpu && player.team === this.disconnectTeam && !this.disconnectedUids.has(player.uid)).length / 2) + 1,
       disconnectAllowsRejoin: this.disconnectAllowsRejoin !== false,
       isDisconnectVoting: this.disconnectVoting
-    });
+    };
+  }
+
+  emitDisconnectPauseState(remaining) {
+    this.io.to(this.roomCode).emit('gameState', this.buildDisconnectPauseState(remaining));
   }
 
   resolveActiveTackleImpacts() {

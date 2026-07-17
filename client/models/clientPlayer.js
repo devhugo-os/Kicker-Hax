@@ -80,18 +80,19 @@ export class ClientPlayer {
     }
   }
 
-  interpolate(lerpFactor = 0.35, now = performance.now(), localPrediction = null) {
+  interpolate(lerpFactor = 0.35, now = performance.now(), localPrediction = null, networkDelayFrames = 0) {
     const frameMs = 1000 / 60;
     const elapsedFrames = Math.max(0.25, Math.min(2, (now - this.lastRenderAt) / frameMs || 1));
-    const snapshotAgeFrames = Math.max(0, Math.min(6, (now - this.stateReceivedAt) / frameMs));
-    let expectedX = this.targetX + (this.extrapolateMotion ? this.vx * snapshotAgeFrames : 0);
-    let expectedY = this.targetY + (this.extrapolateMotion ? this.vy * snapshotAgeFrames : 0);
+    const snapshotAgeFrames = Math.max(0, Math.min(8, (now - this.stateReceivedAt) / frameMs));
+    const compensatedAge = snapshotAgeFrames + Math.max(0, Math.min(10, networkDelayFrames));
+    let expectedX = this.targetX + (this.extrapolateMotion ? this.vx * compensatedAge : 0);
+    let expectedY = this.targetY + (this.extrapolateMotion ? this.vy * compensatedAge : 0);
     if (this.extrapolateMotion && localPrediction) {
       const ax = Number(localPrediction.input?.x || 0);
       const ay = Number(localPrediction.input?.y || 0);
       const length = Math.hypot(ax, ay);
       if (length > 0.001) {
-        const oneWayFrames = Math.min(3, Math.max(0, Number(localPrediction.pingMs || 0) / 2 / frameMs));
+        const oneWayFrames = Math.max(0, Math.min(10, networkDelayFrames));
         const sprintMultiplier = localPrediction.input?.sprint && this.staminaLock <= 0 && this.stamina > 0 ? 1.5 : 1;
         const predictedSpeed = C.MAX_SPEED * 1.2 * sprintMultiplier;
         // Predict only the velocity delta. Adding a full movement estimate on

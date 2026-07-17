@@ -31,6 +31,9 @@ export function shouldDropRealtimeState(event, bufferedAmount = 0) {
 export function encodeRealtimePacket(event, data) {
   return JSON.stringify({ event, data }, (key, value) => {
     if (OMITTED_REALTIME_FIELDS.has(key)) return undefined;
+    if (typeof value === 'number' && Number.isFinite(value) && !Number.isInteger(value)) {
+      return Math.round(value * 1000) / 1000;
+    }
     if (typeof value !== 'string') return value;
     if (value.startsWith('data:image/')) return 'custom';
     return value.slice(0, MAX_REALTIME_TEXT_LENGTH);

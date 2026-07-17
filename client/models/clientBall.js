@@ -35,12 +35,16 @@ export class ClientBall {
   }
 
   // Render motion at display refresh rate without increasing network traffic.
-  interpolate(lerpFactor = 0.35, now = performance.now()) {
+  interpolate(lerpFactor = 0.35, now = performance.now(), networkDelayFrames = 0) {
     const frameMs = 1000 / 60;
     const elapsedFrames = Math.max(0.25, Math.min(2, (now - this.lastRenderAt) / frameMs || 1));
-    const snapshotAgeFrames = Math.max(0, Math.min(6, (now - this.stateReceivedAt) / frameMs));
-    const expectedX = this.targetX + (this.extrapolateMotion ? this.vx * snapshotAgeFrames : 0);
-    const expectedY = this.targetY + (this.extrapolateMotion ? this.vy * snapshotAgeFrames : 0);
+    const snapshotAgeFrames = Math.max(0, Math.min(8, (now - this.stateReceivedAt) / frameMs));
+    // The authoritative host state is already roughly half an RTT old when it
+    // reaches a remote guest. Project moving objects to the guest's present so
+    // long-distance links remain fluid instead of visibly snapping each packet.
+    const compensatedAge = snapshotAgeFrames + Math.max(0, Math.min(10, networkDelayFrames));
+    const expectedX = this.targetX + (this.extrapolateMotion ? this.vx * compensatedAge : 0);
+    const expectedY = this.targetY + (this.extrapolateMotion ? this.vy * compensatedAge : 0);
     const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
     this.x += (expectedX - this.x) * correction;
     this.y += (expectedY - this.y) * correction;

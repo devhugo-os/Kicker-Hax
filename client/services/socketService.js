@@ -1222,6 +1222,10 @@ class P2PSocketService {
       // Resume only after the returning client has mounted the match view.
       const readyPlayer = this.serverRoom.players.find(player => player.id === socketId);
       if (readyPlayer?.uid) match.resumeAfterReconnect(readyPlayer.uid);
+      // A returning guest may mount before its unordered realtime channel is
+      // open. Deliver one chunked authoritative state through the reliable
+      // control connection; later snapshots continue on the fast channel.
+      if (conn?.open) this.sendControlEvent(conn, 'gameState', match.getCurrentState());
       match.emitCurrentState();
     }
 
@@ -1732,9 +1736,12 @@ class P2PSocketService {
     const actionSignature = `${+!!normalized.shoot}|${+!!normalized.sprint}|${+!!normalized.dribble}|${+!!normalized.tackle}|${+!!normalized.power}|${+!!normalized.mobileTackleAssist}`;
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
-    // Movement is capped at 30 Hz; button edges bypass that cap so mobile
-    // actions arrive immediately without joystick jitter flooding WebRTC.
-    if (!urgentActionChanged && now - this.lastInputSentAt < 33) return;
+    const movementChanged = signature !== this.lastInputSignature;
+    // Direction changes stay capped at 30 Hz and button edges bypass the cap.
+    // An unchanged held direction only needs a 10 Hz heartbeat because the
+    // authoritative simulation keeps the last input, cutting guest uplink load.
+    const minimumInterval = movementChanged ? 33 : 100;
+    if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;
     this.lastInputActionSignature = actionSignature;

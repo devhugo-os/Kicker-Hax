@@ -84,7 +84,7 @@ function drawBall(ctx, ball) {
   ctx.beginPath(); ctx.arc(ball.x, ball.y, C.BALL_RADIUS, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawPlayer(ctx, state, player) {
+function drawPlayer(ctx, state, player, showActionEffects = true) {
   const radius = C.PLAYER_RADIUS;
   const color = state.team === C.Team.RED ? '#ef4444' : '#3b82f6';
   ctx.fillStyle = 'rgba(0,0,0,.25)';
@@ -101,7 +101,7 @@ function drawPlayer(ctx, state, player) {
     ctx.fillStyle = '#fff'; ctx.beginPath();
     ctx.moveTo(state.x, state.y - radius - 10); ctx.lineTo(state.x - 6, state.y - radius - 2); ctx.lineTo(state.x + 6, state.y - radius - 2); ctx.fill();
   }
-  if (state.tackling || state.dribbling || state.shootHalo > 0) {
+  if (showActionEffects && (state.tackling || state.dribbling || state.shootHalo > 0)) {
     ctx.strokeStyle = state.tackling ? '#f97316' : (state.dribbling ? '#a78bfa' : '#facc15');
     ctx.globalAlpha = .72;
     ctx.lineWidth = 3;
@@ -134,8 +134,14 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   ctx.save();
   if (options.shake) ctx.translate((Math.random() - .5) * 8, (Math.random() - .5) * 8);
   drawStadium(ctx, fieldWidth, fieldHeight);
-  drawBall(ctx, frame.ball);
-  frame.players.forEach(state => drawPlayer(ctx, state, recording.players?.[state.index] || {}));
+  const actionEffectsActive = frame.status === 'playing';
+  const ball = actionEffectsActive
+    ? frame.ball
+    : { ...frame.ball, lastStrikeType: null, strikeTimer: 0 };
+  drawBall(ctx, ball);
+  frame.players.forEach(state => drawPlayer(
+    ctx, state, recording.players?.[state.index] || {}, actionEffectsActive
+  ));
   // Nets are drawn last, exactly like the live match, so a scored ball is
   // visibly inside the mesh instead of floating over it.
   drawNetOverlay(ctx, fieldWidth, fieldHeight);
@@ -163,6 +169,14 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
     if (remaining > 0) {
       ctx.fillStyle = '#60a5fa'; ctx.font = '800 20px Outfit, system-ui';
       ctx.fillText(`${remaining}s restantes`, fieldWidth / 2, fieldHeight * .56);
+    }
+    if (frame.isDisconnectVoting && Number(frame.continueVotesRequired || 0) > 0) {
+      ctx.fillStyle = '#f8fafc'; ctx.font = '700 16px Outfit, system-ui';
+      ctx.fillText(
+        `Votos para continuar: ${frame.continueVotes || 0}/${frame.continueVotesRequired}`,
+        fieldWidth / 2,
+        fieldHeight * .62
+      );
     }
   }
 }

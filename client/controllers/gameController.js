@@ -2330,7 +2330,7 @@ export const gameController = {
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
         recordingId,
-        recordingVersion: recordingId ? 4 : null
+        recordingVersion: recordingId ? 5 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2537,6 +2537,17 @@ export const gameController = {
       const sequence = Number(state?.transportSequence || state?.sequence || 0);
       if (sequence > 0 && sequence <= this.lastGameStateSequence) return;
       if (sequence > 0) this.lastGameStateSequence = sequence;
+      if (this.pendingRejoinConfirmation) {
+        const localId = socketService.getSocket().id;
+        const localPlayerRestored = state?.players?.some(player => player.id === localId);
+        if (localPlayerRestored) {
+          window.clearInterval(this.rejoinReadyInterval);
+          this.rejoinReadyInterval = null;
+          window.clearTimeout(this.pendingRejoinConfirmation.timeout);
+          this.pendingRejoinConfirmation = null;
+          showToast('Você voltou para a partida.', 'success');
+        }
+      }
       if (Number.isFinite(Number(state.serverSentAt))) {
         const offsetSample = Number(state.serverSentAt) - Date.now();
         this.serverClockOffsetMs = this.serverClockOffsetMs
@@ -2831,9 +2842,15 @@ export const gameController = {
       if (this.inReplay) {
         this.playbackReplay();
       } else {
-        // Interpolate ball and players at display refresh rate. The higher
-        // correction follows the 30 Hz snapshots without leaving stale echoes.
-        this.ball.interpolate(0.34);
+        // Remote snapshots arrive about half an RTT behind the host. Adapt the
+        // correction strength and project velocity to the guest's present;
+        // low-ping play stays crisp while distant links stop snapping in a grid.
+        const measuredPing = Math.max(0, Number(this.pingMs || 0));
+        const networkDelayFrames = Math.min(10, measuredPing / 2 / (1000 / 60));
+        const networkSmoothing = measuredPing > 180 ? 0.12
+          : measuredPing > 100 ? 0.16
+            : measuredPing > 60 ? 0.22 : 0.34;
+        this.ball.interpolate(networkSmoothing, performance.now(), networkDelayFrames);
         this.drawShotPreview(this.ctx, me, this.ball, input, Math.max(localCharge, me?.kickCharge || 0));
         this.ball.draw(this.ctx);
 
@@ -2841,7 +2858,7 @@ export const gameController = {
           const localPrediction = p.id === localId && this.status === 'playing' && !this.matchHostPaused
             ? { input, pingMs: this.pingMs || 0 }
             : null;
-          p.interpolate(0.34, performance.now(), localPrediction);
+          p.interpolate(networkSmoothing, performance.now(), localPrediction, networkDelayFrames);
           p.draw(this.ctx, this.ball.owner);
         });
       }
@@ -2973,6 +2990,19 @@ export const gameController = {
     // installed its state/replay listeners and opened this match view.
     this.lastMatchReadySentAt = Date.now();
     socketService.sendMatchClientReady();
+    if (this.onlineMatchMeta?.rejoined) {
+      window.clearInterval(this.rejoinReadyInterval);
+      this.rejoinReadyInterval = window.setInterval(() => socketService.sendMatchClientReady(), 600);
+      if (this.pendingRejoinConfirmation) {
+        this.pendingRejoinConfirmation.timeout = window.setTimeout(() => {
+          if (this.pendingRejoinConfirmation) this.pendingRejoinConfirmation.timeout = null;
+          // The host already owns this player again. Keep requesting the
+          // bootstrap instead of sending the client back to a now-invalid
+          // arena reservation and creating a second ghost reconnection.
+          showToast('Retorno aceito. A sincronização está demorando; mantendo a conexão...', 'info');
+        }, 12000);
+      }
+    }
   },
 
   stopMatchView() {
@@ -2984,6 +3014,12 @@ export const gameController = {
     socketService.clearListeners();
     if (this.pingInterval) clearInterval(this.pingInterval);
     this.pingInterval = null;
+    window.clearInterval(this.rejoinReadyInterval);
+    this.rejoinReadyInterval = null;
+    if (!this.rejoinRemountInProgress) {
+      if (this.pendingRejoinConfirmation?.timeout) window.clearTimeout(this.pendingRejoinConfirmation.timeout);
+      this.pendingRejoinConfirmation = null;
+    }
     this.pingMs = null;
     this.isPaused = false;
     this.pauseMenuOpen = false;
@@ -4227,8 +4263,16 @@ export const gameController = {
         this.activeRoom = payload.lobbyInfo || this.rejoinRoomMeta || room;
         this.fieldSize = this.activeRoom?.fieldSize || 'medium';
         this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
-        if (router.currentScreenId !== 'match-screen') router.show('match-screen');
-        showToast('Você voltou para a partida.', 'success');
+        this.pendingRejoinConfirmation = { timeout: null };
+        // Always remount. A stale router id can say match-screen while the
+        // arena is the visible screen after a disconnected WebView resumes.
+        this.rejoinRemountInProgress = true;
+        try {
+          router.show('match-screen');
+        } finally {
+          this.rejoinRemountInProgress = false;
+        }
+        showToast('Retorno aceito. Sincronizando a partida...', 'info');
       } catch (error) {
         restoreActions();
         showToast(error?.message || 'Não foi possível voltar para a partida.', 'error');

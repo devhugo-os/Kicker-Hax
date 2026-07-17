@@ -17,7 +17,9 @@ function formatTime(milliseconds) {
 
 export function renderRecordingFrame(canvas, recording, frame) {
   renderMatchRecordingFrame(canvas, recording, frame, {
-    shake: frame.ball?.lastStrikeType === 'power' && Number(frame.ball?.strikeTimer || 0) > 0
+    shake: frame.status === 'playing'
+      && frame.ball?.lastStrikeType === 'power'
+      && Number(frame.ball?.strikeTimer || 0) > 0
   });
 }
 
