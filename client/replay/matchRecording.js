@@ -1,7 +1,8 @@
 const SAMPLE_INTERVAL_MS = 100;
 const REPORT_INTERVAL_MS = 1000;
 export const MAX_RECORDING_BASE64_LENGTH = 850_000;
-const RECORDABLE_STATUSES = new Set(['loading', 'playing', 'countdown']);
+const RECORDABLE_STATUSES = new Set(['loading', 'playing', 'countdown', 'freeze']);
+const GOAL_FREEZE_RECORDING_MS = 2000;
 
 const q = value => Math.round(Number(value || 0) * 10);
 const uq = value => Number(value || 0) / 10;
@@ -68,8 +69,9 @@ function expandStats(values = []) {
 }
 
 /**
- * Records authoritative snapshots as a compact demo. Goal freeze and replay
- * phases are deliberately omitted, so playback cuts directly to kickoff.
+ * Records authoritative snapshots as a compact demo. The replay itself is
+ * omitted, while the first two seconds after a goal and kickoff countdown are
+ * retained to reproduce the match flow without storing the same play twice.
  */
 export class MatchRecordingSession {
   constructor({ fieldWidth = 1024, fieldHeight = 640, players = [] } = {}) {
@@ -86,6 +88,8 @@ export class MatchRecordingSession {
     this.lastImportantMarkerAt = -2000;
     this.lastSoundKey = '';
     this.virtualTimeMs = 0;
+    this.freezeKey = '';
+    this.freezeRecordedMs = 0;
     this.active = true;
     players.forEach(player => this.ensurePlayer({
       ...player,
@@ -138,23 +142,48 @@ export class MatchRecordingSession {
 
   capture(state, now = performance.now()) {
     if (!this.active || !state?.ball || !Array.isArray(state.players)) return;
+    if (!RECORDABLE_STATUSES.has(state.status)) {
+      // Excluded replay time must not leak into the following countdown.
+      this.lastCapturedAt = now;
+      return;
+    }
+    // Sound arrays are transient server events and may disappear before the
+    // next visual sample, so capture their markers before frame throttling.
     this.captureGoalMarker(state.goalInfo, state.score);
     this.captureImportantMarker(state);
     this.captureSoundMarkers(state.soundEffects);
-    if (!RECORDABLE_STATUSES.has(state.status)) return;
     if (this.lastCapturedAt && now - this.lastCapturedAt < SAMPLE_INTERVAL_MS) return;
+    let elapsedMs = this.frames.length
+      ? Math.max(16, Math.min(1000, now - this.lastCapturedAt))
+      : 0;
     this.lastCapturedAt = now;
+    if (state.status === 'freeze') {
+      const freezeKey = `${state.score?.red || 0}:${state.score?.blue || 0}`;
+      if (freezeKey !== this.freezeKey) {
+        this.freezeKey = freezeKey;
+        this.freezeRecordedMs = 0;
+      }
+      if (this.freezeRecordedMs >= GOAL_FREEZE_RECORDING_MS) return;
+      elapsedMs = Math.min(elapsedMs || SAMPLE_INTERVAL_MS, GOAL_FREEZE_RECORDING_MS - this.freezeRecordedMs);
+      this.freezeRecordedMs += elapsedMs;
+    } else {
+      this.freezeKey = '';
+      this.freezeRecordedMs = 0;
+    }
+    this.virtualTimeMs += elapsedMs;
     const players = state.players.map(player => {
       const index = this.ensurePlayer(player);
       return [
         index, q(player.x), q(player.y), q(player.dir), Number(player.team),
-        state.ball.owner === player.id ? 1 : 0
+        state.ball.owner === player.id ? 1 : 0,
+        [Number(player.shootHalo || 0), player.tackle_cd > 0 ? 1 : 0,
+          player.dribble_cd > 0 ? 1 : 0, Number(player.stun || 0)]
       ];
     }).filter(player => player[0] >= 0);
     const paused = !!state.isHostPaused || !!state.isDisconnectPaused || state.status === 'loading';
     const frame = [
       this.virtualTimeMs,
-      paused ? 2 : (state.status === 'countdown' ? 1 : 0),
+      paused ? 2 : (state.status === 'countdown' ? 1 : (state.status === 'freeze' ? 3 : 0)),
       Number(state.score?.red || 0),
       Number(state.score?.blue || 0),
       q(state.ball.x),
@@ -168,14 +197,17 @@ export class MatchRecordingSession {
       Number(state.ball.strikeTimer || 0),
       paused ? String(state.disconnectedPlayerName || (state.isHostPaused ? 'Partida pausada pelo host' : 'Aguardando jogadores')) : '',
       Number(state.disconnectPauseRemaining || 0),
-      state.isDisconnectVoting ? 1 : 0
+      state.isDisconnectVoting ? 1 : 0,
+      state.goalInfo
+        ? [String(state.goalInfo.scorerName || 'Jogador'), state.goalInfo.ownGoal ? 1 : 0,
+          String(state.goalInfo.assistName || '')]
+        : null
     ];
     this.frames.push(frame);
     if (this.virtualTimeMs - this.lastReportAt >= REPORT_INTERVAL_MS) {
       this.captureReport(state.score);
       this.lastReportAt = this.virtualTimeMs;
     }
-    this.virtualTimeMs += SAMPLE_INTERVAL_MS;
   }
 
   captureGoalMarker(goalInfo, score = {}) {
@@ -226,10 +258,10 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 3,
+      v: 4,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
-      durationMs: Math.max(0, this.virtualTimeMs - SAMPLE_INTERVAL_MS),
+      durationMs: Math.max(0, this.virtualTimeMs),
       players: this.players,
       frames: this.frames,
       reports: this.reports,
@@ -254,7 +286,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 3,
+      recordingVersion: 4,
       competitive: true,
       createdAt: new Date().toISOString()
     };
@@ -268,7 +300,7 @@ export async function decodeMatchRecording(documentData) {
     ...compact,
     frames: (compact.frames || []).map(frame => ({
       timeMs: frame[0],
-      status: frame[1] === 2 ? 'paused' : (frame[1] === 1 ? 'countdown' : 'playing'),
+      status: frame[1] === 3 ? 'freeze' : (frame[1] === 2 ? 'paused' : (frame[1] === 1 ? 'countdown' : 'playing')),
       score: { red: frame[2], blue: frame[3] },
       ball: {
         x: uq(frame[4]), y: uq(frame[5]), vx: uq(frame[6]), vy: uq(frame[7]),
@@ -280,13 +312,22 @@ export async function decodeMatchRecording(documentData) {
       pauseMessage: String(frame[13] || ''),
       disconnectPauseRemaining: Number(frame[14] || 0),
       isDisconnectVoting: frame[15] === 1,
+      goalInfo: frame[16] ? {
+        scorerName: String(frame[16][0] || 'Jogador'),
+        ownGoal: frame[16][1] === 1,
+        assistName: String(frame[16][2] || '')
+      } : null,
       players: (frame[8] || []).map(player => ({
         index: player[0],
         x: uq(player[1]),
         y: uq(player[2]),
         dir: uq(player[3]),
         team: player[4],
-        hasBall: player[5] === 1
+        hasBall: player[5] === 1,
+        shootHalo: Number(player[6]?.[0] || 0),
+        tackling: player[6]?.[1] === 1,
+        dribbling: player[6]?.[2] === 1,
+        stun: Number(player[6]?.[3] || 0)
       }))
     })),
     reports: (compact.reports || []).map(report => ({
@@ -302,6 +343,7 @@ export async function decodeMatchRecording(documentData) {
 
 export function interpolateRecordingFrame(first, second, ratio) {
   if (!first || !second || ratio <= 0) return first;
+  if (first.status !== second.status) return first;
   const mix = (a, b) => Number(a || 0) + (Number(b || 0) - Number(a || 0)) * ratio;
   const nextByIndex = new Map(second.players.map(player => [player.index, player]));
   return {
@@ -309,6 +351,7 @@ export function interpolateRecordingFrame(first, second, ratio) {
     matchTime: mix(first.matchTime, second.matchTime),
     countdown: mix(first.countdown, second.countdown),
     ball: {
+      ...first.ball,
       x: mix(first.ball.x, second.ball.x),
       y: mix(first.ball.y, second.ball.y),
       vx: mix(first.ball.vx, second.ball.vx),

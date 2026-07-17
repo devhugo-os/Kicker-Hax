@@ -159,7 +159,10 @@ export const menuController = {
       if (!match?.recordingId || !this.recordingPlayer) return;
       button.disabled = true;
       button.textContent = 'Carregando...';
-      matchDetailsModal?.classList.add('hidden');
+      // History overlays sit above the recording player. Close every layer so
+      // opening a demo goes directly to the player.
+      ['match-details-modal', 'profile-history-modal', 'public-profile-history-modal']
+        .forEach(id => document.getElementById(id)?.classList.add('hidden'));
       this.recordingPlayer.prepareOpen();
       try {
         const recording = await firebaseService.getMatchRecording(match.recordingId);
@@ -748,7 +751,7 @@ export const menuController = {
     renderMatchReport(report, match);
     this.selectedMatchDetails = match;
     const hasCompatibleRecording = !!(match.competitive || match.category === 'competitive')
-      && Number(match.recordingVersion || 0) >= 3
+      && Number(match.recordingVersion || 0) >= 4
       && !!match.recordingId;
     document.getElementById('match-recording-open')?.classList.toggle('hidden', !hasCompatibleRecording);
     modal.classList.remove('hidden');

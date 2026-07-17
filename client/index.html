@@ -1031,7 +1031,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v42.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v43.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1060,7 +1060,7 @@
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão, Retorno e Abandono</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Na Arena, <strong>Abandonar Partida</strong> encerra imediatamente a espera e bloqueia o retorno: se o time ainda tiver membros, começa a votação de 30 segundos para continuar com um a menos; se ficar vazio, ocorre W.O.</p></section>
           <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta com os seis segundos anteriores ao gol. No multiplayer, início, replay e reinício usam o relógio do host para todos assistirem juntos. Jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
-          <section><h3>Gravações das partidas</h3><p>Partidas multiplayer concluídas geram uma demo compacta sem repetir comemorações e replays. Abra o histórico, selecione a partida e toque em <strong>Assistir gravação</strong>. O player permite pausar, mudar velocidade e volume, avançar pela linha do tempo, saltar para gols marcados, consultar as estatísticas daquele instante e exportar um MP4 quando o dispositivo oferecer esse formato.</p></section>
+          <section><h3>Gravações das partidas</h3><p>Partidas competitivas concluídas geram uma demo compacta com o campo real, efeitos, sons, dois segundos de gol congelado e a contagem de reinício, sem repetir o replay. Abra o histórico, selecione a partida e toque em <strong>Assistir gravação</strong>. O player permite pausar, mudar velocidade e volume, avançar pela linha do tempo, saltar para gols marcados, consultar as estatísticas daquele instante e exportar um MP4 quando o dispositivo oferecer esse formato.</p></section>
           <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
           <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
           <section><h3>Vitrines e Solicitações</h3><p>Skins da comunidade custam 90 KX Coins na vitrine diária, 180 na semanal e 360 na mensal. Cada conta pode solicitar uma skin por dia. O recorte enviado participa das seleções e a vitrine mantém a skin atual quando não existe nova candidata válida para o período.</p></section>
@@ -1074,6 +1074,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v43.0 - Replay de Partida</h4>
+            <p>O retorno agora aguarda a aceita&ccedil;&atilde;o real do host e restaura a identifica&ccedil;&atilde;o da partida antes de abrir o campo. O reprodutor fecha automaticamente o hist&oacute;rico, usa o intervalo real entre quadros para corrigir a velocidade, reproduz os sons do jogo e alinha campo, traves e redes &agrave; f&iacute;sica da partida. Gols permanecem dois segundos congelados dentro da rede antes da contagem. Grava&ccedil;&otilde;es antigas e incompat&iacute;veis foram removidas.</p>
+          </section>
           <section>
             <h4>v42.0 - Mem&oacute;ria Competitiva</h4>
             <p>O retorno &agrave; partida ganhou confirma&ccedil;&atilde;o direta e um estado autoritativo ao remontar o campo. Grava&ccedil;&otilde;es agora existem apenas no competitivo, mostram pausas e esperas por reconex&atilde;o, preservam skins, velocidade ap&oacute;s avan&ccedil;ar a linha do tempo e a identidade do jogador ao sair e voltar. O reprodutor abre imediatamente em tela dedicada, demos antigas foram aposentadas e a sala n&atilde;o &eacute; mais removida por uma oscila&ccedil;&atilde;o tempor&aacute;ria do Realtime Database.</p>

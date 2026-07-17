@@ -715,6 +715,9 @@ class P2PSocketService {
             openRealtimeChannel();
             this.listenToRoomChat(roomCode);
             this.watchHostLifecycle(roomCode);
+            // The callback rejoin path bypasses triggerLocalEvent. Synchronize
+            // the match id before the newly mounted view announces readiness.
+            this.syncMatchLifecycle('matchRejoined', data);
             if (onAccepted) onAccepted(data);
             else this.triggerLocalEvent('matchRejoined', data);
             if (!data?.lobbyInfo) {
@@ -914,6 +917,32 @@ class P2PSocketService {
       interval,
       timeout,
       joinAttemptId: String(data?.joinAttemptId || '')
+    });
+  }
+
+  /**
+   * Resolves only after the host accepted a returning player. RTDB can expose
+   * the reservation before WebRTC is ready, so navigation must await this.
+   */
+  rejoinMatch(code, password, profile, matchId) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const handleError = message => finish(false, message || 'Nao foi possivel voltar para a partida.');
+      const timeout = window.setTimeout(() => finish(false, 'A conexao com a partida demorou demais.'), 17000);
+      const finish = (accepted, payload) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        this.off('joinError', handleError);
+        if (accepted) resolve(payload || {});
+        else reject(new Error(String(payload || 'Nao foi possivel voltar para a partida.')));
+      };
+      this.on('joinError', handleError);
+      this.joinRoom(code, password, profile, {
+        rejoin: true,
+        matchId,
+        onAccepted: payload => finish(true, payload)
+      });
     });
   }
 

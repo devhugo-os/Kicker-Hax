@@ -2330,7 +2330,7 @@ export const gameController = {
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
         recordingId,
-        recordingVersion: recordingId ? 3 : null
+        recordingVersion: recordingId ? 4 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -4206,7 +4206,6 @@ export const gameController = {
         skinId: menuController.profileData.equippedSkinId || 'rookie',
         staffRole: menuController.profileData.staffRole || ''
       };
-      socketService.once('joinError', (message) => showToast(message, 'error'));
       let password = '';
       try {
         const lastRoom = JSON.parse(localStorage.getItem(`kicker_hax_last_room_${this.currentUser.uid}`) || 'null');
@@ -4214,37 +4213,26 @@ export const gameController = {
       } catch { /* Rejoining a public room does not need a saved password. */ }
       return { profile, password };
     };
-    button.onclick = () => {
+    button.onclick = async () => {
       const { profile, password } = getRejoinCredentials();
       button.disabled = true;
       if (abandonButton) abandonButton.disabled = true;
-      const cleanupRejoinActions = () => {
-        socketService.off('matchRejoined', handleRejoined);
-        socketService.off('joinError', handleJoinError);
-      };
       const restoreActions = () => {
         button.disabled = false;
         if (abandonButton) abandonButton.disabled = false;
       };
-      const handleRejoined = (payload = {}) => {
-        cleanupRejoinActions();
+      try {
+        const payload = await socketService.rejoinMatch(saved.code, password, profile, saved.matchId);
         restoreActions();
         this.activeRoom = payload.lobbyInfo || this.rejoinRoomMeta || room;
         this.fieldSize = this.activeRoom?.fieldSize || 'medium';
         this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
         if (router.currentScreenId !== 'match-screen') router.show('match-screen');
         showToast('Você voltou para a partida.', 'success');
-      };
-      const handleJoinError = () => {
-        cleanupRejoinActions();
+      } catch (error) {
         restoreActions();
-      };
-      socketService.on('joinError', handleJoinError);
-      socketService.joinRoom(saved.code, password, profile, {
-        rejoin: true,
-        matchId: saved.matchId,
-        onAccepted: handleRejoined
-      });
+        showToast(error?.message || 'Não foi possível voltar para a partida.', 'error');
+      }
     };
     if (abandonButton) abandonButton.onclick = async () => {
       const confirmed = await confirmDialog({

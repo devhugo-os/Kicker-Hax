@@ -6,28 +6,9 @@ import { showToast } from '../utils/toast.js';
 import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
 import firebaseService from '../services/firebaseService.js';
 import { getEquippedSkin, getSkinById } from '../data/skins.js';
+import { soundFx } from '../utils/soundFx.js';
 
-const SPEEDS = [0.5, 1, 1.5, 2];
-const SOUND_FREQUENCIES = {
-  goal: [480, 960], cheer: [360, 720], power: [180, 720], kick: [520, 260],
-  tackle: [140, 90], dribble: [800, 600], pickup: [330, 440], whistle: [1800, 1500], post: [900, 300]
-};
-
-function scheduleRecordingTone(context, destination, marker, volume, delaySeconds = 0) {
-  const sound = marker.sound || marker.type;
-  const [startFrequency, endFrequency] = SOUND_FREQUENCIES[sound] || [320, 520];
-  const startAt = context.currentTime + Math.max(0, delaySeconds);
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.type = sound === 'power' || sound === 'tackle' ? 'sawtooth' : 'triangle';
-  oscillator.frequency.setValueAtTime(startFrequency, startAt);
-  oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), startAt + .18);
-  gain.gain.setValueAtTime(Math.max(.0001, Math.min(.2, volume * .2)), startAt);
-  gain.gain.exponentialRampToValueAtTime(.0001, startAt + .24);
-  oscillator.connect(gain).connect(destination);
-  oscillator.start(startAt);
-  oscillator.stop(startAt + .25);
-}
+const SPEEDS = [0.25, 0.5, 0.75, 1];
 
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -58,7 +39,6 @@ export class MatchRecordingPlayer {
     this.lastTick = 0;
     this.raf = 0;
     this.lastAudioMarkerMs = 0;
-    this.audioContext = null;
     this.playbackRate = 1;
     this.bind();
   }
@@ -171,10 +151,19 @@ export class MatchRecordingPlayer {
   getFrameAt(timeMs) {
     const frames = this.recording?.frames || [];
     if (!frames.length) return null;
-    const sampleMs = Number(this.recording.sampleMs || 100);
-    const position = Math.max(0, timeMs / sampleMs);
-    const index = Math.min(frames.length - 1, Math.floor(position));
-    return interpolateRecordingFrame(frames[index], frames[Math.min(frames.length - 1, index + 1)], position - index);
+    // Captures arrive at real network/browser intervals. Binary search the
+    // stored timestamps instead of assuming every frame is exactly 100 ms.
+    let low = 0;
+    let high = frames.length - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (frames[middle].timeMs <= timeMs) low = middle;
+      else high = middle - 1;
+    }
+    const first = frames[low];
+    const second = frames[Math.min(frames.length - 1, low + 1)];
+    const span = Math.max(1, Number(second.timeMs || 0) - Number(first.timeMs || 0));
+    return interpolateRecordingFrame(first, second, Math.max(0, Math.min(1, (timeMs - first.timeMs) / span)));
   }
 
   getReportAt(timeMs) {
@@ -230,10 +219,10 @@ export class MatchRecordingPlayer {
   playMarkerAudio(fromMs, toMs) {
     const volume = Number(this.volumeInput?.value || 0) / 100;
     if (volume <= 0) return;
-    const crossedMarkers = (this.recording?.markers || []).filter(marker => marker.t > fromMs && marker.t <= toMs);
+    const crossedMarkers = (this.recording?.markers || [])
+      .filter(marker => marker.type === 'sound' && marker.t > fromMs && marker.t <= toMs);
     if (!crossedMarkers.length) return;
-    this.audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
-    crossedMarkers.forEach(marker => scheduleRecordingTone(this.audioContext, this.audioContext.destination, marker, volume));
+    crossedMarkers.forEach(marker => soundFx.play(marker.sound));
   }
 
   async exportVideo() {
@@ -252,28 +241,30 @@ export class MatchRecordingPlayer {
     exportCanvas.width = fieldWidth;
     exportCanvas.height = fieldHeight;
     const stream = exportCanvas.captureStream(30);
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const audioDestination = audioContext.createMediaStreamDestination();
-    audioDestination.stream.getAudioTracks().forEach(track => stream.addTrack(track));
+    const audioDestination = soundFx.getRecordingStreamDestination();
+    audioDestination?.stream.getAudioTracks().forEach(track => stream.addTrack(track));
     const exportVolume = Number(this.volumeInput?.value || 0) / 100;
-    (this.recording.markers || []).forEach(marker => {
-      scheduleRecordingTone(audioContext, audioDestination, marker, exportVolume, Number(marker.t || 0) / 1000);
-    });
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_200_000 });
     recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
     const finished = new Promise(resolve => { recorder.onstop = resolve; });
     recorder.start(500);
     const exportStart = performance.now();
+    let previousExportMs = 0;
     const renderExport = now => {
       const exportMs = Math.min(this.recording.durationMs, now - exportStart);
+      if (exportVolume > 0) {
+        (this.recording.markers || [])
+          .filter(marker => marker.type === 'sound' && marker.t > previousExportMs && marker.t <= exportMs)
+          .forEach(marker => soundFx.play(marker.sound));
+      }
+      previousExportMs = exportMs;
       renderRecordingFrame(exportCanvas, this.recording, this.getFrameAt(exportMs));
       if (exportMs < this.recording.durationMs) requestAnimationFrame(renderExport);
       else recorder.stop();
     };
     requestAnimationFrame(renderExport);
     await finished;
-    audioContext.close().catch(() => {});
     const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
     const blob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(blob);
