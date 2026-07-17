@@ -6,6 +6,15 @@ export function getSynchronizedReplayStart(replayStartAt, serverClockOffsetMs = 
     : fallbackNow;
 }
 
+/** Estimates host clock skew without adding the one-way network delay. */
+export function estimateServerClockOffset(sentAt, receivedAt, serverTime) {
+  const sent = Number(sentAt);
+  const received = Number(receivedAt);
+  const server = Number(serverTime);
+  if (![sent, received, server].every(Number.isFinite) || received < sent) return null;
+  return server - ((sent + received) / 2);
+}
+
 export function getReplayPosition(startedAtWall, frameMs, frameCount, now = Date.now(), holdMs = 0) {
   const safeFrameMs = Math.max(1, Number(frameMs) || 1);
   const elapsedMs = Math.max(0, Number(now) - Number(startedAtWall || now));

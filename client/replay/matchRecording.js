@@ -264,7 +264,7 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 5,
+      v: 6,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs),
@@ -292,7 +292,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 5,
+      recordingVersion: 6,
       competitive: true,
       createdAt: new Date().toISOString()
     };

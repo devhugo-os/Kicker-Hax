@@ -179,4 +179,16 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
       );
     }
   }
+  if (options.ended) {
+    ctx.fillStyle = 'rgba(2,6,23,.84)';
+    ctx.fillRect(0, fieldHeight * .36, fieldWidth, fieldHeight * .28);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 38px Outfit, system-ui';
+    ctx.fillText('Fim da partida', fieldWidth / 2, fieldHeight * .46);
+    ctx.fillStyle = '#60a5fa';
+    ctx.font = '800 22px Outfit, system-ui';
+    ctx.fillText(`Placar final: ${frame.score?.red || 0} : ${frame.score?.blue || 0}`, fieldWidth / 2, fieldHeight * .56);
+  }
 }

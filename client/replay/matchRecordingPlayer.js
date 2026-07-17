@@ -122,6 +122,7 @@ export class MatchRecordingPlayer {
   close() {
     this.playing = false;
     cancelAnimationFrame(this.raf);
+    if (this.playButton) this.playButton.textContent = '▶';
     this.root?.classList.add('hidden');
   }
 
@@ -192,11 +193,27 @@ export class MatchRecordingPlayer {
   render() {
     if (!this.recording) return;
     const frame = this.getFrameAt(this.currentMs);
-    renderRecordingFrame(this.canvas, this.recording, frame);
+    const ended = this.currentMs >= Number(this.recording.durationMs || 0);
+    renderMatchRecordingFrame(this.canvas, this.recording, frame, {
+      shake: !ended
+        && frame?.status === 'playing'
+        && frame.ball?.lastStrikeType === 'power'
+        && Number(frame.ball?.strikeTimer || 0) > 0,
+      ended
+    });
     this.timeline.value = String(Math.min(this.currentMs, this.recording.durationMs || 0));
     this.timeLabel.textContent = `${formatTime(this.currentMs)} / ${formatTime(this.recording.durationMs)}`;
     const report = this.getReportAt(this.currentMs);
-    if (report) renderMatchReport(this.report, report);
+    if (report) {
+      renderMatchReport(this.report, report);
+      this.report.classList.toggle('recording-final-report', ended);
+      if (ended) {
+        const title = document.createElement('h3');
+        title.className = 'recording-final-title';
+        title.textContent = 'Fim da partida';
+        this.report.prepend(title);
+      }
+    }
   }
 
   renderMarkers() {
@@ -219,6 +236,8 @@ export class MatchRecordingPlayer {
   }
 
   playMarkerAudio(fromMs, toMs) {
+    // Seeking, opening and paused rendering must be completely silent.
+    if (!this.playing || this.root?.classList.contains('hidden')) return;
     const volume = Number(this.volumeInput?.value || 0) / 100;
     if (volume <= 0) return;
     const crossedMarkers = (this.recording?.markers || [])
@@ -243,24 +262,16 @@ export class MatchRecordingPlayer {
     exportCanvas.width = fieldWidth;
     exportCanvas.height = fieldHeight;
     const stream = exportCanvas.captureStream(30);
-    const audioDestination = soundFx.getRecordingStreamDestination();
-    audioDestination?.stream.getAudioTracks().forEach(track => stream.addTrack(track));
-    const exportVolume = Number(this.volumeInput?.value || 0) / 100;
+    // Exporting is intentionally silent in the UI. Match sounds are emitted
+    // only by active playback, never by background rendering/export work.
     const chunks = [];
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_200_000 });
     recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
     const finished = new Promise(resolve => { recorder.onstop = resolve; });
     recorder.start(500);
     const exportStart = performance.now();
-    let previousExportMs = 0;
     const renderExport = now => {
       const exportMs = Math.min(this.recording.durationMs, now - exportStart);
-      if (exportVolume > 0) {
-        (this.recording.markers || [])
-          .filter(marker => marker.type === 'sound' && marker.t > previousExportMs && marker.t <= exportMs)
-          .forEach(marker => soundFx.play(marker.sound));
-      }
-      previousExportMs = exportMs;
       renderRecordingFrame(exportCanvas, this.recording, this.getFrameAt(exportMs));
       if (exportMs < this.recording.durationMs) requestAnimationFrame(renderExport);
       else recorder.stop();

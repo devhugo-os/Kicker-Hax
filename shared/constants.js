@@ -63,7 +63,7 @@ export const REPLAY_CAPTURE_FRAMES = 360;
 export const REPLAY_SLOWMO_FACTOR = 2;
 // Gives chunked control packets enough time to reach slower mobile peers while
 // every client still starts from the same authoritative wall-clock instant.
-export const REPLAY_SYNC_LEAD_MS = 700;
+export const REPLAY_SYNC_LEAD_MS = 1200;
 // Hold the scored frame after playback. This is part of the synchronized
 // replay phase, but power-kick camera shake is disabled during the hold.
 export const REPLAY_POST_GOAL_FREEZE_MS = 2000;

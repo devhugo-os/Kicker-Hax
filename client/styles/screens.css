@@ -3485,6 +3485,7 @@ html.app-runtime #menu-btn-download-app {
 .recording-controls label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; }
 .recording-icon-btn { width: 40px; min-width: 40px; padding-inline: 0; }
 .recording-report { margin-top: 6px; }
+.recording-final-title { margin: 4px 0 10px; color: #fff; text-align: center; font-size: 22px; }
 
 @media (max-width: 720px), (pointer: coarse) {
   .match-report { gap: 6px; }

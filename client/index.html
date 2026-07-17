@@ -1031,7 +1031,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v45.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v46.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1074,6 +1074,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v46.0 - Conex&atilde;o em Campo</h4>
+            <p>O canal de movimento agora descarta estados antigos em vez de retransmiti-los e acumular atraso, reduzindo teletransportes e lat&ecirc;ncia artificial em conex&otilde;es distantes. Replay e contagens usam estimativa de rel&oacute;gio no estilo NTP e uma janela maior de sincroniza&ccedil;&atilde;o. Voltar para Partida monta o campo antes da negocia&ccedil;&atilde;o e s&oacute; conclui quando o host devolve o jogador no estado autoritativo. A grava&ccedil;&atilde;o termina com Fim da partida, placar e resultados; seus sons tocam apenas enquanto o reprodutor est&aacute; reproduzindo. Demos anteriores incompat&iacute;veis foram removidas.</p>
+          </section>
           <section>
             <h4>v45.0 - Retorno Confirmado</h4>
             <p>Voltar para Partida agora remonta o campo mesmo quando a rota do aplicativo ficou desatualizada, solicita um estado completo pelo canal confi&aacute;vel e s&oacute; confirma o retorno depois que o jogador reaparece no jogo. Links distantes recebem compensa&ccedil;&atilde;o adaptativa de lat&ecirc;ncia e pacotes menores para reduzir engasgos e teletransportes. A grava&ccedil;&atilde;o remove efeitos de super chute ap&oacute;s o gol, preserva a mesma contagem, os votos e o reset das pausas por desist&ecirc;ncia; grava&ccedil;&otilde;es antigas incompat&iacute;veis foram limpas.</p>

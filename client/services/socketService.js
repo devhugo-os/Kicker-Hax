@@ -927,21 +927,39 @@ class P2PSocketService {
   rejoinMatch(code, password, profile, matchId) {
     return new Promise((resolve, reject) => {
       let settled = false;
+      let acceptedPayload = null;
+      let readyInterval = null;
       const handleError = message => finish(false, message || 'Nao foi possivel voltar para a partida.');
-      const timeout = window.setTimeout(() => finish(false, 'A conexao com a partida demorou demais.'), 17000);
+      const handleState = state => {
+        if (!acceptedPayload || !state?.players?.some(player => player.id === this.clientId)) return;
+        finish(true, acceptedPayload);
+      };
+      const announceReady = () => this.sendMatchClientReady();
+      const timeout = window.setTimeout(() => {
+        finish(false, 'O host aceitou o retorno, mas nao devolveu seu jogador ao campo.');
+      }, 17000);
       const finish = (accepted, payload) => {
         if (settled) return;
         settled = true;
         window.clearTimeout(timeout);
+        window.clearInterval(readyInterval);
         this.off('joinError', handleError);
+        this.off('gameState', handleState);
         if (accepted) resolve(payload || {});
         else reject(new Error(String(payload || 'Nao foi possivel voltar para a partida.')));
       };
       this.on('joinError', handleError);
+      this.on('gameState', handleState);
       this.joinRoom(code, password, profile, {
         rejoin: true,
         matchId,
-        onAccepted: payload => finish(true, payload)
+        onAccepted: payload => {
+          acceptedPayload = payload || {};
+          announceReady();
+          // Keep asking until an authoritative state proves that the host
+          // rebound this browser's new PeerJS id to the physical player.
+          readyInterval = window.setInterval(announceReady, 600);
+        }
       });
     });
   }
@@ -1259,7 +1277,12 @@ class P2PSocketService {
     else if (event === 'ping') {
       // A tiny echo packet measures actual WebRTC round-trip time. The host
       // handles its own packet locally and guests receive the same response.
-      const payload = { sentAt: Number(data?.sentAt) || Date.now() };
+      const payload = {
+        sentAt: Number(data?.sentAt) || Date.now(),
+        // Returned by the authoritative host for an NTP-style midpoint
+        // estimate. RTT alone cannot distinguish clock skew from latency.
+        serverTime: Date.now()
+      };
       this.serverRoom.match?.touchPlayer(socketId);
       if (socketId === this.clientId) {
         this.triggerLocalEvent('pong', payload);

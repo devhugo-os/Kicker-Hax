@@ -41,7 +41,7 @@ class Router {
     // Call exit lifecycle handler
     if (prevRoute && prevRoute.onExit) {
       try {
-        prevRoute.onExit();
+        prevRoute.onExit({ from: prevScreenId, to: screenId });
       } catch (err) {
         console.error(`[Router] Erro ao sair da tela ${prevScreenId}:`, err);
       }

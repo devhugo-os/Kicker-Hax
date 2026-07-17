@@ -11,10 +11,15 @@ import { showToast } from './utils/toast.js';
 import { soundFx } from './utils/soundFx.js';
 import { requestAppDownload, notifyNativeUpdate } from './utils/nativeBridge.js';
 import { setupCharacterLimitWarnings } from './utils/contentLimitWarnings.js';
+import { installLowLatencyDataChannelPatch } from './utils/webrtcLowLatency.js';
+
+// Install before the first PeerJS connection is created. Control messages keep
+// ordered delivery; only replaceable realtime state/input packets can expire.
+installLowLatencyDataChannelPatch();
 
 // Vite replaces the build constant in production. The fallback keeps the
 // local development server usable when it serves the source module directly.
-const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '45.0.0';
+const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '46.0.0';
 const DISPLAY_VERSION = APP_VERSION.split('.').length > 2
   ? APP_VERSION.replace(/\.0$/, '')
   : APP_VERSION;

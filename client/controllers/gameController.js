@@ -23,7 +23,12 @@ import { getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfi
 import { buildMatchReport } from '../../shared/matchReport.js';
 import { renderMatchReport } from '../components/matchReportView.js';
 import { buildLiveMatchReport } from '../replay/liveMatchReport.js';
-import { getReplayPosition, getSynchronizedReplayStart, interpolateReplayFrame } from '../replay/goalReplay.js';
+import {
+  estimateServerClockOffset,
+  getReplayPosition,
+  getSynchronizedReplayStart,
+  interpolateReplayFrame
+} from '../replay/goalReplay.js';
 import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
 
 export const gameController = {
@@ -439,8 +444,8 @@ export const gameController = {
         socketService.refreshPublicRooms();
         this.refreshRejoinMatchAction();
       },
-      onExit: () => {
-        if (router.currentScreenId !== 'match-screen') {
+      onExit: ({ to } = {}) => {
+        if (to !== 'match-screen') {
           socketService.clearListeners();
         }
       }
@@ -514,8 +519,8 @@ export const gameController = {
         });
         socketService.getSocket().on('roomChatCleared', () => this.clearRoomChatViews());
       },
-      onExit: () => {
-        if (router.currentScreenId !== 'match-screen') {
+      onExit: ({ to } = {}) => {
+        if (to !== 'match-screen') {
           socketService.clearListeners();
         }
       }
@@ -2330,7 +2335,7 @@ export const gameController = {
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
         recordingId,
-        recordingVersion: recordingId ? 5 : null
+        recordingVersion: recordingId ? 6 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2497,8 +2502,9 @@ export const gameController = {
     if (this.pingInterval) clearInterval(this.pingInterval);
 
     socketService.off('pong');
-    socketService.on('pong', ({ sentAt } = {}) => {
-      const sample = Date.now() - Number(sentAt);
+    socketService.on('pong', ({ sentAt, serverTime } = {}) => {
+      const receivedAt = Date.now();
+      const sample = receivedAt - Number(sentAt);
       if (!Number.isFinite(sample) || sample < 0 || sample > 5000) return;
       this.lastPingAt = Date.now();
       const sorted = [...this.pingSamples].sort((a, b) => a - b);
@@ -2509,6 +2515,14 @@ export const gameController = {
       if (this.pingSamples.length > 9) this.pingSamples.shift();
       const stable = [...this.pingSamples].sort((a, b) => a - b);
       this.pingMs = stable[Math.floor(stable.length / 2)];
+      // NTP midpoint estimation removes one-way network delay from the clock
+      // offset, so every client maps replayStartAt to the same wall instant.
+      const clockSample = estimateServerClockOffset(sentAt, receivedAt, serverTime);
+      if (clockSample !== null) {
+        this.serverClockOffsetMs = this.serverClockOffsetMs
+          ? (this.serverClockOffsetMs * 0.75) + (clockSample * 0.25)
+          : clockSample;
+      }
     });
     const samplePing = () => socketService.emit('ping', { sentAt: Date.now() });
     samplePing();
@@ -2548,7 +2562,7 @@ export const gameController = {
           showToast('Você voltou para a partida.', 'success');
         }
       }
-      if (Number.isFinite(Number(state.serverSentAt))) {
+      if (!this.lastPingAt && Number.isFinite(Number(state.serverSentAt))) {
         const offsetSample = Number(state.serverSentAt) - Date.now();
         this.serverClockOffsetMs = this.serverClockOffsetMs
           ? (this.serverClockOffsetMs * 0.8) + (offsetSample * 0.2)
@@ -4257,24 +4271,35 @@ export const gameController = {
         button.disabled = false;
         if (abandonButton) abandonButton.disabled = false;
       };
+      // Enter the online view immediately and let its ready requests wait for
+      // PeerJS. This removes the arena-side race where the host restored the
+      // player but the returning client never mounted the match listeners.
+      this.mode = 'multiplayer';
+      this.practiceMode = false;
+      this.tutorialMode = false;
+      this.activeRoom = this.rejoinRoomMeta || room;
+      this.fieldSize = this.activeRoom?.fieldSize || 'medium';
+      this.onlineMatchMeta = { rejoined: true, matchId: saved.matchId };
+      this.onlineMatchFinished = false;
+      this.pendingRejoinConfirmation = { timeout: null };
+      this.rejoinRemountInProgress = true;
+      try {
+        router.show('match-screen');
+      } finally {
+        this.rejoinRemountInProgress = false;
+      }
       try {
         const payload = await socketService.rejoinMatch(saved.code, password, profile, saved.matchId);
         restoreActions();
         this.activeRoom = payload.lobbyInfo || this.rejoinRoomMeta || room;
         this.fieldSize = this.activeRoom?.fieldSize || 'medium';
         this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
-        this.pendingRejoinConfirmation = { timeout: null };
-        // Always remount. A stale router id can say match-screen while the
-        // arena is the visible screen after a disconnected WebView resumes.
-        this.rejoinRemountInProgress = true;
-        try {
-          router.show('match-screen');
-        } finally {
-          this.rejoinRemountInProgress = false;
-        }
+        socketService.sendMatchClientReady();
         showToast('Retorno aceito. Sincronizando a partida...', 'info');
       } catch (error) {
         restoreActions();
+        socketService.leaveRoom();
+        if (router.currentScreenId === 'match-screen') router.show('multiplayer-screen');
         showToast(error?.message || 'Não foi possível voltar para a partida.', 'error');
       }
     };
