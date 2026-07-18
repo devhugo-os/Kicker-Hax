@@ -642,7 +642,7 @@ export class ServerMatch {
     // a silent guest by the missing input heartbeat before simulating a frame.
     const staleGuest = this.players.find(player => !player.cpu
       && player.id !== this.hostPlayerId
-      && Date.now() - (player.lastSeenAt || 0) > 8000);
+      && Date.now() - (player.lastSeenAt || 0) > 12000);
     if (staleGuest && this.status !== 'ended') {
       this.onGuestConnectionLost?.(staleGuest);
       this.pauseForDisconnectedTeam(staleGuest.team, staleGuest.uid, staleGuest.name);
@@ -1033,10 +1033,10 @@ export class ServerMatch {
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
       // Physics remains at 60 Hz. Velocity-aware rendering fills the gap
-      // between 30 Hz snapshots while the lower cadence leaves headroom for
+      // between 40 Hz snapshots while the lower cadence leaves headroom for
       // remote/mobile WebRTC links and rooms with several spectators.
       const finalFrame = frame === frames - 1;
-      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 33;
+      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 25;
       this.tick();
       if (!this.skipBroadcast) this.lastBroadcastAt = now;
       if (this.status === 'ended') break;

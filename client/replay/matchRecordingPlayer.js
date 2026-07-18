@@ -68,7 +68,7 @@ export class MatchRecordingPlayer {
       this.playing = false;
       cancelAnimationFrame(this.raf);
       soundFx.stopCrowd();
-      if (this.playButton) this.playButton.textContent = 'â–¶';
+      if (this.playButton) this.playButton.textContent = '▶';
     });
   }
 
@@ -269,7 +269,8 @@ export class MatchRecordingPlayer {
     const mimeType = candidates.find(type => MediaRecorder.isTypeSupported(type));
     if (!mimeType) return showToast('Nenhum formato de vídeo compatível foi encontrado.', 'error');
     this.exportButton.disabled = true;
-    this.exportButton.textContent = 'Criando vídeo...';
+    this.exportButton.classList.add('is-exporting');
+    this.exportButton.textContent = 'Preparando 0%';
     // Render on an isolated canvas so exporting never moves the visible player.
     const exportCanvas = document.createElement('canvas');
     const [fieldWidth, fieldHeight] = this.recording.field || [1024, 640];
@@ -279,30 +280,54 @@ export class MatchRecordingPlayer {
     // Exporting is intentionally silent in the UI. Match sounds are emitted
     // only by active playback, never by background rendering/export work.
     const chunks = [];
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_200_000 });
-    recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
-    const finished = new Promise(resolve => { recorder.onstop = resolve; });
-    recorder.start(500);
-    const exportStart = performance.now();
-    const renderExport = now => {
-      const exportMs = Math.min(this.recording.durationMs, now - exportStart);
-      renderRecordingFrame(exportCanvas, this.recording, this.getFrameAt(exportMs));
-      if (exportMs < this.recording.durationMs) requestAnimationFrame(renderExport);
-      else recorder.stop();
-    };
-    requestAnimationFrame(renderExport);
-    await finished;
     const extension = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
-    const blob = new Blob(chunks, { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Kicker-Hax-${this.match?.matchId || Date.now()}.${extension}`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    this.exportButton.disabled = false;
-    this.exportButton.textContent = extension === 'mp4' ? 'Salvar MP4' : 'Salvar vídeo';
-    this.render();
-    showToast(extension === 'mp4' ? 'MP4 criado com sucesso!' : 'MP4 indisponível; vídeo salvo em WebM.', 'success');
+    try {
+      const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 1_200_000 });
+      recorder.ondataavailable = event => { if (event.data?.size) chunks.push(event.data); };
+      const finished = new Promise((resolve, reject) => {
+        recorder.onstop = resolve;
+        recorder.onerror = event => reject(event.error || new Error('Falha ao codificar o vídeo.'));
+      });
+      recorder.start(500);
+      const exportStart = performance.now();
+      let lastProgressAt = 0;
+      const renderExport = now => {
+        const exportMs = Math.min(this.recording.durationMs, now - exportStart);
+        renderRecordingFrame(exportCanvas, this.recording, this.getFrameAt(exportMs));
+        if (now - lastProgressAt > 200) {
+          const progress = Math.min(99, Math.floor(exportMs / Math.max(1, this.recording.durationMs) * 100));
+          this.exportButton.textContent = `Criando vídeo ${progress}%`;
+          this.exportButton.style.setProperty('--export-progress', `${progress}%`);
+          lastProgressAt = now;
+        }
+        if (exportMs < this.recording.durationMs) requestAnimationFrame(renderExport);
+        else {
+          this.exportButton.textContent = 'Finalizando 100%';
+          this.exportButton.style.setProperty('--export-progress', '100%');
+          recorder.stop();
+        }
+      };
+      requestAnimationFrame(renderExport);
+      await finished;
+      if (!chunks.length) throw new Error('O navegador não gerou dados para o vídeo.');
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Kicker-Hax-${this.match?.matchId || Date.now()}.${extension}`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast(extension === 'mp4' ? 'MP4 criado com sucesso!' : 'MP4 indisponível; vídeo salvo em WebM.', 'success');
+    } catch (error) {
+      console.error('[Recording] Falha ao exportar vídeo:', error);
+      showToast(error?.message || 'Não foi possível criar o vídeo.', 'error');
+    } finally {
+      stream.getTracks().forEach(track => track.stop());
+      this.exportButton.disabled = false;
+      this.exportButton.classList.remove('is-exporting');
+      this.exportButton.style.removeProperty('--export-progress');
+      this.exportButton.textContent = extension === 'mp4' ? 'Salvar MP4' : 'Salvar vídeo';
+      this.render();
+    }
   }
 }

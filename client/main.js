@@ -12,6 +12,7 @@ import { soundFx } from './utils/soundFx.js';
 import { requestAppDownload, notifyNativeUpdate } from './utils/nativeBridge.js';
 import { setupCharacterLimitWarnings } from './utils/contentLimitWarnings.js';
 import { installLowLatencyDataChannelPatch } from './utils/webrtcLowLatency.js';
+import { decorateReleaseTimeline } from './data/releaseTimeline.js';
 
 // Install before the first PeerJS connection is created. Control messages keep
 // ordered delivery; only replaceable realtime state/input packets can expire.
@@ -19,7 +20,7 @@ installLowLatencyDataChannelPatch();
 
 // Vite replaces the build constant in production. The fallback keeps the
 // local development server usable when it serves the source module directly.
-const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '48.0.0';
+const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '50.0.0';
 const DISPLAY_VERSION = APP_VERSION.split('.').length > 2
   ? APP_VERSION.replace(/\.0$/, '')
   : APP_VERSION;
@@ -29,6 +30,8 @@ let fullscreenEscapeHoldTimer = null;
 // Setup full SPA lifecycle
 function initApp() {
   console.log('[Kicker Hax SPA] Inicializando...');
+  const nativeRuntime = new URLSearchParams(window.location.search).get('app') === '1';
+  document.documentElement.classList.toggle('native-app', nativeRuntime);
   setupAppRuntimeOptimizations();
   setupMandatoryUpdateCheck();
   setupDesktopFullscreenLock();
@@ -46,7 +49,7 @@ function initApp() {
     const fsBtn2 = document.getElementById('settings-btn-fullscreen');
     if (fsBtn2) fsBtn2.style.display = 'none';
   }
-  if (new URLSearchParams(window.location.search).get('app') === '1') {
+  if (nativeRuntime) {
     // Native updates are handled by the Android shell; remove this web CTA
     // completely so stale CSS cannot make it visible in the app.
     document.getElementById('menu-btn-download-app')?.remove();
@@ -82,6 +85,7 @@ function initApp() {
     };
   }
   setupReleaseNotesOnce(changelogModal);
+  decorateReleaseTimeline();
 
   // 2) Initialize individual screen controllers
   authController.init();

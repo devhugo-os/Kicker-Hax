@@ -2,6 +2,7 @@
 import { router } from '../router.js';
 import { firebaseService } from '../services/firebaseService.js';
 import { socketService } from '../services/socketService.js';
+import { competitiveDeviceService } from '../services/competitiveDeviceService.js';
 import { DEFAULT_MOBILE_HUD, settingsController } from './settingsController.js';
 import { menuController } from './menuController.js';
 import { soundFx } from '../utils/soundFx.js';
@@ -52,6 +53,7 @@ export const gameController = {
   lastOnlineActionInput: {},
   localActionSoundUntil: {},
   lastMatchReadySentAt: 0,
+  competitiveDeviceListenerBound: false,
 
   // Render & Physics Loop
   canvas: null,
@@ -87,6 +89,18 @@ export const gameController = {
 
   async init(user) {
     this.currentUser = user;
+    if (!this.competitiveDeviceListenerBound) {
+      this.competitiveDeviceListenerBound = true;
+      window.addEventListener('kickerhax:competitive-device-revoked', () => {
+        if (!this.activeRoom?.competitive && !socketService.currentRoomCompetitive) return;
+        socketService.leaveRoom();
+        this.activeRoom = null;
+        this.onlineMatchMeta = null;
+        showToast('O competitivo foi transferido para outra sessão deste aparelho.', 'error');
+        router.show('multiplayer-screen');
+        socketService.refreshPublicRooms();
+      });
+    }
     this.canvas = document.getElementById('match-canvas');
     if (this.canvas) {
       this.ctx = this.canvas.getContext('2d', { alpha: false });
@@ -673,6 +687,7 @@ export const gameController = {
         if (pass.length > C.ROOM_PASSWORD_MAX_LENGTH) return showToast(`A senha pode ter no máximo ${C.ROOM_PASSWORD_MAX_LENGTH} caracteres.`, 'error');
         const competitiveInput = document.getElementById('room-competitive-input');
         const competitive = !!competitiveInput?.checked && !pass;
+        if (competitive && !await this.ensureCompetitiveDeviceAccess()) return;
         const max = document.getElementById('room-max-players').value;
         const duration = competitive ? '5' : document.getElementById('room-duration').value;
         const goals = competitive ? '0' : document.getElementById('room-goals').value;
@@ -751,6 +766,9 @@ export const gameController = {
           staffRole: menuController.profileData.staffRole || ''
         };
 
+        const roomMeta = await socketService.getPublicRoomMeta(code).catch(() => null);
+        if (!roomMeta) return showToast('A sala não existe mais ou o host está desconectado.', 'error');
+        if (roomMeta.competitive && !await this.ensureCompetitiveDeviceAccess()) return;
         this.registerJoinResult(
           (joinData) => {
             const room = joinData?.lobbyInfo;
@@ -4228,6 +4246,29 @@ export const gameController = {
     socket.on('joinError', errorHandler);
   },
 
+  async ensureCompetitiveDeviceAccess() {
+    const username = menuController.profileData?.username || 'Jogador';
+    let result;
+    try {
+      result = await competitiveDeviceService.claim(username);
+    } catch (error) {
+      showToast(error?.message || 'Não foi possível validar este aparelho.', 'error');
+      return false;
+    }
+    if (result.accepted) return true;
+    const useHere = await confirmDialog({
+      title: 'Competitivo já aberto neste aparelho',
+      message: `${result.conflict?.username || 'Outro jogador'} está usando o competitivo neste computador ou celular. Deseja jogar nesta sessão e bloquear a outra?`,
+      confirmLabel: 'Jogar nesta sessão',
+      cancelLabel: 'Manter a outra',
+      danger: true
+    });
+    if (!useHere) return false;
+    const takeover = await competitiveDeviceService.claim(username, true).catch(() => ({ accepted: false }));
+    if (!takeover.accepted) showToast('Não foi possível transferir o competitivo para esta sessão.', 'error');
+    return takeover.accepted;
+  },
+
   async blockMatchmakingWhileReserved() {
     const uid = this.currentUser?.uid;
     if (!uid) return false;
@@ -4477,6 +4518,12 @@ export const gameController = {
   async joinRoomWithCode(code, password) {
     if (await this.blockMatchmakingWhileReserved()) return;
     if (this.joiningRoomCode) return;
+    const roomMeta = await socketService.getPublicRoomMeta(code).catch(() => null);
+    if (!roomMeta) {
+      socketService.refreshPublicRooms();
+      return showToast('A sala não existe mais ou o host está desconectado.', 'error');
+    }
+    if (roomMeta.competitive && !await this.ensureCompetitiveDeviceAccess()) return;
     this.joiningRoomCode = String(code || '').toUpperCase();
     this.renderRoomsList(this.latestRooms || []);
     const profile = {

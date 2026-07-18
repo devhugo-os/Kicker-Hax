@@ -69,8 +69,8 @@ const db = getFirestore(app);
 const rtdb = getDatabase(app);
 // A visible data reset for the 9.7 season. Old documents are intentionally
 // retained in Firebase for audit safety, but no longer affect game UI/ranking.
-export const CURRENT_SEASON_ID = '21.0';
-export const CURRENT_COSMETIC_RESET_ID = '21.0';
+export const CURRENT_SEASON_ID = '50.0';
+export const CURRENT_COSMETIC_RESET_ID = '50.0';
 const normalizeCosmetics = profile => profile?.cosmeticResetId === CURRENT_COSMETIC_RESET_ID
   ? profile
   : { ...profile, ownedSkins: ['rookie'], equippedSkinId: 'rookie', equippedSkinImage: null };
@@ -85,7 +85,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '48.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '50.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -859,8 +859,8 @@ export const firebaseService = {
           xp: seasonActive ? (userData.xp || 0) : 0,
           // Wallet balance belongs to the user document and remains rankable
           // even if competitive statistics are waiting for season migration.
-          coins: Number(userData.coins || 0),
-          skinCount: Array.isArray(userData.ownedSkins)
+          coins: seasonActive ? Number(userData.coins || 0) : 0,
+          skinCount: seasonActive && userData.cosmeticResetId === CURRENT_COSMETIC_RESET_ID && Array.isArray(userData.ownedSkins)
             ? new Set(userData.ownedSkins.filter(id => id !== 'rookie')).size
             : 0
         };

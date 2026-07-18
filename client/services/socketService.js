@@ -16,6 +16,8 @@ import {
   sanitizeMultiplayerProfile
 } from '../../shared/multiplayerPayload.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
+import { competitiveDeviceService } from './competitiveDeviceService.js';
+import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
 
 // Prefer direct WebRTC routes, including local-network candidates, and keep a
 // small ICE pool ready so joining a room does not stall the first inputs.
@@ -61,6 +63,7 @@ class P2PSocketService {
     this.isHost = false;
     this.roomCode = null;
     this.roomInstanceId = null;
+    this.currentRoomCompetitive = false;
     this.presenceBound = false;
     
     // Peer connections
@@ -74,6 +77,7 @@ class P2PSocketService {
     // Host Room state (only instantiated if host)
     this.serverRoom = null;
     this.roomHeartbeatInterval = null;
+    this.roomHeartbeatTicker = null;
     this.hostRoomPresenceUnsub = null;
     this.hostRoomDisconnect = null;
     this.roomChatUnsub = null;
@@ -212,9 +216,9 @@ class P2PSocketService {
       && typeof room.hostUsername === 'string' && room.hostUsername.length > 0
       && room.hostPresent === true
       && Number.isInteger(Number(room.maxPlayers)) && Number(room.maxPlayers) >= 2
-      && Number.isFinite(Number(room.playersCount)) && Number(room.playersCount) >= 0
+      && Number.isFinite(Number(room.playersCount)) && Number(room.playersCount) >= 1
       && ['lobby', 'playing'].includes(room.status)
-      && heartbeat > 0 && now - heartbeat < 15000;
+      && heartbeat > 0 && now - heartbeat < 11000;
   }
 
   hasLiveHostConnection() {
@@ -445,6 +449,7 @@ class P2PSocketService {
         competitive: isCompetitive,
         hostUsername: hostProfile.username || 'Host'
       });
+      this.currentRoomCompetitive = isCompetitive;
       
       this.serverRoom.addPlayer(this.clientId, sanitizeMultiplayerProfile(hostProfile), 'spectator');
 
@@ -546,7 +551,6 @@ class P2PSocketService {
           this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
         }
       });
-      
       conn.on('close', () => {
         if (this.controlConnections.get(conn.peer) !== conn) return;
         this.controlConnections.delete(conn.peer);
@@ -639,6 +643,7 @@ class P2PSocketService {
         return;
       }
       this.roomInstanceId = roomData.instanceId || '';
+      this.currentRoomCompetitive = !!roomData.competitive;
       if (roomData.status !== 'lobby' && !rejoin) {
         finishJoinOperation();
         this.roomOperation = null;
@@ -859,7 +864,8 @@ class P2PSocketService {
     // The original timestamp is created when the match starts. Refresh it at
     // the actual disconnect so a late competitive dropout still receives the
     // full reconnect window in the arena list.
-    if (!this.isHost && this.roomCode && this.activeMatchId && auth.currentUser?.uid) {
+    const preserveCompetitiveLease = !this.isHost && this.roomCode && this.activeMatchId && auth.currentUser?.uid;
+    if (preserveCompetitiveLease) {
       localStorage.setItem(`kicker_hax_rejoin_${auth.currentUser.uid}`, JSON.stringify({
         code: this.roomCode,
         matchId: this.activeMatchId,
@@ -867,12 +873,17 @@ class P2PSocketService {
       }));
     }
     this.isLeavingRoom = true;
+    if (!preserveCompetitiveLease && (this.serverRoom?.competitive || this.currentRoomCompetitive)) {
+      competitiveDeviceService.release().catch(() => {});
+    }
     if (this.isHost && this.roomCode) {
       this.stopHostRoomPresence();
       if (this.roomHeartbeatInterval) {
         clearInterval(this.roomHeartbeatInterval);
         this.roomHeartbeatInterval = null;
       }
+      this.roomHeartbeatTicker?.stop();
+      this.roomHeartbeatTicker = null;
       // Remove from matchmaking index
       const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
       this.cleanupRoomData(this.roomCode);
@@ -918,6 +929,7 @@ class P2PSocketService {
     this.isHost = false;
     this.roomCode = null;
     this.roomInstanceId = null;
+    this.currentRoomCompetitive = false;
     this.hostDepartureReported = false;
     this.roomOperation = null;
     this.activeMatchId = null;
@@ -1177,6 +1189,9 @@ class P2PSocketService {
         // Rebinding the authoritative player proves the return. Clear the old
         // countdown now so it cannot expire after the player is already back.
         this.serverRoom.match.resumeAfterReconnect(reconnecting.player.uid);
+        // Do not let the silent-disconnect watchdog eject a player while the
+        // new realtime channel is still negotiating after an accepted return.
+        this.serverRoom.match.touchPlayer(socketId);
         // Prove the physical player was rebound without resuming the match.
         // The client resumes only after its view and fast state channel are up.
         if (conn?.open) this.sendControlEvent(conn, 'gameState', this.serverRoom.match.getCurrentState());
@@ -1819,10 +1834,10 @@ class P2PSocketService {
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;
-    // Direction changes stay capped at 30 Hz and button edges bypass the cap.
-    // An unchanged held direction only needs a 10 Hz heartbeat because the
+    // Direction changes stay capped at 50 Hz and button edges bypass the cap.
+    // An unchanged held direction only needs a 12.5 Hz heartbeat because the
     // authoritative simulation keeps the last input, cutting guest uplink load.
-    const minimumInterval = movementChanged ? 33 : 100;
+    const minimumInterval = movementChanged ? 20 : 80;
     if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;
@@ -2013,7 +2028,8 @@ class P2PSocketService {
 
   startRoomHeartbeat() {
     if (this.roomHeartbeatInterval) clearInterval(this.roomHeartbeatInterval);
-    this.roomHeartbeatInterval = setInterval(() => {
+    this.roomHeartbeatTicker?.stop();
+    this.roomHeartbeatTicker = createRealtimeTicker(() => {
       if (!this.isHost || !this.roomCode) return;
       const roomStatus = this.serverRoom?.status || 'lobby';
       const liveLobbyPlayers = this.serverRoom?.players?.filter(player => player.status === 'lobby').length || 0;
@@ -2024,7 +2040,7 @@ class P2PSocketService {
         hostHeartbeatAt: Date.now(),
         updatedAt: Date.now()
       }).catch(() => {});
-    }, 5000);
+    }, 3000);
   }
 
   /** Keeps matchmaking visibility tied to the actual RTDB host connection. */
@@ -2087,7 +2103,7 @@ class P2PSocketService {
     });
     this.hostLeaseWatchInterval = setInterval(() => {
       if (this.isHost || !this.roomCode) return;
-      if (Date.now() - this.lastHostHeartbeatAt > 15000) {
+      if (Date.now() - this.lastHostHeartbeatAt > 12000) {
         this.reportHostDeparture('O host perdeu a conexão. A partida foi encerrada.');
       }
     }, 3000);
