@@ -2335,7 +2335,7 @@ export const gameController = {
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
         recordingId,
-        recordingVersion: recordingId ? 6 : null
+        recordingVersion: recordingId ? 7 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2600,7 +2600,7 @@ export const gameController = {
           if (this.status !== 'replay' || this.inReplay || !this.onlineReplayBuffer?.length) return;
           const frameMs = (1000 / 30) * C.REPLAY_SLOWMO_FACTOR;
           const replayStartAt = this.phaseEndsAt
-            ? this.phaseEndsAt - (this.onlineReplayBuffer.length * frameMs)
+            ? this.phaseEndsAt - (this.onlineReplayBuffer.length * frameMs) - C.REPLAY_POST_GOAL_FREEZE_MS
             : 0;
           this.beginOnlineReplay(this.onlineReplayBuffer, this.lastGoal, frameMs, replayStartAt);
         }, C.REPLAY_SYNC_LEAD_MS + 150);

@@ -8,6 +8,33 @@ const OMITTED_REALTIME_FIELDS = new Set([
   'inventory'
 ]);
 
+// High-frequency snapshots repeat these names for every player. They are
+// shortened only on the raw DataChannel and expanded before controllers see
+// the packet, keeping the game model readable while cutting uplink traffic.
+const REALTIME_KEYS = Object.freeze({
+  sequence: 'q', transportSequence: 'Q', serverSentAt: 'a', ball: 'b', players: 'p',
+  score: 's', matchTime: 'm', status: 'S', countdown: 'c', phaseEndsAt: 'e',
+  goalInfo: 'g', soundEffects: 'f', isHostPaused: 'h', id: 'i', uid: 'u', team: 't',
+  vx: 'X', vy: 'Y', dir: 'D', stamina: 'n', staminaLock: 'N', stun: 'z',
+  shootHalo: 'o', kickCharge: 'k', invuln: 'v', tackle_cd: 'l', dribble_cd: 'r',
+  power_cd: 'w', matchStats: 'M', badge: 'B', name: 'A', skinId: 'K', staffRole: 'R',
+  owner: 'O', lastTouch: 'L', lastStrikeType: 'T', strikeTimer: 'I', red: '0', blue: '1',
+  shoot: 'j', sprint: 'P', dribble: 'd', tackle: 'C', power: 'W', mobileTackleAssist: 'U',
+  sentAt: 'E', serverTime: 'V'
+});
+const EXPANDED_REALTIME_KEYS = Object.freeze(Object.fromEntries(
+  Object.entries(REALTIME_KEYS).map(([key, value]) => [value, key])
+));
+
+function transformKeys(value, dictionary) {
+  if (Array.isArray(value)) return value.map(item => transformKeys(item, dictionary));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    dictionary[key] || key,
+    transformKeys(item, dictionary)
+  ]));
+}
+
 export function isRealtimeEvent(event) {
   return event === 'gameState' || event === 'gameInput';
 }
@@ -29,7 +56,8 @@ export function shouldDropRealtimeState(event, bufferedAmount = 0) {
  * boundary strips profile images or accidental large strings from snapshots.
  */
 export function encodeRealtimePacket(event, data) {
-  return JSON.stringify({ event, data }, (key, value) => {
+  const compactData = transformKeys(data, REALTIME_KEYS);
+  return JSON.stringify({ e: event, d: compactData }, (key, value) => {
     if (OMITTED_REALTIME_FIELDS.has(key)) return undefined;
     if (typeof value === 'number' && Number.isFinite(value) && !Number.isInteger(value)) {
       return Math.round(value * 1000) / 1000;
@@ -43,7 +71,9 @@ export function encodeRealtimePacket(event, data) {
 export function decodeRealtimePacket(payload) {
   if (typeof payload !== 'string') return payload;
   try {
-    return JSON.parse(payload);
+    const packet = JSON.parse(payload);
+    if (!packet?.e) return packet;
+    return { event: packet.e, data: transformKeys(packet.d, EXPANDED_REALTIME_KEYS) };
   } catch {
     return null;
   }

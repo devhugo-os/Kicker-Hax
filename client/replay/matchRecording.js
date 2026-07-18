@@ -1,4 +1,4 @@
-const SAMPLE_INTERVAL_MS = 100;
+const SAMPLE_INTERVAL_MS = 50;
 const REPORT_INTERVAL_MS = 1000;
 export const MAX_RECORDING_BASE64_LENGTH = 850_000;
 const RECORDABLE_STATUSES = new Set(['loading', 'playing', 'countdown', 'freeze']);
@@ -90,6 +90,7 @@ export class MatchRecordingSession {
     this.virtualTimeMs = 0;
     this.freezeKey = '';
     this.freezeRecordedMs = 0;
+    this.lastStatus = '';
     this.active = true;
     players.forEach(player => this.ensurePlayer({
       ...player,
@@ -152,11 +153,13 @@ export class MatchRecordingSession {
     this.captureGoalMarker(state.goalInfo, state.score);
     this.captureImportantMarker(state);
     this.captureSoundMarkers(state.soundEffects);
-    if (this.lastCapturedAt && now - this.lastCapturedAt < SAMPLE_INTERVAL_MS) return;
+    const statusChanged = this.lastStatus && this.lastStatus !== state.status;
+    if (!statusChanged && this.lastCapturedAt && now - this.lastCapturedAt < SAMPLE_INTERVAL_MS) return;
     let elapsedMs = this.frames.length
       ? Math.max(16, Math.min(1000, now - this.lastCapturedAt))
       : 0;
     this.lastCapturedAt = now;
+    this.lastStatus = state.status;
     if (state.status === 'freeze') {
       const freezeKey = `${state.score?.red || 0}:${state.score?.blue || 0}`;
       if (freezeKey !== this.freezeKey) {
@@ -264,7 +267,7 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 6,
+      v: 7,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs),
@@ -292,7 +295,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 6,
+      recordingVersion: 7,
       competitive: true,
       createdAt: new Date().toISOString()
     };
@@ -352,7 +355,10 @@ export async function decodeMatchRecording(documentData) {
 
 export function interpolateRecordingFrame(first, second, ratio) {
   if (!first || !second || ratio <= 0) return first;
-  if (first.status !== second.status) return first;
+  // The transition into the scored freeze is continuous: the ball still has
+  // to travel into the net. Other phase changes intentionally teleport to a
+  // kickoff/loading position and must not be blended.
+  if (first.status !== second.status && second.status !== 'freeze') return first;
   const mix = (a, b) => Number(a || 0) + (Number(b || 0) - Number(a || 0)) * ratio;
   const nextByIndex = new Map(second.players.map(player => [player.index, player]));
   return {

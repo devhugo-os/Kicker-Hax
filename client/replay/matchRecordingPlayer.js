@@ -48,6 +48,7 @@ export class MatchRecordingPlayer {
   bind() {
     this.playButton?.addEventListener('click', () => this.toggle());
     this.timeline?.addEventListener('input', () => {
+      soundFx.stopCrowd();
       this.currentMs = Number(this.timeline.value || 0);
       // Seeking must not reuse the elapsed time from before the pointer move.
       // Otherwise 0.5x appears to jump at normal speed on the next frame.
@@ -62,6 +63,13 @@ export class MatchRecordingPlayer {
     });
     this.exportButton?.addEventListener('click', () => this.exportVideo());
     this.root?.querySelector('#recording-close')?.addEventListener('click', () => this.close());
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden || !this.playing) return;
+      this.playing = false;
+      cancelAnimationFrame(this.raf);
+      soundFx.stopCrowd();
+      if (this.playButton) this.playButton.textContent = 'â–¶';
+    });
   }
 
   async open(documentData, match = {}) {
@@ -122,6 +130,9 @@ export class MatchRecordingPlayer {
   close() {
     this.playing = false;
     cancelAnimationFrame(this.raf);
+    // A recording goal can raise the shared crowd bed. Stop it immediately
+    // when the player closes so no recording audio leaks into other screens.
+    soundFx.stopCrowd();
     if (this.playButton) this.playButton.textContent = '▶';
     this.root?.classList.add('hidden');
   }
@@ -130,6 +141,7 @@ export class MatchRecordingPlayer {
     if (!this.recording) return;
     if (this.currentMs >= this.recording.durationMs) this.currentMs = 0;
     this.playing = !this.playing;
+    if (!this.playing) soundFx.stopCrowd();
     this.playButton.textContent = this.playing ? '⏸' : '▶';
     this.lastTick = performance.now();
     if (this.playing) this.raf = requestAnimationFrame(time => this.tick(time));
@@ -145,6 +157,7 @@ export class MatchRecordingPlayer {
     if (this.currentMs >= this.recording.durationMs) {
       this.currentMs = this.recording.durationMs;
       this.playing = false;
+      soundFx.stopCrowd();
       this.playButton.textContent = '▶';
     }
     this.render();

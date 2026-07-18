@@ -56,14 +56,15 @@ export const POWER_KICK_CD = 60;
 
 export const GOAL_FREEZE_FRAMES = 180;
 export const END_FREEZE_FRAMES = 180;
-// Six complete seconds before the goal are retained in every game mode.
-export const REPLAY_CAPTURE_FRAMES = 360;
+// Keep only the final three seconds before the goal. The scored frame is held
+// separately for two seconds after playback, so replays stay short and clear.
+export const REPLAY_CAPTURE_FRAMES = 180;
 // Playback runs at half speed. Clients interpolate captured snapshots at the
 // display refresh rate instead of visibly repeating each frame.
 export const REPLAY_SLOWMO_FACTOR = 2;
 // Gives chunked control packets enough time to reach slower mobile peers while
 // every client still starts from the same authoritative wall-clock instant.
-export const REPLAY_SYNC_LEAD_MS = 1200;
+export const REPLAY_SYNC_LEAD_MS = 450;
 // Hold the scored frame after playback. This is part of the synchronized
 // replay phase, but power-kick camera shake is disabled during the hold.
 export const REPLAY_POST_GOAL_FREEZE_MS = 2000;
