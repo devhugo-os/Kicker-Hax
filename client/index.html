@@ -1031,7 +1031,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v47.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v48.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1048,7 +1048,7 @@
           <section><h3>HUD e controles no celular</h3><p>Abra <strong>Controles &gt; Editar HUD na partida</strong>. Um treino de configuração será aberto: arraste o analógico e todos os botões até a posição desejada; toque no lápis de cada controle para ajustar tamanho e opacidade. Use <strong>Confirmar HUD</strong> na parte inferior para salvar no perfil ou <strong>Restaurar padrões</strong> para recuperar o layout inicial.</p></section>
           <section><h3>Posse e chute</h3><p>Encoste na bola para dominá-la. Somente o jogador que está com a posse pode chutar, carregar o chute, driblar ou executar o super chute. Segure o comando de chute para aumentar a força e solte para finalizar; a seta mostra a direção antes do disparo. O super chute consome mais stamina, possui recarga e gera um disparo muito mais veloz.</p></section>
           <section><h3>Movimentação e habilidades</h3><p>Sprint aumenta a velocidade enquanto consome stamina. Drible exige posse, avança o jogador e concede uma proteção curta contra desarmes. O desarme executa um avanço: ele precisa concluir o contato com o portador da bola para funcionar. No celular, a assistência de desarme direciona esse avanço para a bola; computadores e tablets não recebem essa ajuda.</p></section>
-          <section><h3>Chat, pausa e estatísticas</h3><p>Em partidas no computador, pressione Enter para entrar ou sair da digitação do chat e segure Tab para abrir o relatório completo ao vivo. No celular, use os botões de chat e estatísticas do HUD; dentro da caixa de estatísticas, toque em <strong>Relatório completo</strong>. Pausa, chat e estatísticas podem ser reposicionados no editor mobile. Somente partidas competitivas alimentam o ranking permanente.</p></section>
+          <section><h3>Chat, pausa e estatísticas</h3><p>Em partidas no computador, pressione Enter para entrar ou sair da digitação do chat e toque em Tab para alternar o relatório completo ao vivo. No celular, use os botões de chat e estatísticas do HUD; dentro da caixa de estatísticas, toque em <strong>Relatório completo</strong>. Pausa, chat e estatísticas podem ser reposicionados no editor mobile. Somente partidas competitivas alimentam o ranking permanente.</p></section>
           <section><h3>Treino Livre</h3><p>Tempo e gols são ilimitados. Serve para praticar movimentação, chute, drible e desarme. Não concede XP, KX Coins, estatísticas, ranking ou histórico.</p></section>
           <section><h3>Jogar Sozinho</h3><p>Partida local contra CPU com dificuldade configurável. Replay é obrigatório após gols. Partidas com bot não concedem XP, KX Coins, estatísticas, ranking ou histórico online.</p></section>
           <section><h3>Multiplayer Casual</h3><p>O host organiza os times e pode usar o painel administrativo. Todos precisam estar prontos antes do início. Concede XP e entra no histórico casual, mas não altera estatísticas competitivas, ranking ou KX Coins.</p></section>
@@ -1074,6 +1074,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v48.0 - Presen&ccedil;a em Campo</h4>
+            <p>Salas agora existem somente enquanto o host mant&eacute;m presen&ccedil;a ativa no Realtime Database; registros vazios e retornos vencidos somem imediatamente da Arena. O retorno encerra a espera assim que o jogador volta ao estado autoritativo, o bot&atilde;o Entrar n&atilde;o pisca nem aceita cliques duplicados e um lobby fechado leva todos &agrave; Arena. Tab alterna o relat&oacute;rio ao vivo. Grava&ccedil;&otilde;es reproduzem espera, contagens, pausas e motivo do encerramento, com velocidades de 0,1x a 8x e exporta&ccedil;&atilde;o sempre normal. O canal r&aacute;pido ganhou fila menor para conter picos de lat&ecirc;ncia.</p>
+          </section>
           <section>
             <h4>v47.0 - Jogo sem Fila</h4>
             <p>O replay foi reduzido aos tr&ecirc;s segundos decisivos antes do gol e mant&eacute;m dois segundos congelados depois da bola entrar. O retorno &agrave; partida agora confirma aceita&ccedil;&atilde;o, jogador restaurado e canal r&aacute;pido antes de liberar o campo. Snapshots usam pacotes compactos e uma &uacute;nica serializa&ccedil;&atilde;o por quadro para reduzir upload, filas e teletransportes em conex&otilde;es distantes. Grava&ccedil;&otilde;es ficaram mais suaves no gol, silenciam ao pausar ou fechar e demos antigas incompat&iacute;veis foram removidas. Salas encerradas deixam de reaparecer por uma reserva local vencida.</p>

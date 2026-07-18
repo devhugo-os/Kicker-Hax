@@ -1,4 +1,4 @@
-export const MAX_REALTIME_BUFFERED_BYTES = 12 * 1024;
+export const MAX_REALTIME_BUFFERED_BYTES = 6 * 1024;
 export const MAX_REALTIME_TEXT_LENGTH = 255;
 
 const OMITTED_REALTIME_FIELDS = new Set([
@@ -60,7 +60,7 @@ export function encodeRealtimePacket(event, data) {
   return JSON.stringify({ e: event, d: compactData }, (key, value) => {
     if (OMITTED_REALTIME_FIELDS.has(key)) return undefined;
     if (typeof value === 'number' && Number.isFinite(value) && !Number.isInteger(value)) {
-      return Math.round(value * 1000) / 1000;
+      return Math.round(value * 100) / 100;
     }
     if (typeof value !== 'string') return value;
     if (value.startsWith('data:image/')) return 'custom';

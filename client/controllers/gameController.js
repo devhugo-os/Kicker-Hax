@@ -111,7 +111,10 @@ export const gameController = {
       if (router.currentScreenId === 'match-screen') {
         if (k === 'tab') {
           e.preventDefault();
-          this.showLiveMatchReport(true);
+          if (!e.repeat) {
+            const modal = document.getElementById('live-match-report-modal');
+            this.showLiveMatchReport(!!modal?.classList.contains('hidden'));
+          }
           return;
         }
         if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'enter'].includes(k)) {
@@ -132,7 +135,6 @@ export const gameController = {
       }
       if (router.currentScreenId === 'match-screen' && k === 'tab') {
         e.preventDefault();
-        this.showLiveMatchReport(false);
       }
     });
 
@@ -2335,7 +2337,7 @@ export const gameController = {
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
         recordingId,
-        recordingVersion: recordingId ? 7 : null
+        recordingVersion: recordingId ? 8 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2778,6 +2780,13 @@ export const gameController = {
         return;
       }
       if (this.onlineMatchFinished) {
+        this.activeRoom = null;
+        this.clearRoomChatViews();
+        if (router.currentScreenId === 'lobby-screen') {
+          socketService.leaveRoom();
+          router.show('multiplayer-screen');
+          socketService.refreshPublicRooms();
+        }
         showToast(msg || 'O host saiu. Seu time recebeu a vitória.', 'info');
         return;
       }
@@ -4210,6 +4219,8 @@ export const gameController = {
       socket.off('joinError', errorHandler);
       if (this.pendingJoinSuccess === successHandler) this.pendingJoinSuccess = null;
       if (this.pendingJoinError === errorHandler) this.pendingJoinError = null;
+      this.joiningRoomCode = null;
+      if (this.latestRooms) this.renderRoomsList(this.latestRooms);
     };
     this.pendingJoinSuccess = successHandler;
     this.pendingJoinError = errorHandler;
@@ -4338,7 +4349,10 @@ export const gameController = {
     const tbody = document.getElementById('rooms-list-body');
     if (!tbody) return;
 
-    rooms = rooms.filter(room => room.status === 'lobby');
+    const authoritativeRooms = (rooms || [])
+      .filter(room => room.status === 'lobby' && !room.rejoinOnly);
+    this.latestRooms = authoritativeRooms.slice();
+    rooms = authoritativeRooms.slice();
     if (this.rejoinRoomMeta && !rooms.some(room => room.code === this.rejoinRoomMeta.code)) {
       rooms.push({ ...this.rejoinRoomMeta, status: 'lobby', rejoinOnly: true });
     }
@@ -4379,7 +4393,16 @@ export const gameController = {
         });
       });
     }
-    this.latestRooms = rooms.slice();
+    // Do not replace the pressed button on every Firebase heartbeat. Replacing
+    // the node while PointerEvent is active caused the visible phantom click.
+    if (this.joiningRoomCode && tbody.dataset.roomsRendered === 'true') {
+      const pending = document.getElementById(`join-btn-${this.joiningRoomCode}`);
+      if (pending) {
+        pending.disabled = true;
+        pending.textContent = 'Conectando...';
+      }
+      return;
+    }
     const nameSearch = String((document.getElementById('room-search-input') || document.querySelector('[data-room-filter="name"]'))?.value || '').trim().toLowerCase();
     rooms = rooms.filter(room => {
       return !nameSearch || String(room.name || '').toLowerCase().includes(nameSearch);
@@ -4406,6 +4429,7 @@ export const gameController = {
     }
 
     tbody.innerHTML = '';
+    tbody.dataset.roomsRendered = 'true';
     rooms.forEach(r => {
       const tr = document.createElement('tr');
       const security = (r.hasPassword || r.password) ?'Senha' : 'Pública';
@@ -4424,7 +4448,11 @@ export const gameController = {
 
       const joinBtn = document.getElementById(`join-btn-${r.code}`);
       if (joinBtn) {
+        const joiningThisRoom = this.joiningRoomCode === r.code;
+        joinBtn.disabled = joiningThisRoom;
+        if (joiningThisRoom) joinBtn.textContent = 'Conectando...';
         joinBtn.onclick = async () => {
+          if (this.joiningRoomCode) return;
           if (r.rejoinOnly) {
             document.getElementById('multi-btn-rejoin-match')?.click();
             return;
@@ -4448,6 +4476,9 @@ export const gameController = {
 
   async joinRoomWithCode(code, password) {
     if (await this.blockMatchmakingWhileReserved()) return;
+    if (this.joiningRoomCode) return;
+    this.joiningRoomCode = String(code || '').toUpperCase();
+    this.renderRoomsList(this.latestRooms || []);
     const profile = {
       uid: this.currentUser.uid,
       username: menuController.profileData.username,

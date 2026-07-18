@@ -74,6 +74,8 @@ class P2PSocketService {
     // Host Room state (only instantiated if host)
     this.serverRoom = null;
     this.roomHeartbeatInterval = null;
+    this.hostRoomPresenceUnsub = null;
+    this.hostRoomDisconnect = null;
     this.roomChatUnsub = null;
     this.roomLifecycleUnsub = null;
     this.hostLeaseWatchInterval = null;
@@ -205,7 +207,10 @@ class P2PSocketService {
       && /^[A-Z0-9]{6}$/.test(String(room.code || ''))
       && typeof room.name === 'string' && room.name.trim().length > 0
       && typeof room.hostPeerId === 'string' && room.hostPeerId.length > 0
+      && typeof room.hostUid === 'string' && room.hostUid.length > 0
+      && typeof room.instanceId === 'string' && room.instanceId.length > 0
       && typeof room.hostUsername === 'string' && room.hostUsername.length > 0
+      && room.hostPresent === true
       && Number.isInteger(Number(room.maxPlayers)) && Number(room.maxPlayers) >= 2
       && Number.isFinite(Number(room.playersCount)) && Number(room.playersCount) >= 0
       && ['lobby', 'playing'].includes(room.status)
@@ -402,8 +407,7 @@ class P2PSocketService {
     const rooms = roomsSnapshot.val() || {};
     const nameTaken = Object.values(rooms).some(room =>
       String(room.name || '').trim().toLowerCase() === normalizedName.toLowerCase() &&
-      room.status === 'lobby' &&
-      Date.now() - (room.updatedAt || 0) < 45000
+      room.status === 'lobby' && this.isActiveRoomRecord(room)
     );
     if (nameTaken) {
       this.roomOperation = null;
@@ -472,13 +476,14 @@ class P2PSocketService {
         hostPeerId: id,
         hostUid: authenticatedUid,
         hostUsername: hostProfile.username || 'Host',
+        hostPresent: true,
         hostHeartbeatAt: now,
         createdAt: now,
         updatedAt: now
       }).then(() => {
         if (this.peer !== peer || this.peerGeneration !== peerGeneration || this.roomCode !== code) return;
-        // A temporary RTDB transport reconnect must not delete a healthy
-        // WebRTC room. Explicit host exit plus the heartbeat reaper own cleanup.
+        // Public discovery follows the host's actual Firebase connection.
+        this.startHostRoomPresence(code);
         this.startRoomHeartbeat();
         this.listenToRoomChat(code);
         this.roomOperation = null;
@@ -625,6 +630,14 @@ class P2PSocketService {
       }
 
       const roomData = snapshot.val();
+      if (!this.isActiveRoomRecord(roomData)) {
+        finishJoinOperation();
+        this.cleanupRoomData(roomCode).catch(() => {});
+        this.roomCode = null;
+        this.roomOperation = null;
+        this.triggerLocalEvent('joinError', 'A sala foi encerrada porque o host nao esta mais conectado.');
+        return;
+      }
       this.roomInstanceId = roomData.instanceId || '';
       if (roomData.status !== 'lobby' && !rejoin) {
         finishJoinOperation();
@@ -855,6 +868,7 @@ class P2PSocketService {
     }
     this.isLeavingRoom = true;
     if (this.isHost && this.roomCode) {
+      this.stopHostRoomPresence();
       if (this.roomHeartbeatInterval) {
         clearInterval(this.roomHeartbeatInterval);
         this.roomHeartbeatInterval = null;
@@ -1160,6 +1174,9 @@ class P2PSocketService {
           this.connections.push(conn);
         }
         this.serverRoom.match.reconnectPlayer(reconnecting.previousId, socketId, reconnecting.player);
+        // Rebinding the authoritative player proves the return. Clear the old
+        // countdown now so it cannot expire after the player is already back.
+        this.serverRoom.match.resumeAfterReconnect(reconnecting.player.uid);
         // Prove the physical player was rebound without resuming the match.
         // The client resumes only after its view and fast state channel are up.
         if (conn?.open) this.sendControlEvent(conn, 'gameState', this.serverRoom.match.getCurrentState());
@@ -2003,10 +2020,44 @@ class P2PSocketService {
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
         playersCount: roomStatus === 'lobby' ? liveLobbyPlayers : (this.serverRoom?.players?.length || 0),
         status: roomStatus,
+        hostPresent: true,
         hostHeartbeatAt: Date.now(),
         updatedAt: Date.now()
       }).catch(() => {});
     }, 5000);
+  }
+
+  /** Keeps matchmaking visibility tied to the actual RTDB host connection. */
+  startHostRoomPresence(roomCode) {
+    this.stopHostRoomPresence();
+    const code = String(roomCode || '').toUpperCase();
+    const roomRef = ref(rtdb, `multiplayerRooms/${code}`);
+    this.hostRoomPresenceUnsub = onValue(ref(rtdb, '.info/connected'), async snapshot => {
+      if (!snapshot.val() || !this.isHost || this.roomCode !== code) return;
+      // Another client may already have reaped the room while this host was
+      // offline. Never recreate a partial room from heartbeat-only fields.
+      const current = await get(roomRef).catch(() => null);
+      if (!current?.exists() || current.val()?.instanceId !== this.roomInstanceId) return;
+      await update(roomRef, {
+        hostPresent: true,
+        hostHeartbeatAt: Date.now(),
+        updatedAt: Date.now()
+      }).catch(() => {});
+      if (!this.isHost || this.roomCode !== code) return;
+      this.hostRoomDisconnect = onDisconnect(roomRef);
+      this.hostRoomDisconnect.update({
+        hostPresent: false,
+        disconnectedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }).catch(() => {});
+    });
+  }
+
+  stopHostRoomPresence() {
+    this.hostRoomPresenceUnsub?.();
+    this.hostRoomPresenceUnsub = null;
+    this.hostRoomDisconnect?.cancel?.().catch(() => {});
+    this.hostRoomDisconnect = null;
   }
 
   async cleanupOrphanRoomChats(roomIndex = null) {
@@ -2028,6 +2079,10 @@ class P2PSocketService {
         return;
       }
       const room = snapshot.val() || {};
+      if (room.hostPresent !== true) {
+        this.reportHostDeparture('O host saiu. A sala foi encerrada.');
+        return;
+      }
       this.lastHostHeartbeatAt = Number(room.hostHeartbeatAt || room.updatedAt || Date.now());
     });
     this.hostLeaseWatchInterval = setInterval(() => {

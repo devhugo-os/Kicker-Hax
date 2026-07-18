@@ -147,7 +147,13 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   drawNetOverlay(ctx, fieldWidth, fieldHeight);
   ctx.restore();
   drawHud(ctx, frame, fieldWidth);
-  if (frame.status === 'countdown' && Number(frame.countdown || 0) > 0) {
+  if (frame.status === 'loading') {
+    ctx.fillStyle = 'rgba(2,6,23,.72)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 32px Outfit, system-ui'; ctx.fillText('Aguardando jogadores...', fieldWidth / 2, fieldHeight * .47);
+    ctx.fillStyle = '#60a5fa'; ctx.font = '800 18px Outfit, system-ui';
+    ctx.fillText('A partida inicia quando todos abrirem o campo', fieldWidth / 2, fieldHeight * .56);
+  } else if (frame.status === 'countdown' && Number(frame.countdown || 0) > 0) {
     ctx.fillStyle = 'rgba(2,6,23,.72)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '900 34px Outfit, system-ui'; ctx.fillText(`Começa em ${Math.ceil(frame.countdown)}...`, fieldWidth / 2, fieldHeight / 2);
@@ -190,5 +196,8 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
     ctx.fillStyle = '#60a5fa';
     ctx.font = '800 22px Outfit, system-ui';
     ctx.fillText(`Placar final: ${frame.score?.red || 0} : ${frame.score?.blue || 0}`, fieldWidth / 2, fieldHeight * .56);
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '700 17px Outfit, system-ui';
+    ctx.fillText(options.endReason === 'wo' ? 'Encerrada por W.O.' : 'Conclusao normal por tempo ou gols', fieldWidth / 2, fieldHeight * .61);
   }
 }

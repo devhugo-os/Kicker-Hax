@@ -8,7 +8,7 @@ import firebaseService from '../services/firebaseService.js';
 import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { soundFx } from '../utils/soundFx.js';
 
-const SPEEDS = [0.25, 0.5, 0.75, 1];
+const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -57,7 +57,7 @@ export class MatchRecordingPlayer {
       this.render();
     });
     this.speedSelect?.addEventListener('change', () => {
-      this.playbackRate = Math.max(.25, Number(this.speedSelect.value) || 1);
+      this.playbackRate = Math.max(.1, Math.min(8, Number(this.speedSelect.value) || 1));
       this.lastTick = performance.now();
       this.render();
     });
@@ -212,7 +212,8 @@ export class MatchRecordingPlayer {
         && frame?.status === 'playing'
         && frame.ball?.lastStrikeType === 'power'
         && Number(frame.ball?.strikeTimer || 0) > 0,
-      ended
+      ended,
+      endReason: this.recording.endReason || (this.match?.forfeit ? 'wo' : 'normal')
     });
     this.timeline.value = String(Math.min(this.currentMs, this.recording.durationMs || 0));
     this.timeLabel.textContent = `${formatTime(this.currentMs)} / ${formatTime(this.recording.durationMs)}`;
@@ -223,7 +224,7 @@ export class MatchRecordingPlayer {
       if (ended) {
         const title = document.createElement('h3');
         title.className = 'recording-final-title';
-        title.textContent = 'Fim da partida';
+        title.textContent = `Fim da partida - ${this.recording.endReason === 'wo' || this.match?.forfeit ? 'W.O.' : 'conclusao normal'}`;
         this.report.prepend(title);
       }
     }

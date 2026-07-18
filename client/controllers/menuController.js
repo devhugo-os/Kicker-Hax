@@ -751,7 +751,7 @@ export const menuController = {
     renderMatchReport(report, match);
     this.selectedMatchDetails = match;
     const hasCompatibleRecording = !!(match.competitive || match.category === 'competitive')
-      && Number(match.recordingVersion || 0) >= 7
+      && Number(match.recordingVersion || 0) >= 8
       && !!match.recordingId;
     document.getElementById('match-recording-open')?.classList.toggle('hidden', !hasCompatibleRecording);
     modal.classList.remove('hidden');

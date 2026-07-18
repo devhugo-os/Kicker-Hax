@@ -186,10 +186,13 @@ export class MatchRecordingSession {
           showActionEffects ? Number(player.stun || 0) : 0]
       ];
     }).filter(player => player[0] >= 0);
-    const paused = !!state.isHostPaused || !!state.isDisconnectPaused || state.status === 'loading';
+    const paused = !!state.isHostPaused || !!state.isDisconnectPaused;
+    const pauseMessage = state.isDisconnectPaused
+      ? `${state.disconnectedPlayerName || 'Jogador'} ${state.isDisconnectVoting ? 'nao voltou. Decidam se o time continua' : 'saiu. Aguardando retorno'}`
+      : (state.isHostPaused ? 'Partida pausada pelo host' : '');
     const frame = [
       this.virtualTimeMs,
-      paused ? 2 : (state.status === 'countdown' ? 1 : (state.status === 'freeze' ? 3 : 0)),
+      state.status === 'loading' ? 4 : (paused ? 2 : (state.status === 'countdown' ? 1 : (state.status === 'freeze' ? 3 : 0))),
       Number(state.score?.red || 0),
       Number(state.score?.blue || 0),
       q(state.ball.x),
@@ -201,7 +204,7 @@ export class MatchRecordingSession {
       Number(state.countdown || 0),
       state.status === 'playing' && state.ball.lastStrikeType === 'power' ? 1 : 0,
       state.status === 'playing' ? Number(state.ball.strikeTimer || 0) : 0,
-      paused ? String(state.disconnectedPlayerName || (state.isHostPaused ? 'Partida pausada pelo host' : 'Aguardando jogadores')) : '',
+      pauseMessage,
       Number(state.disconnectPauseRemaining || 0),
       state.isDisconnectVoting ? 1 : 0,
       state.goalInfo
@@ -267,14 +270,15 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 7,
+      v: 8,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs),
       players: this.players,
       frames: this.frames,
       reports: this.reports,
-      markers: this.markers
+      markers: this.markers,
+      endReason: result?.forfeit ? 'wo' : 'normal'
     };
     let payload = await compressText(JSON.stringify(base));
     let stride = 1;
@@ -295,7 +299,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 7,
+      recordingVersion: 8,
       competitive: true,
       createdAt: new Date().toISOString()
     };
@@ -309,7 +313,7 @@ export async function decodeMatchRecording(documentData) {
     ...compact,
     frames: (compact.frames || []).map(frame => ({
       timeMs: frame[0],
-      status: frame[1] === 3 ? 'freeze' : (frame[1] === 2 ? 'paused' : (frame[1] === 1 ? 'countdown' : 'playing')),
+      status: frame[1] === 4 ? 'loading' : (frame[1] === 3 ? 'freeze' : (frame[1] === 2 ? 'paused' : (frame[1] === 1 ? 'countdown' : 'playing'))),
       score: { red: frame[2], blue: frame[3] },
       ball: {
         x: uq(frame[4]), y: uq(frame[5]), vx: uq(frame[6]), vy: uq(frame[7]),
