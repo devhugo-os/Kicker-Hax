@@ -10,9 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-DItWDiyG.js"></script>
+  <script type="module" crossorigin src="./assets/index-DHSukJEq.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-ge5jg6nm.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-CS9JY33t.js">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-BCGQVuBP.js">
   <link rel="stylesheet" crossorigin href="./assets/index-Bsmfz4xV.css">
 </head>
 <body>
@@ -1032,7 +1032,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v46.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v47.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1060,7 +1060,7 @@
           <section><h3>Resultado e histórico detalhado</h3><p>Ao terminar uma partida, o relatório mostra participantes, nota individual, gols, assistências, chutes, dribles, desarmes, posse e os totais de cada time. Os mesmos detalhes podem ser reabertos clicando em uma partida no histórico próprio ou público. Partidas casuais exibem o relatório e dão XP, mas apenas as competitivas alimentam estatísticas, ranking e KX Coins.</p></section>
           <section><h3>Fim, W.O. e Desistência</h3><p>A partida termina pelo relógio ou por W.O. Se um time ficar sem jogadores, o adversário vence. Desistir em um time com companheiros abre votação de 30 segundos; sem companheiros, concede W.O. imediato. Expulsões administrativas podem encerrar sem prêmio conforme o caso.</p></section>
           <section><h3>Desconexão, Retorno e Abandono</h3><p>Jogadores têm até 1 minuto e 30 segundos para retornar e no máximo duas reconexões. O servidor da partida reaparece apenas para aquele jogador. Na Arena, <strong>Abandonar Partida</strong> encerra imediatamente a espera e bloqueia o retorno: se o time ainda tiver membros, começa a votação de 30 segundos para continuar com um a menos; se ficar vazio, ocorre W.O.</p></section>
-          <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta com os seis segundos anteriores ao gol. No multiplayer, início, replay e reinício usam o relógio do host para todos assistirem juntos. Jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
+          <section><h3>Replay</h3><p>Todo gol passa por comemoração e replay em câmera lenta com os três segundos anteriores ao gol, seguido de dois segundos congelados. No multiplayer, início, replay e reinício usam o relógio do host para todos assistirem juntos. Jogadores ativos podem votar para pular; é necessária maioria. Empate de votos mantém o replay. Espectadores não votam.</p></section>
           <section><h3>Gravações das partidas</h3><p>Partidas competitivas concluídas geram uma demo compacta com o campo real, efeitos, sons, dois segundos de gol congelado e a contagem de reinício, sem repetir o replay. Abra o histórico, selecione a partida e toque em <strong>Assistir gravação</strong>. O player permite pausar, mudar velocidade e volume, avançar pela linha do tempo, saltar para gols marcados, consultar as estatísticas daquele instante e exportar um MP4 quando o dispositivo oferecer esse formato.</p></section>
           <section><h3>Skins e KX Coins</h3><p>KX Coins são obtidos apenas em partidas competitivas. Podem abrir baús e comprar skins em destaque. Skins são cosméticas, preservam a cor do time e são trocadas ao equipar outra skin no inventário.</p></section>
           <section><h3>Como funciona o Mercado</h3><p>Vitórias, empates e derrotas competitivas concedem 30, 18 e 10 KX Coins. O Baú Comum custa 120 e sorteia principalmente skins comuns; o Dourado custa 320 e sorteia raras ou épicas; o de Obsidiana custa 700 e sorteia épicas ou lendárias. Cada posição da lista de raridades do baú tem a mesma chance. Skin repetida devolve 25% do preço do baú.</p></section>
@@ -1075,6 +1075,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v47.0 - Jogo sem Fila</h4>
+            <p>O replay foi reduzido aos tr&ecirc;s segundos decisivos antes do gol e mant&eacute;m dois segundos congelados depois da bola entrar. O retorno &agrave; partida agora confirma aceita&ccedil;&atilde;o, jogador restaurado e canal r&aacute;pido antes de liberar o campo. Snapshots usam pacotes compactos e uma &uacute;nica serializa&ccedil;&atilde;o por quadro para reduzir upload, filas e teletransportes em conex&otilde;es distantes. Grava&ccedil;&otilde;es ficaram mais suaves no gol, silenciam ao pausar ou fechar e demos antigas incompat&iacute;veis foram removidas. Salas encerradas deixam de reaparecer por uma reserva local vencida.</p>
+          </section>
           <section>
             <h4>v46.0 - Conex&atilde;o em Campo</h4>
             <p>O canal de movimento agora descarta estados antigos em vez de retransmiti-los e acumular atraso, reduzindo teletransportes e lat&ecirc;ncia artificial em conex&otilde;es distantes. Replay e contagens usam estimativa de rel&oacute;gio no estilo NTP e uma janela maior de sincroniza&ccedil;&atilde;o. Voltar para Partida monta o campo antes da negocia&ccedil;&atilde;o e s&oacute; conclui quando o host devolve o jogador no estado autoritativo. A grava&ccedil;&atilde;o termina com Fim da partida, placar e resultados; seus sons tocam apenas enquanto o reprodutor est&aacute; reproduzindo. Demos anteriores incompat&iacute;veis foram removidas.</p>
