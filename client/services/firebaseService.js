@@ -67,13 +67,22 @@ const authPersistenceReady = setPersistence(auth, browserLocalPersistence)
   .catch(err => console.warn('[Auth] Local persistence was not enabled:', err));
 const db = getFirestore(app);
 const rtdb = getDatabase(app);
-// A visible data reset for the 9.7 season. Old documents are intentionally
-// retained in Firebase for audit safety, but no longer affect game UI/ranking.
+// Season 50 starts from a clean competitive and cosmetic state. Identity,
+// biography, staff roles and control preferences remain attached to accounts.
 export const CURRENT_SEASON_ID = '50.0';
 export const CURRENT_COSMETIC_RESET_ID = '50.0';
-const normalizeCosmetics = profile => profile?.cosmeticResetId === CURRENT_COSMETIC_RESET_ID
-  ? profile
-  : { ...profile, ownedSkins: ['rookie'], equippedSkinId: 'rookie', equippedSkinImage: null };
+const normalizeCosmetics = profile => {
+  const activeSeason = profile?.seasonId === CURRENT_SEASON_ID;
+  const activeCosmetics = profile?.cosmeticResetId === CURRENT_COSMETIC_RESET_ID;
+  return {
+    ...profile,
+    ...(activeSeason ? {} : { level: 1, xp: 0, coins: 0, processedXpMatchIds: {} }),
+    ...(activeCosmetics ? {} : {
+      ownedSkins: ['rookie'], equippedSkinId: 'rookie', equippedSkinImage: null,
+      skinPurchaseValues: {}, chestPurchaseReceipts: []
+    })
+  };
+};
 const emptySeasonStats = uid => ({
   uid,
   seasonId: CURRENT_SEASON_ID,
@@ -221,6 +230,8 @@ export const firebaseService = {
           equippedSkinId: 'rookie',
           equippedSkinImage: null,
           cosmeticResetId: CURRENT_COSMETIC_RESET_ID,
+          skinPurchaseValues: {},
+          chestPurchaseReceipts: [],
           processedXpMatchIds: {}
         });
       } else if (existing.cosmeticResetId !== CURRENT_COSMETIC_RESET_ID) {
@@ -231,7 +242,9 @@ export const firebaseService = {
           ownedSkins: ['rookie'],
           equippedSkinId: 'rookie',
           equippedSkinImage: null,
-          cosmeticResetId: CURRENT_COSMETIC_RESET_ID
+          cosmeticResetId: CURRENT_COSMETIC_RESET_ID,
+          skinPurchaseValues: {},
+          chestPurchaseReceipts: []
         });
       } else {
         await updateDoc(profileRef, { lastLogin: new Date().toISOString() });
