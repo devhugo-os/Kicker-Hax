@@ -145,7 +145,11 @@ class P2PSocketService {
         badge: '',
         text: `${player.username} desistiu. O time adversário venceu por W.O.`
       });
-      match.forfeitAgainstTeam(team);
+      match.forfeitAgainstTeam(team, {
+        code: 'surrender',
+        players: [player.username],
+        message: `${player.username} abandonou a partida e não havia outro jogador na equipe.`
+      });
       return true;
     }
 
@@ -217,8 +221,13 @@ class P2PSocketService {
       && room.hostPresent === true
       && Number.isInteger(Number(room.maxPlayers)) && Number(room.maxPlayers) >= 2
       && Number.isFinite(Number(room.playersCount)) && Number(room.playersCount) >= 1
-      && ['lobby', 'playing'].includes(room.status)
+      && ['lobby', 'playing', 'results'].includes(room.status)
       && heartbeat > 0 && now - heartbeat < 11000;
+  }
+
+  canCurrentUserJoinRoom(room) {
+    const uid = auth.currentUser?.uid;
+    return !uid || (!room?.blockedRejoinUids?.[uid] && !room?.bannedUids?.[uid]);
   }
 
   hasLiveHostConnection() {
@@ -254,6 +263,11 @@ class P2PSocketService {
       return null;
     }
     return { saved, room };
+  }
+
+  clearLocalMatchReservation(uid = auth.currentUser?.uid) {
+    if (uid) localStorage.removeItem(`kicker_hax_rejoin_${uid}`);
+    this.activeMatchId = null;
   }
 
   // Socket-like Listener Registry
@@ -366,7 +380,7 @@ class P2PSocketService {
       this.activeMatchId = data?.matchId || this.activeMatchId;
       return;
     }
-    if (!['matchEnded', 'matchAborted', 'kicked', 'hostLeft'].includes(event)) return;
+    if (!['matchEnded', 'matchAborted', 'kicked', 'hostLeft', 'returnedToLobby'].includes(event)) return;
     this.activeMatchId = null;
     if (auth.currentUser?.uid) {
       localStorage.removeItem(`kicker_hax_rejoin_${auth.currentUser.uid}`);
@@ -410,8 +424,8 @@ class P2PSocketService {
     }
     const rooms = roomsSnapshot.val() || {};
     const nameTaken = Object.values(rooms).some(room =>
-      String(room.name || '').trim().toLowerCase() === normalizedName.toLowerCase() &&
-      room.status === 'lobby' && this.isActiveRoomRecord(room)
+      String(room.name || '').trim().toLowerCase() === normalizedName.toLowerCase()
+      && this.isActiveRoomRecord(room)
     );
     if (nameTaken) {
       this.roomOperation = null;
@@ -781,6 +795,9 @@ class P2PSocketService {
             this.leaveRoom();
           } else if (event === 'joinError') {
             finishJoinOperation();
+            if (rejoin && /abandon|limite|expirou|não está mais|nao esta mais/i.test(String(data || ''))) {
+              this.clearLocalMatchReservation(profile?.uid);
+            }
             this.triggerLocalEvent('joinError', data);
             this.leaveRoom();
           } else if (event) {
@@ -896,7 +913,11 @@ class P2PSocketService {
       if (this.serverRoom && this.serverRoom.match) {
         const activeMatch = this.serverRoom.match;
         const hostPlayer = this.serverRoom.players.find(player => player.id === this.clientId);
-        matchEndedByHostExit = activeMatch.forfeitAgainstTeam(hostPlayer?.team);
+        matchEndedByHostExit = activeMatch.forfeitAgainstTeam(hostPlayer?.team, {
+          code: 'host_left',
+          players: [hostPlayer?.username || 'Host'],
+          message: `${hostPlayer?.username || 'O host'} saiu durante a partida.`
+        });
         activeMatch.isHostPaused = false;
         activeMatch.stopTicker();
       }
@@ -984,17 +1005,14 @@ class P2PSocketService {
     return new Promise((resolve, reject) => {
       let settled = false;
       let acceptedPayload = null;
-      let stateReady = false;
       let realtimeReady = false;
       const tryFinish = () => {
-        if (acceptedPayload && stateReady && realtimeReady) finish(true, acceptedPayload);
+        // The match view owns the gameState listener and may replace listeners
+        // while mounting. Acceptance proves that the host rebound the physical
+        // player; an open realtime channel proves snapshots can reach the view.
+        if (acceptedPayload && realtimeReady) finish(true, acceptedPayload);
       };
       const handleError = message => finish(false, message || 'Nao foi possivel voltar para a partida.');
-      const handleState = state => {
-        if (!state?.players?.some(player => player.id === this.clientId)) return;
-        stateReady = true;
-        tryFinish();
-      };
       const handleRealtimeReady = () => {
         realtimeReady = true;
         tryFinish();
@@ -1007,7 +1025,6 @@ class P2PSocketService {
         settled = true;
         window.clearTimeout(timeout);
         this.off('joinError', handleError);
-        this.off('gameState', handleState);
         this.off('realtimeReady', handleRealtimeReady);
         this.rejoinTransportReady = accepted;
         this.rejoinInProgress = false;
@@ -1015,13 +1032,16 @@ class P2PSocketService {
         else reject(new Error(String(payload || 'Nao foi possivel voltar para a partida.')));
       };
       this.on('joinError', handleError);
-      this.on('gameState', handleState);
       this.on('realtimeReady', handleRealtimeReady);
       this.joinRoom(code, password, profile, {
         rejoin: true,
         matchId,
         onAccepted: payload => {
           acceptedPayload = payload || {};
+          this.activeMatchId = payload?.matchId || matchId || this.activeMatchId;
+          // Readiness is part of the reconnect handshake. Sending it here lets
+          // the host return an authoritative bootstrap state immediately.
+          this.emit('matchClientReady', { matchId: this.activeMatchId });
           tryFinish();
         }
       });
@@ -1105,6 +1125,21 @@ class P2PSocketService {
     if (event === 'joinRoom') {
       const { profile, rejoin, abandon, password, matchId, joinAttemptId = '' } = data || {};
 
+      if (this.serverRoom.hasCompetitiveDeviceConflict(profile)) {
+        if (conn?.open) conn.send({
+          event: 'joinError',
+          data: 'Outra conta deste aparelho já está nesta partida competitiva.'
+        });
+        return;
+      }
+      if (roomData.blockedRejoinUids?.[profile?.uid]) {
+        finishJoinOperation();
+        this.clearLocalMatchReservation(profile?.uid);
+        this.roomOperation = null;
+        this.triggerLocalEvent('joinError', 'Seu retorno a esta partida foi encerrado.');
+        return;
+      }
+
       // Retries receive a new PeerJS ID. Rebind the existing lobby entry by
       // authenticated UID instead of briefly duplicating and then removing it.
       if (this.serverRoom.status === 'lobby' && profile?.uid) {
@@ -1183,6 +1218,7 @@ class P2PSocketService {
         }
         if (conn) {
           conn.peerId = socketId;
+          this.connections = this.connections.filter(channel => channel !== conn && channel.peer !== socketId);
           this.connections.push(conn);
         }
         this.serverRoom.match.reconnectPlayer(reconnecting.previousId, socketId, reconnecting.player);
@@ -1419,6 +1455,9 @@ class P2PSocketService {
       player.team = 'spectator';
       player.disconnected = false;
       player.disconnectedAt = null;
+      // Guests may return first, but only the authoritative host republishes
+      // the room in matchmaking. Until then it remains in the results state.
+      if (socketId === this.serverRoom.hostId) this.serverRoom.status = 'lobby';
       const lobbyInfo = this.serverRoom.getLobbyInfo();
       this.broadcast('lobbyUpdate', lobbyInfo);
       const returnedPayload = { lobbyInfo };
@@ -1428,7 +1467,20 @@ class P2PSocketService {
         conn.send({ event: 'returnedToLobby', data: returnedPayload });
       }
       const lobbyCount = this.serverRoom.players.filter(item => item.status === 'lobby').length;
-      update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { playersCount: lobbyCount, updatedAt: Date.now() }).catch(() => {});
+      const indexedPlayerCount = this.serverRoom.status === 'lobby'
+        ? lobbyCount
+        : this.serverRoom.players.filter(item => !item.disconnected && !item.cpu).length;
+      const now = Date.now();
+      update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+        status: this.serverRoom.status,
+        matchId: null,
+        playersCount: indexedPlayerCount,
+        hostPresent: true,
+        hostHeartbeatAt: now,
+        updatedAt: now,
+        [`joinReceipts/${player.uid}`]: null,
+        [`blockedRejoinUids/${player.uid}`]: null
+      }).catch(() => {});
     }
 
     else if (event === 'voteSkipReplay') {
@@ -1527,7 +1579,11 @@ class P2PSocketService {
       this.blockRoomRejoin(rosterPlayer.uid);
       if (teammates.length === 0) {
         this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${rosterPlayer.username} excedeu o limite de retornos. O time adversário venceu.` });
-        this.serverRoom.match.forfeitAgainstTeam(rosterPlayer.team === 'red' ? 0 : 1);
+        this.serverRoom.match.forfeitAgainstTeam(rosterPlayer.team === 'red' ? 0 : 1, {
+          code: 'return_limit_exceeded',
+          players: [rosterPlayer.username],
+          message: `${rosterPlayer.username} excedeu o limite de retornos e não havia companheiros para continuar.`
+        });
         return;
       }
       this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${rosterPlayer.username} excedeu o limite de retornos. O time pode votar para continuar sem ele.` });
@@ -1775,7 +1831,7 @@ class P2PSocketService {
       (result) => {
         if (!matchRoom || this.serverRoom !== matchRoom) return;
         // Callback on match end
-        matchRoom.status = 'lobby';
+        matchRoom.status = 'results';
         matchRoom.match = null;
         matchRoom.chatHistory = [];
         this.cleanupRoomChats(this.roomCode).catch(() => {});
@@ -1791,10 +1847,10 @@ class P2PSocketService {
         // Update status in Firebase
         const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
         update(roomRef, {
-          status: 'lobby',
+          status: 'results',
           matchId: null,
           matchEndedAt: Date.now(),
-          playersCount: 0,
+          playersCount: matchRoom.players.filter(player => !player.disconnected && !player.cpu).length,
           updatedAt: Date.now()
         });
       },
@@ -1803,6 +1859,7 @@ class P2PSocketService {
         competitive: this.serverRoom.competitive,
         allowCasualForfeit: false,
         hostPlayerId: this.clientId,
+        recordingOwnerUid: this.serverRoom.players.find(player => player.id === this.clientId)?.uid || null,
         onGuestConnectionLost: (physicalPlayer) => this.handleSilentGuestDisconnect(physicalPlayer)
       }
     );
@@ -1846,7 +1903,8 @@ class P2PSocketService {
   }
 
   sendMatchClientReady() {
-    if (this.rejoinInProgress && !this.rejoinTransportReady) return;
+    // Blocking this while rejoining created a circular wait between the
+    // restored player state and the client's readiness confirmation.
     this.emit('matchClientReady', { matchId: this.activeMatchId });
   }
 
@@ -1985,7 +2043,7 @@ class P2PSocketService {
       const now = Date.now();
       const list = Object.keys(data)
         .map(key => data[key])
-        .filter(room => this.isActiveRoomRecord(room, now) && room.status === 'lobby');
+        .filter(room => this.isActiveRoomRecord(room, now) && room.status === 'lobby' && this.canCurrentUserJoinRoom(room));
       Object.values(data)
         .filter(room => room?.code && !this.isActiveRoomRecord(room, now))
         .forEach(room => this.cleanupRoomData(room.code).catch(() => {}));
@@ -1998,7 +2056,8 @@ class P2PSocketService {
     get(ref(rtdb, 'multiplayerRooms')).then(snapshot => {
       const data = snapshot.val() || {};
       const now = Date.now();
-      const list = Object.values(data).filter(room => this.isActiveRoomRecord(room, now) && room.status === 'lobby');
+      const list = Object.values(data).filter(room => this.isActiveRoomRecord(room, now)
+        && room.status === 'lobby' && this.canCurrentUserJoinRoom(room));
       Object.values(data)
         .filter(room => room?.code && !this.isActiveRoomRecord(room, now))
         .forEach(room => {

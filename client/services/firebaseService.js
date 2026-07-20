@@ -44,6 +44,7 @@ import { findStaffProfileByRole } from '../utils/staffProfiles.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { getFeaturedCycle } from '../utils/featuredCycle.js';
 import { getSaoPauloChatDayWindow } from '../utils/chatRetention.js';
+import { getSeasonId } from '../utils/seasonCycle.js';
 
 const _dec = (val) => atob(val);
 const firebaseConfig = {
@@ -67,16 +68,16 @@ const authPersistenceReady = setPersistence(auth, browserLocalPersistence)
   .catch(err => console.warn('[Auth] Local persistence was not enabled:', err));
 const db = getFirestore(app);
 const rtdb = getDatabase(app);
-// Season 50 starts from a clean competitive and cosmetic state. Identity,
-// biography, staff roles and control preferences remain attached to accounts.
-export const CURRENT_SEASON_ID = '50.0';
+// Every São Paulo calendar month starts a new competitive season. Cosmetics
+// and KX Coins are lifetime account assets and are intentionally preserved.
+export const CURRENT_SEASON_ID = getSeasonId('monthly');
 export const CURRENT_COSMETIC_RESET_ID = '50.0';
 const normalizeCosmetics = profile => {
   const activeSeason = profile?.seasonId === CURRENT_SEASON_ID;
   const activeCosmetics = profile?.cosmeticResetId === CURRENT_COSMETIC_RESET_ID;
   return {
     ...profile,
-    ...(activeSeason ? {} : { level: 1, xp: 0, coins: 0, processedXpMatchIds: {} }),
+    ...(activeSeason ? {} : { level: 1, xp: 0, processedXpMatchIds: {} }),
     ...(activeCosmetics ? {} : {
       ownedSkins: ['rookie'], equippedSkinId: 'rookie', equippedSkinImage: null,
       skinPurchaseValues: {}, chestPurchaseReceipts: []
@@ -94,7 +95,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '50.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '51.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -218,20 +219,13 @@ export const firebaseService = {
       const statsSnap = await getDoc(statsRef);
       const statsNeedReset = !statsSnap.exists() || statsSnap.data().seasonId !== CURRENT_SEASON_ID;
       if (existing.seasonId !== CURRENT_SEASON_ID) {
-        // A season migration preserves identity/settings but resets every
-        // progression and cosmetic value exactly once for this account.
+        // Monthly season migration preserves identity, controls, purchased
+        // skins and KX Coins while restarting competitive progression.
         await updateDoc(profileRef, {
           lastLogin: new Date().toISOString(),
           seasonId: CURRENT_SEASON_ID,
           level: 1,
           xp: 0,
-          coins: 0,
-          ownedSkins: ['rookie'],
-          equippedSkinId: 'rookie',
-          equippedSkinImage: null,
-          cosmeticResetId: CURRENT_COSMETIC_RESET_ID,
-          skinPurchaseValues: {},
-          chestPurchaseReceipts: [],
           processedXpMatchIds: {}
         });
       } else if (existing.cosmeticResetId !== CURRENT_COSMETIC_RESET_ID) {
@@ -268,6 +262,12 @@ export const firebaseService = {
     // All writes remain scoped to the authenticated user's own documents.
     await this.reconcileMatchHistory(user.uid).catch(error => {
       console.warn('[Kicker Stats] Não foi possível reconciliar resultados pendentes:', error);
+    });
+    this.cleanupOwnedOldRecordings(user.uid).catch(error => {
+      console.warn('[Kicker Recording] Limpeza mensal adiada:', error);
+    });
+    this.cleanupOwnedOldHistory(user.uid).catch(error => {
+      console.warn('[Kicker History] Limpeza mensal adiada:', error);
     });
     return await this.getUserProfile(user.uid);
   },
@@ -556,7 +556,8 @@ export const firebaseService = {
   },
 
   skinDayKey(date = new Date()) {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+    return `${CURRENT_SEASON_ID}_${day}`;
   },
 
   async hasSkinRequestToday(uid) {
@@ -580,12 +581,12 @@ export const firebaseService = {
   },
 
   skinPeriodKey(cadence, date = new Date()) {
-    return getFeaturedCycle(cadence, date).period;
+    return `${CURRENT_SEASON_ID}_${getFeaturedCycle(cadence, date).period}`;
   },
 
   async getFeaturedSkin(cadence) {
     const cycle = getFeaturedCycle(cadence);
-    const period = cycle.period;
+    const period = this.skinPeriodKey(cadence);
     const featuredRoot = ref(rtdb, `skinFeatured/${cadence}`);
     const featuredSnapshot = await get(featuredRoot);
     const featured = featuredSnapshot.val() || {};
@@ -595,12 +596,15 @@ export const firebaseService = {
       get(ref(rtdb, 'skinFeatured'))
     ]);
     const requestsByDay = requestsSnapshot.val() || {};
+    const currentRequests = Object.fromEntries(Object.entries(requestsByDay)
+      .filter(([requestDay]) => requestDay.startsWith(`${CURRENT_SEASON_ID}_`)));
     const allFeatured = allFeaturedSnapshot.val() || {};
-    const candidates = getPendingSkinRequests(requestsByDay, allFeatured, this.skinDayKey());
+    const candidates = getPendingSkinRequests(currentRequests, allFeatured, this.skinDayKey());
     if (!candidates.length) {
       const previousEntries = Object.entries(allFeatured).flatMap(([sourceCadence, periods]) =>
         Object.entries(periods || {}).map(([sourcePeriod, item]) => ({ sourceCadence, sourcePeriod, item }))
-      ).filter(entry => entry.item?.image).sort((a, b) => Number(a.item.createdAt || a.item.startsAt || 0) - Number(b.item.createdAt || b.item.startsAt || 0));
+      ).filter(entry => entry.item?.image && String(entry.sourcePeriod).startsWith(`${CURRENT_SEASON_ID}_`))
+        .sort((a, b) => Number(a.item.createdAt || a.item.startsAt || 0) - Number(b.item.createdAt || b.item.startsAt || 0));
       const previousEntry = previousEntries.at(-1) || null;
       const previous = previousEntry?.item || null;
       if (!previous) return null;
@@ -737,7 +741,26 @@ export const firebaseService = {
     if (!auth.currentUser?.uid || !recordingId || !recordingData?.data) {
       throw new Error('Gravação inválida.');
     }
-    await setDoc(doc(db, 'matchRecordings', recordingId), recordingData);
+    await setDoc(doc(db, 'matchRecordings', recordingId), {
+      ...recordingData,
+      seasonId: CURRENT_SEASON_ID
+    });
+  },
+
+  async cleanupOwnedOldRecordings(uid) {
+    if (!uid) return 0;
+    const snapshots = await getDocs(query(collection(db, 'matchRecordings'), where('ownerUid', '==', uid)));
+    const obsolete = snapshots.docs.filter(snapshot => snapshot.data().seasonId !== CURRENT_SEASON_ID);
+    await Promise.all(obsolete.map(snapshot => deleteDoc(snapshot.ref)));
+    return obsolete.length;
+  },
+
+  async cleanupOwnedOldHistory(uid) {
+    if (!uid) return 0;
+    const snapshots = await getDocs(query(collection(db, 'history'), where('playerUids', 'array-contains', uid)));
+    const obsolete = snapshots.docs.filter(snapshot => snapshot.data().seasonId !== CURRENT_SEASON_ID);
+    await Promise.all(obsolete.map(snapshot => deleteDoc(snapshot.ref)));
+    return obsolete.length;
   },
 
   async getMatchRecording(recordingId) {
@@ -872,8 +895,8 @@ export const firebaseService = {
           xp: seasonActive ? (userData.xp || 0) : 0,
           // Wallet balance belongs to the user document and remains rankable
           // even if competitive statistics are waiting for season migration.
-          coins: seasonActive ? Number(userData.coins || 0) : 0,
-          skinCount: seasonActive && userData.cosmeticResetId === CURRENT_COSMETIC_RESET_ID && Array.isArray(userData.ownedSkins)
+          coins: Number(userData.coins || 0),
+          skinCount: userData.cosmeticResetId === CURRENT_COSMETIC_RESET_ID && Array.isArray(userData.ownedSkins)
             ? new Set(userData.ownedSkins.filter(id => id !== 'rookie')).size
             : 0
         };

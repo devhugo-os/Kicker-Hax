@@ -41,6 +41,7 @@ export class ServerRoom {
       skin: playerProfile.skin || '',
       skinId: playerProfile.skinId || playerProfile.equippedSkinId || '',
       staffRole: normalizeStaffRole(playerProfile.staffRole),
+      deviceId: String(playerProfile.deviceId || '').replace(/[^a-f0-9]/gi, '').slice(0, 32),
       team: team, // 'red' | 'blue' | 'spectator'
       ready: false,
       ping: 0,
@@ -178,5 +179,14 @@ export class ServerRoom {
       status: this.status,
       players: this.players
     });
+  }
+
+  hasCompetitiveDeviceConflict(profile = {}) {
+    const deviceId = String(profile.deviceId || '');
+    if (!this.competitive || !deviceId) return false;
+    return this.players.some(player => !player.cpu
+      && player.deviceId === deviceId
+      && player.uid
+      && player.uid !== profile.uid);
   }
 }

@@ -39,6 +39,7 @@ export class ServerMatch {
     this.isHostPaused = false;
     this.pauseTicks = 0;
     this.forfeitWinnerTeam = null;
+    this.forfeitReason = null;
     this.disconnectPauseUntil = 0;
     this.disconnectTeam = null;
     this.disconnectUid = null;
@@ -47,6 +48,7 @@ export class ServerMatch {
     this.disconnectVoting = false;
     this.onGuestConnectionLost = options.onGuestConnectionLost || null;
     this.hostPlayerId = options.hostPlayerId || null;
+    this.recordingOwnerUid = options.recordingOwnerUid || null;
 
     // Initialize physical objects
     this.ball = {
@@ -620,8 +622,13 @@ export class ServerMatch {
           // The team declined (or did not reach a majority in) the final
           // vote, so the opposite side receives the W.O.
           const disconnectedTeam = this.disconnectTeam;
+          const disconnectedPlayers = [...this.disconnectedNames.values()];
           this.clearDisconnectPause();
-          this.forfeitAgainstTeam(disconnectedTeam);
+          this.forfeitAgainstTeam(disconnectedTeam, {
+            code: 'continuation_vote_failed',
+            players: disconnectedPlayers,
+            message: `${disconnectedPlayers.join(' e ') || 'O jogador'} não voltou e a equipe não aprovou continuar com menos jogadores.`
+          });
         } else {
           // The reconnection window ended. A remaining teammate gets one
           // short vote instead of an endless reconnect loop.
@@ -1084,8 +1091,13 @@ export class ServerMatch {
     const eligible = this.players.filter(player => !player.cpu && player.team === this.disconnectTeam && !missing.has(player.uid));
     if (eligible.length === 0) {
       const team = this.disconnectTeam;
+      const disconnectedPlayers = [...this.disconnectedNames.values()];
       this.clearDisconnectPause();
-      return this.forfeitAgainstTeam(team);
+      return this.forfeitAgainstTeam(team, {
+        code: 'reconnect_timeout_empty_team',
+        players: disconnectedPlayers,
+        message: `${disconnectedPlayers.join(' e ') || 'O jogador'} não voltou dentro do prazo e não restou ninguém na equipe.`
+      });
     }
     this.disconnectVoting = true;
     this.disconnectAllowsRejoin = false;
@@ -1171,7 +1183,11 @@ export class ServerMatch {
       if (this.ball.lastTouch === player.id) this.ball.lastTouch = null;
     });
     this.clearDisconnectPause();
-    if (!this.players.some(item => item.team === team)) return this.forfeitAgainstTeam(team);
+    if (!this.players.some(item => item.team === team)) return this.forfeitAgainstTeam(team, {
+      code: 'continued_without_empty_team',
+      players: removed.map(player => player.name || player.uid || 'Jogador'),
+      message: 'A equipe aceitou continuar, mas ficou sem jogadores ativos.'
+    });
     return true;
   }
 
@@ -1304,7 +1320,9 @@ export class ServerMatch {
       teamStats: report.teamStats,
       hasBots: this.hasBots,
       competitive: this.competitive,
-      forfeit: hasForfeitWinner
+      forfeit: hasForfeitWinner,
+      forfeitReason: hasForfeitWinner ? this.forfeitReason : null,
+      recordingOwnerUid: this.recordingOwnerUid
     };
   }
 
@@ -1316,7 +1334,11 @@ export class ServerMatch {
     if (redCount > 0 && blueCount > 0) return false;
     if (redCount === 0 && blueCount === 0) return false;
 
-    return this.finishForfeit(redCount > 0 ? C.Team.RED : C.Team.BLUE);
+    return this.finishForfeit(redCount > 0 ? C.Team.RED : C.Team.BLUE, {
+      code: 'empty_team',
+      players: [],
+      message: 'A equipe adversária ficou sem jogadores ativos.'
+    });
   }
 
   /**
@@ -1324,10 +1346,15 @@ export class ServerMatch {
    * separate from the periodic player-count check because a host disconnect
    * tears down the room before another simulation tick can be guaranteed.
    */
-  finishForfeit(winnerTeam) {
+  finishForfeit(winnerTeam, reason = null) {
     if (this.status === 'ended' || (winnerTeam !== C.Team.RED && winnerTeam !== C.Team.BLUE)) return false;
 
     this.forfeitWinnerTeam = winnerTeam;
+    this.forfeitReason = reason || {
+      code: 'wo',
+      players: [],
+      message: 'A partida foi encerrada por W.O.'
+    };
     if (winnerTeam === C.Team.RED && this.score.red <= this.score.blue) {
       this.score.red = this.score.blue + 1;
     }
@@ -1344,9 +1371,9 @@ export class ServerMatch {
   }
 
   /** Gives the opposite side a forfeit victory when a known player leaves. */
-  forfeitAgainstTeam(leavingTeam) {
+  forfeitAgainstTeam(leavingTeam, reason = null) {
     if (leavingTeam !== C.Team.RED && leavingTeam !== C.Team.BLUE) return false;
-    return this.finishForfeit(leavingTeam === C.Team.RED ? C.Team.BLUE : C.Team.RED);
+    return this.finishForfeit(leavingTeam === C.Team.RED ? C.Team.BLUE : C.Team.RED, reason);
   }
 
   changeFieldSize(size) {

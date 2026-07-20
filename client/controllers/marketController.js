@@ -445,10 +445,15 @@ export const marketController = {
   async submitRequest() {
     const canvas = document.getElementById('skin-request-preview');
     const nameInput = document.getElementById('skin-request-name');
+    const fileInput = document.getElementById('skin-request-file');
     const name = normalizeCommunitySkinName(nameInput?.value);
     if (name.length < 3) {
       nameInput?.focus();
       return showToast('Dê um nome de pelo menos 3 caracteres para sua skin.', 'error');
+    }
+    if (!this.crop.image?.src || !this.crop.mimeType || !fileInput?.files?.length) {
+      fileInput?.focus();
+      return showToast('Selecione uma imagem PNG ou JPG antes de enviar a skin.', 'error');
     }
     const image = encodeSkinCanvas(canvas, this.crop.mimeType);
     if (!image) return showToast(`Não foi possível comprimir a skin para até ${SKIN_IMAGE_MAX_BYTES / 1024} KB.`, 'error');
@@ -504,6 +509,6 @@ export const marketController = {
     const name = normalizeCommunitySkinName(document.getElementById('skin-request-name')?.value);
     // Keep the action available after an image is selected so clicking with
     // an empty name produces an explicit validation message.
-    if (button) button.disabled = Boolean(this.requestSent) || !this.crop.image?.src || !this.crop.mimeType || name.length > SKIN_NAME_MAX_LENGTH;
+    if (button) button.disabled = Boolean(this.requestSent) || name.length > SKIN_NAME_MAX_LENGTH;
   }
 };

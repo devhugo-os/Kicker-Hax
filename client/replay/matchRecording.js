@@ -278,7 +278,8 @@ export class MatchRecordingSession {
       frames: this.frames,
       reports: this.reports,
       markers: this.markers,
-      endReason: result?.forfeit ? 'wo' : 'normal'
+      endReason: result?.forfeit ? 'wo' : 'normal',
+      forfeitReason: result?.forfeitReason || null
     };
     let payload = await compressText(JSON.stringify(base));
     let stride = 1;

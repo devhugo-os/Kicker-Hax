@@ -696,7 +696,7 @@ export const gameController = {
         const fieldSize = competitive ? 'medium' : (sizeSelect ? sizeSelect.value : 'medium');
         const showReplay = localStorage.getItem('kicker_hax_show_replay') !== 'false';
 
-        const profile = {
+        let profile = {
           uid: this.currentUser.uid,
           username: menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️',
@@ -704,6 +704,7 @@ export const gameController = {
           skinId: menuController.profileData.equippedSkinId || 'rookie',
           staffRole: menuController.profileData.staffRole || ''
         };
+        profile = await this.attachCompetitiveDevice(profile, competitive);
 
         const s = socketService.getSocket();
         if (s) {
@@ -757,7 +758,7 @@ export const gameController = {
           ? document.getElementById('join-password-input').value
           : '';
 
-        const profile = {
+        let profile = {
           uid: this.currentUser.uid,
           username: menuController.profileData.username,
           badge: menuController.profileData.badge || '🏳️',
@@ -769,6 +770,7 @@ export const gameController = {
         const roomMeta = await socketService.getPublicRoomMeta(code).catch(() => null);
         if (!roomMeta) return showToast('A sala não existe mais ou o host está desconectado.', 'error');
         if (roomMeta.competitive && !await this.ensureCompetitiveDeviceAccess()) return;
+        profile = await this.attachCompetitiveDevice(profile, roomMeta.competitive);
         this.registerJoinResult(
           (joinData) => {
             const room = joinData?.lobbyInfo;
@@ -932,6 +934,16 @@ export const gameController = {
             showToast('A sala foi encerrada pelo host.', 'error');
             router.show('multiplayer-screen');
             socketService.refreshPublicRooms();
+            return;
+          }
+          if (socketService.isHost && socketService.serverRoom) {
+            // Discovery temporarily reports zero players after results. The
+            // authoritative host still owns the room and recreates its lobby
+            // immediately with the previous settings.
+            socketService.returnToLobby();
+            this.activeRoom = socketService.serverRoom.getLobbyInfo();
+            this.updateLobbyView(this.activeRoom);
+            router.show('lobby-screen');
             return;
           }
           socketService.getPublicRoomMeta(this.activeRoom?.code).then(room => {
@@ -2308,8 +2320,9 @@ export const gameController = {
 
     const score = result?.score || result || { red: 0, blue: 0 };
     const matchId = result?.matchId || `${this.activeRoom?.code || 'online'}-${result?.endedAt || Date.now()}`;
-    const recordingId = this.matchRecording && this.currentUser?.uid
-      ? getMatchRecordingId(this.currentUser.uid, matchId)
+    const recordingOwnerUid = result?.recordingOwnerUid || this.currentUser?.uid;
+    const recordingId = this.matchRecording && recordingOwnerUid
+      ? getMatchRecordingId(recordingOwnerUid, matchId)
       : null;
     const myId = socketService.getSocket().id;
     const outcome = resolvePlayerMatchOutcome(result, this.currentUser?.uid, myId, this.players);
@@ -2354,6 +2367,7 @@ export const gameController = {
         competitive: isCompetitive,
         category: isCompetitive ? 'competitive' : 'casual',
         forfeit: !!result?.forfeit,
+        forfeitReason: result?.forfeitReason || null,
         recordingId,
         recordingVersion: recordingId ? 8 : null
       };
@@ -2406,12 +2420,16 @@ export const gameController = {
 
   finalizeMatchRecording(matchId, result, recordingId = null) {
     if (!this.matchRecording || !this.currentUser?.uid || !result?.competitive) return Promise.resolve(null);
+    const recordingOwnerUid = result?.recordingOwnerUid || this.currentUser.uid;
+    // One canonical host-owned demo is shared by every participant history.
+    // Disconnected, expelled or exhausted players can therefore watch it later.
+    if (recordingOwnerUid !== this.currentUser.uid) return Promise.resolve(recordingId);
     if (this.recordingFinalizePromise) return this.recordingFinalizePromise;
     const session = this.matchRecording;
-    const safeRecordingId = recordingId || getMatchRecordingId(this.currentUser.uid, matchId);
+    const safeRecordingId = recordingId || getMatchRecordingId(recordingOwnerUid, matchId);
     this.recordingFinalizePromise = session.finalize({
       matchId,
-      ownerUid: this.currentUser.uid,
+      ownerUid: recordingOwnerUid,
       result
     }).then(documentData => firebaseService.saveMatchRecording(safeRecordingId, documentData))
       .then(() => safeRecordingId)
@@ -4269,6 +4287,14 @@ export const gameController = {
     return takeover.accepted;
   },
 
+  async attachCompetitiveDevice(profile, competitive) {
+    if (!competitive) return profile;
+    return {
+      ...profile,
+      deviceId: await competitiveDeviceService.getDeviceId()
+    };
+  },
+
   async blockMatchmakingWhileReserved() {
     const uid = this.currentUser?.uid;
     if (!uid) return false;
@@ -4299,8 +4325,8 @@ export const gameController = {
     if (this.latestRooms) this.renderRoomsList(this.latestRooms);
     button.classList.remove('hidden');
     abandonButton?.classList.remove('hidden');
-    const getRejoinCredentials = () => {
-      const profile = {
+    const getRejoinCredentials = async () => {
+        let profile = {
         uid: this.currentUser.uid,
         username: menuController.profileData.username,
         badge: menuController.profileData.badge || '🏳️',
@@ -4313,10 +4339,11 @@ export const gameController = {
         const lastRoom = JSON.parse(localStorage.getItem(`kicker_hax_last_room_${this.currentUser.uid}`) || 'null');
         if (lastRoom?.code === saved.code) password = lastRoom.password || '';
       } catch { /* Rejoining a public room does not need a saved password. */ }
+      profile = await this.attachCompetitiveDevice(profile, !!room.competitive);
       return { profile, password };
     };
     button.onclick = async () => {
-      const { profile, password } = getRejoinCredentials();
+      const { profile, password } = await getRejoinCredentials();
       button.disabled = true;
       if (abandonButton) abandonButton.disabled = true;
       const restoreActions = () => {
@@ -4351,6 +4378,12 @@ export const gameController = {
       } catch (error) {
         restoreActions();
         socketService.leaveRoom();
+        const reservation = await socketService.getActiveMatchReservation(this.currentUser?.uid).catch(() => null);
+        if (!reservation) {
+          this.rejoinRoomMeta = null;
+          await this.refreshRejoinMatchAction();
+          socketService.refreshPublicRooms();
+        }
         if (router.currentScreenId === 'match-screen') router.show('multiplayer-screen');
         showToast(error?.message || 'Não foi possível voltar para a partida.', 'error');
       }
@@ -4363,7 +4396,7 @@ export const gameController = {
         danger: true
       });
       if (!confirmed) return;
-      const { profile, password } = getRejoinCredentials();
+      const { profile, password } = await getRejoinCredentials();
       button.disabled = true;
       abandonButton.disabled = true;
       socketService.off('abandonAccepted');
@@ -4526,7 +4559,7 @@ export const gameController = {
     if (roomMeta.competitive && !await this.ensureCompetitiveDeviceAccess()) return;
     this.joiningRoomCode = String(code || '').toUpperCase();
     this.renderRoomsList(this.latestRooms || []);
-    const profile = {
+    let profile = {
       uid: this.currentUser.uid,
       username: menuController.profileData.username,
       badge: menuController.profileData.badge || '🏳️',
@@ -4534,6 +4567,7 @@ export const gameController = {
       skinId: menuController.profileData.equippedSkinId || 'rookie',
       staffRole: menuController.profileData.staffRole || ''
     };
+    profile = await this.attachCompetitiveDevice(profile, roomMeta.competitive);
     this.registerJoinResult((joinData) => {
       const room = joinData?.lobbyInfo;
       if (room) {

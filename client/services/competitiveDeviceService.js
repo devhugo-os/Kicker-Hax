@@ -20,14 +20,15 @@ async function deviceFingerprint() {
     : /iphone|ipad|ipod/i.test(navigator.userAgent) ? 'ios'
       : /win/i.test(navigator.platform) ? 'windows'
         : /mac/i.test(navigator.platform) ? 'mac' : 'other';
+  // Keep the fingerprint deliberately stable between Chrome, Edge, Firefox
+  // and the Cordova WebView on the same physical device. Browser-specific
+  // values such as deviceMemory/hardwareConcurrency made two profiles on one
+  // computer look like unrelated devices and defeated the competitive guard.
   const source = [
     platform,
     screenLong,
     screenShort,
     screen.colorDepth || 0,
-    navigator.hardwareConcurrency || 0,
-    navigator.deviceMemory || 0,
-    navigator.maxTouchPoints || 0,
     Intl.DateTimeFormat().resolvedOptions().timeZone || ''
   ].join('|');
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source));
@@ -48,6 +49,11 @@ class CompetitiveDeviceService {
   async getRef() {
     this.deviceId ||= await deviceFingerprint();
     return ref(rtdb, `competitiveDevices/${this.deviceId}`);
+  }
+
+  async getDeviceId() {
+    this.deviceId ||= await deviceFingerprint();
+    return this.deviceId;
   }
 
   async claim(username, force = false) {

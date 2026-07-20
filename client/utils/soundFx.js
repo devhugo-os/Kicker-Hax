@@ -229,7 +229,7 @@ export const soundFx = {
     if (shouldPlayMatchTheme) this.startMatchTheme();
   },
 
-  createTone(freq, dur = 0.12, type = 'sine', vol = 0.2) {
+  createTone(freq, dur = 0.12, type = 'sine', vol = 0.2, recordOnly = false) {
     try {
       const buses = this.ensureBuses();
       if (!buses) return;
@@ -242,7 +242,7 @@ export const soundFx = {
       g.gain.value = vol;
 
       o.connect(g);
-      g.connect(outGain);
+      if (!recordOnly) g.connect(outGain);
       if (recDest) g.connect(recGain);
 
       o.start();
@@ -251,7 +251,7 @@ export const soundFx = {
     } catch (e) {}
   },
 
-  percuss(vol = 0.18, dur = 0.05) {
+  percuss(vol = 0.18, dur = 0.05, recordOnly = false) {
     try {
       const buses = this.ensureBuses();
       if (!buses) return;
@@ -269,7 +269,7 @@ export const soundFx = {
       
       src.buffer = buffer;
       src.connect(g);
-      g.connect(outGain);
+      if (!recordOnly) g.connect(outGain);
       if (recDest) g.connect(recGain);
       
       src.start();
@@ -371,6 +371,47 @@ export const soundFx = {
         break;
       case 'cheer':
         this.playCheer();
+        break;
+    }
+  },
+
+  /** Emits the compact match effects only into MediaRecorder's audio bus. */
+  playForRecording(kind) {
+    switch (kind) {
+      case 'kick':
+        this.createTone(520, 0.05, 'square', 0.18, true);
+        this.createTone(260, 0.06, 'square', 0.09, true);
+        break;
+      case 'pickup':
+        this.createTone(330, 0.045, 'triangle', 0.08, true);
+        setTimeout(() => this.createTone(440, 0.05, 'triangle', 0.07, true), 35);
+        break;
+      case 'tackle':
+        this.percuss(0.22, 0.03, true);
+        this.createTone(140, 0.06, 'sawtooth', 0.22, true);
+        break;
+      case 'dribble':
+        this.createTone(800, 0.05, 'triangle', 0.12, true);
+        this.createTone(600, 0.05, 'triangle', 0.08, true);
+        break;
+      case 'power':
+        this.createTone(360, 0.08, 'sawtooth', 0.18, true);
+        setTimeout(() => this.createTone(720, 0.06, 'square', 0.16, true), 80);
+        setTimeout(() => this.percuss(0.25, 0.04, true), 120);
+        break;
+      case 'post':
+        this.createTone(900, 0.04, 'square', 0.12, true);
+        this.createTone(300, 0.06, 'sine', 0.10, true);
+        break;
+      case 'whistle':
+        this.createTone(1800, 0.18, 'sine', 0.12, true);
+        this.createTone(1500, 0.18, 'sine', 0.12, true);
+        break;
+      case 'goal':
+        this.createTone(480, 0.18, 'triangle', 0.14, true);
+        setTimeout(() => this.createTone(960, 0.12, 'sine', 0.12, true), 120);
+        break;
+      default:
         break;
     }
   },
