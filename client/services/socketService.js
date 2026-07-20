@@ -16,7 +16,6 @@ import {
   sanitizeMultiplayerProfile
 } from '../../shared/multiplayerPayload.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
-import { competitiveDeviceService } from './competitiveDeviceService.js';
 import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
 
 // Prefer direct WebRTC routes, including local-network candidates, and keep a
@@ -55,7 +54,7 @@ function resolveCustomSkinsInLobbyInfo(lobbyInfo, triggerRedraw) {
   });
 }
 
-class P2PSocketService {
+export class P2PSocketService {
   constructor() {
     this.listeners = new Map();
     this.clientId = null;
@@ -881,8 +880,8 @@ class P2PSocketService {
     // The original timestamp is created when the match starts. Refresh it at
     // the actual disconnect so a late competitive dropout still receives the
     // full reconnect window in the arena list.
-    const preserveCompetitiveLease = !this.isHost && this.roomCode && this.activeMatchId && auth.currentUser?.uid;
-    if (preserveCompetitiveLease) {
+    const preserveMatchReservation = !this.isHost && this.roomCode && this.activeMatchId && auth.currentUser?.uid;
+    if (preserveMatchReservation) {
       localStorage.setItem(`kicker_hax_rejoin_${auth.currentUser.uid}`, JSON.stringify({
         code: this.roomCode,
         matchId: this.activeMatchId,
@@ -890,9 +889,6 @@ class P2PSocketService {
       }));
     }
     this.isLeavingRoom = true;
-    if (!preserveCompetitiveLease && (this.serverRoom?.competitive || this.currentRoomCompetitive)) {
-      competitiveDeviceService.release().catch(() => {});
-    }
     if (this.isHost && this.roomCode) {
       this.stopHostRoomPresence();
       if (this.roomHeartbeatInterval) {
@@ -1125,18 +1121,13 @@ class P2PSocketService {
     if (event === 'joinRoom') {
       const { profile, rejoin, abandon, password, matchId, joinAttemptId = '' } = data || {};
 
-      if (this.serverRoom.hasCompetitiveDeviceConflict(profile)) {
+      // This check belongs to the authoritative host room. Referencing the
+      // guest-side RTDB snapshot here used to throw before every join reply.
+      if (profile?.uid && this.serverRoom.blockedRejoinUids.has(profile.uid)) {
         if (conn?.open) conn.send({
           event: 'joinError',
-          data: 'Outra conta deste aparelho já está nesta partida competitiva.'
+          data: 'Seu retorno a esta partida foi encerrado.'
         });
-        return;
-      }
-      if (roomData.blockedRejoinUids?.[profile?.uid]) {
-        finishJoinOperation();
-        this.clearLocalMatchReservation(profile?.uid);
-        this.roomOperation = null;
-        this.triggerLocalEvent('joinError', 'Seu retorno a esta partida foi encerrado.');
         return;
       }
 

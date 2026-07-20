@@ -13,8 +13,7 @@ export function sanitizeMultiplayerProfile(profile) {
   return {
     ...profile,
     skin: hasEmbeddedSkin(profile) ? 'custom' : profile.skin,
-    badge: String(profile.badge || '').slice(0, MAX_INLINE_BADGE_LENGTH),
-    deviceId: String(profile.deviceId || '').replace(/[^a-f0-9]/gi, '').slice(0, 32)
+    badge: String(profile.badge || '').slice(0, MAX_INLINE_BADGE_LENGTH)
   };
 }
 
