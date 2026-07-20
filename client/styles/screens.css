@@ -1832,6 +1832,12 @@ html.app-runtime #menu-btn-download-app {
   padding-right: 42px;
 }
 .public-profile-header p { color: var(--text-secondary); overflow-wrap: anywhere; }
+.profile-presence { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font-size: 11px; font-weight: 800; }
+.profile-presence::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: #64748b; box-shadow: 0 0 0 2px rgba(100,116,139,.15); }
+.profile-presence.online { color: #4ade80; }
+.profile-presence.online::before { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,.65); }
+.inventory-skin-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; }
+.inventory-skin-actions > :only-child { grid-column: 1 / -1; }
 .public-profile-ratings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .public-profile-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .public-profile-stats > div { display: grid; place-items: center; gap: 2px; padding: 10px 5px; background: rgba(255,255,255,.035); border: 1px solid var(--border-light); border-radius: 6px; }

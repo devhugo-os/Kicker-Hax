@@ -13,7 +13,8 @@ export function buildRoomCleanupPatch(roomCode) {
   return {
     [`multiplayerRooms/${code}`]: null,
     [`roomChats/${code}`]: null,
-    [`matchChats/${code}`]: null
+    [`matchChats/${code}`]: null,
+    [`chatRateLimits/rooms/${code}`]: null
   };
 }
 

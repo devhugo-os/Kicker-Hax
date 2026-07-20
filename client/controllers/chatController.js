@@ -56,7 +56,8 @@ export const chatController = {
       try {
         await firebaseService.sendGlobalChatMessage(menuController.profileData, text);
       } catch (err) {
-        showToast('Erro ao enviar mensagem.', 'error');
+        chatInput.value = text;
+        showToast(err?.message || 'Erro ao enviar mensagem.', 'error');
         console.error(err);
       }
     });

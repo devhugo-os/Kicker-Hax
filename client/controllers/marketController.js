@@ -8,7 +8,7 @@ import { escapeHtml, safeImageSource } from '../utils/safeHtml.js';
 import { getCommunitySkinInventoryValue, getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { createChestPurchaseId, markChestPurchaseCommitted } from '../utils/chestPurchase.js';
 import { normalizeCommunitySkinName } from '../utils/skinQueue.js';
-import { confirmDialog } from '../utils/dialog.js';
+import { confirmDialog, promptDialog } from '../utils/dialog.js';
 import { encodeSkinCanvas, validateSkinImageFile } from '../utils/skinImage.js';
 import { SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { soundFx } from '../utils/soundFx.js';
@@ -301,6 +301,10 @@ export const marketController = {
 
   async loadInventory() {
     if (!this.user) return;
+    const gifts = await firebaseService.claimPendingSkinGifts(this.user.uid).catch(error => {
+      console.warn('[Skin Gifts] Não foi possível receber doações pendentes:', error);
+      return [];
+    });
     const [profile, featured] = await Promise.all([
       firebaseService.getUserProfile(this.user.uid),
       firebaseService.getFeaturedSkins().catch(() => ({}))
@@ -320,6 +324,7 @@ export const marketController = {
     this.inventoryItems = ownedItems;
     this.inventoryRarity ||= 'all';
     this.renderInventory();
+    gifts.forEach(gift => showToast(`${gift.senderUsername || 'Um jogador'} doou uma skin para você.`, 'success'));
   },
 
   renderInventory() {
@@ -351,11 +356,35 @@ export const marketController = {
       const visual = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name)}">`;
       const valueLabel = skin.id === 'rookie' ? 'Sem valor' : `${skin.value} KX Coins`;
       const equippedLabel = skinPending ? 'Selecionada, salve o perfil' : 'Em uso';
-      card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button></div>`;
-      card.querySelector('button')?.addEventListener('click', async () => {
+      const canDonate = skin.id !== 'rookie' && !equipped;
+      card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong><div class="inventory-skin-actions"><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" data-action="equip" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button>${canDonate ? '<button class="btn btn-secondary" data-action="donate" type="button">Doar</button>' : ''}</div></div>`;
+      card.querySelector('[data-action="equip"]')?.addEventListener('click', () => {
         menuController.selectProfileSkinDraft(skin);
         this.renderInventory();
         showToast(`${skin.name} selecionada. Volte ao perfil e salve as alterações.`, 'info');
+      });
+      card.querySelector('[data-action="donate"]')?.addEventListener('click', async () => {
+        const username = await promptDialog({
+          title: `Doar ${skin.name}`,
+          message: 'Digite o nome exato da conta que receberá a skin.',
+          placeholder: 'Nome do jogador',
+          confirmLabel: 'Continuar'
+        });
+        if (!username) return;
+        const confirmed = await confirmDialog({
+          title: 'Confirmar doação',
+          message: `A skin ${skin.name} sairá do seu inventário e será enviada para ${String(username).trim()}.`,
+          confirmLabel: 'Doar skin',
+          danger: true
+        });
+        if (!confirmed) return;
+        try {
+          const recipient = await firebaseService.donateSkin(this.user.uid, username, skin.id);
+          showToast(`${skin.name} foi doada para ${recipient.username}.`, 'success');
+          await this.loadInventory();
+        } catch (error) {
+          showToast(error.message || 'Não foi possível concluir a doação.', 'error');
+        }
       });
       grid.appendChild(card);
     });

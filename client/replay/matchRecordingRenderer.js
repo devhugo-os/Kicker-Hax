@@ -198,6 +198,13 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
     ctx.fillText(`Placar final: ${frame.score?.red || 0} : ${frame.score?.blue || 0}`, fieldWidth / 2, fieldHeight * .56);
     ctx.fillStyle = '#f8fafc';
     ctx.font = '700 17px Outfit, system-ui';
-    ctx.fillText(options.endReason === 'wo' ? 'Encerrada por W.O.' : 'Conclusao normal por tempo ou gols', fieldWidth / 2, fieldHeight * .61);
+    const winnerLabel = options.winnerTeam === C.Team.RED || options.winnerTeam === 'red'
+      ? 'Time Vermelho'
+      : options.winnerTeam === C.Team.BLUE || options.winnerTeam === 'blue' ? 'Time Azul' : 'Empate';
+    ctx.fillText(
+      options.endReason === 'wo' ? `${winnerLabel} venceu por W.O.` : `${winnerLabel}${winnerLabel === 'Empate' ? '' : ' venceu'}`,
+      fieldWidth / 2,
+      fieldHeight * .61
+    );
   }
 }

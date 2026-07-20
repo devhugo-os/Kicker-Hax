@@ -1,7 +1,7 @@
 // Kicker Hax - WebRTC Peer-to-Peer & Firebase RTDB Multiplayer Client Service
 import firebaseService, { rtdb, auth } from './firebaseService.js';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ref, set, remove, get, update, onValue, off, onDisconnect, push, onChildAdded, serverTimestamp } from 'firebase/database';
+import { ref, set, remove, get, update, onValue, off, onDisconnect, push, onChildAdded, serverTimestamp, runTransaction as runRtdbTransaction } from 'firebase/database';
 import { ServerRoom } from '../../server/models/serverRoom.js';
 import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
@@ -17,6 +17,7 @@ import {
 } from '../../shared/multiplayerPayload.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
 import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
+import { consumeChatRateLimit } from '../utils/chatRateLimit.js';
 
 // Prefer direct WebRTC routes, including local-network candidates, and keep a
 // small ICE pool ready so joining a room does not stall the first inputs.
@@ -48,6 +49,7 @@ function resolveCustomSkinsInLobbyInfo(lobbyInfo, triggerRedraw) {
       const image = profile?.equippedSkinImage;
       if (!image) return;
       customSkinCache.set(player.uid, image);
+      if (customSkinCache.size > 64) customSkinCache.delete(customSkinCache.keys().next().value);
       player.skin = image;
       triggerRedraw?.();
     }).catch(() => {});
@@ -97,10 +99,38 @@ export class P2PSocketService {
     this.rejoinInProgress = false;
     this.rejoinTransportReady = false;
     this.controlChunks = new Map();
+    this.chatRateBuckets = new Map();
     const isNativeFrame = new URLSearchParams(window.location.search).get('native') === '1' && window.parent !== window;
     const sessionStore = isNativeFrame ? localStorage : sessionStorage;
     this.sessionId = sessionStore.getItem('kicker_hax_session_id') || `session_${Date.now()}_${crypto.randomUUID()}`;
     sessionStore.setItem('kicker_hax_session_id', this.sessionId);
+  }
+
+  registerHostControlConnection(conn, socketId = conn?.peer) {
+    if (!conn || !socketId) return;
+    conn.peerId = socketId;
+    const previous = this.controlConnections.get(socketId);
+    if (previous && previous !== conn) {
+      this.connections = this.connections.filter(channel => channel !== previous);
+      try { previous.close(); } catch { /* It was already closed. */ }
+    }
+    this.controlConnections.set(socketId, conn);
+    this.connections = this.connections.filter(channel => channel !== conn && channel.peer !== socketId);
+    this.connections.push(conn);
+  }
+
+  removeHostControlConnection(conn) {
+    if (!conn) return;
+    this.connections = this.connections.filter(channel => channel !== conn);
+    if (this.controlConnections.get(conn.peer) === conn) this.controlConnections.delete(conn.peer);
+    this.clearJoinResponseRetry(conn.peer);
+  }
+
+  consumeRoomChatRate(uid) {
+    if (!uid) return { allowed: true, retryAfterMs: 0 };
+    const result = consumeChatRateLimit(this.chatRateBuckets.get(uid));
+    if (result.allowed) this.chatRateBuckets.set(uid, result.state);
+    return result;
   }
 
   async cleanupRoomData(roomCode) {
@@ -557,7 +587,7 @@ export class P2PSocketService {
       }
       console.log('[P2PSocket] Recebida tentativa de conexão de:', conn.peer);
       
-      this.controlConnections.set(conn.peer, conn);
+      this.registerHostControlConnection(conn, conn.peer);
       conn.on('data', (payload) => {
         const packet = this.consumeControlChunk(payload);
         if (packet?.event) {
@@ -566,12 +596,13 @@ export class P2PSocketService {
       });
       conn.on('close', () => {
         if (this.controlConnections.get(conn.peer) !== conn) return;
-        this.controlConnections.delete(conn.peer);
+        this.removeHostControlConnection(conn);
         this.handleHostPlayerDisconnect(conn);
       });
 
       conn.on('error', (err) => {
         console.error('[P2PSocket] Erro no canal de dados do peer:', err);
+        if (this.controlConnections.get(conn.peer) === conn) this.removeHostControlConnection(conn);
       });
     });
 
@@ -1001,20 +1032,18 @@ export class P2PSocketService {
     return new Promise((resolve, reject) => {
       let settled = false;
       let acceptedPayload = null;
-      let realtimeReady = false;
       const tryFinish = () => {
-        // The match view owns the gameState listener and may replace listeners
-        // while mounting. Acceptance proves that the host rebound the physical
-        // player; an open realtime channel proves snapshots can reach the view.
-        if (acceptedPayload && realtimeReady) finish(true, acceptedPayload);
+        // Acceptance is authoritative: the host has already rebound the
+        // physical player and sent a bootstrap state on the reliable channel.
+        // The unordered realtime channel may finish opening afterwards.
+        if (acceptedPayload) finish(true, acceptedPayload);
       };
       const handleError = message => finish(false, message || 'Nao foi possivel voltar para a partida.');
       const handleRealtimeReady = () => {
-        realtimeReady = true;
-        tryFinish();
+        this.rejoinTransportReady = true;
       };
       const timeout = window.setTimeout(() => {
-        finish(false, 'O host aceitou o retorno, mas nao devolveu seu jogador ao campo.');
+        finish(false, 'O host não confirmou o retorno à partida a tempo.');
       }, 17000);
       const finish = (accepted, payload) => {
         if (settled) return;
@@ -1143,10 +1172,7 @@ export class P2PSocketService {
           this.realtimeConnections.get(previousId)?.close();
           this.realtimeConnections.delete(previousId);
           duplicatePlayer.id = socketId;
-          if (conn && !this.connections.includes(conn)) {
-            conn.peerId = socketId;
-            this.connections.push(conn);
-          }
+          if (conn) this.registerHostControlConnection(conn, socketId);
           const lobbyInfo = this.serverRoom.getLobbyInfo();
           this.publishJoinReceipt(profile.uid, joinAttemptId, 'joinSuccess');
           this.sendJoinResponseWithRetry(socketId, conn, 'joinSuccess', {
@@ -1207,11 +1233,7 @@ export class P2PSocketService {
           if (conn) conn.send({ event: 'joinError', data: 'A janela para voltar a partida expirou.' });
           return;
         }
-        if (conn) {
-          conn.peerId = socketId;
-          this.connections = this.connections.filter(channel => channel !== conn && channel.peer !== socketId);
-          this.connections.push(conn);
-        }
+        if (conn) this.registerHostControlConnection(conn, socketId);
         this.serverRoom.match.reconnectPlayer(reconnecting.previousId, socketId, reconnecting.player);
         // Rebinding the authoritative player proves the return. Clear the old
         // countdown now so it cannot expire after the player is already back.
@@ -1242,10 +1264,7 @@ export class P2PSocketService {
 
       const existingPlayer = this.serverRoom.players.find(player => player.id === socketId);
       if (existingPlayer) {
-        if (conn && !this.connections.includes(conn)) {
-          conn.peerId = socketId;
-          this.connections.push(conn);
-        }
+        if (conn) this.registerHostControlConnection(conn, socketId);
         this.publishJoinReceipt(profile?.uid, joinAttemptId, 'joinSuccess');
         this.sendJoinResponseWithRetry(socketId, conn, 'joinSuccess', {
           code: this.roomCode,
@@ -1261,10 +1280,7 @@ export class P2PSocketService {
       }
 
       // Save player WebRTC data channel
-      if (conn) {
-        conn.peerId = socketId;
-        this.connections.push(conn);
-      }
+      if (conn) this.registerHostControlConnection(conn, socketId);
 
       this.serverRoom.addPlayer(socketId, sanitizeMultiplayerProfile(profile), 'spectator');
 
@@ -1305,6 +1321,11 @@ export class P2PSocketService {
     
     else if (event === 'chatMessage') {
       const player = this.serverRoom.players.find(p => p.id === socketId);
+      const rate = this.consumeRoomChatRate(player?.uid || socketId);
+      if (!rate.allowed) {
+        if (conn?.open) conn.send({ event: 'chatRateLimited', data: { retryAfterMs: rate.retryAfterMs } });
+        return;
+      }
       this.sendRoomChatMessage({
         uid: player?.uid || '',
         username: player ? player.username : 'Jogador',
@@ -1649,6 +1670,11 @@ export class P2PSocketService {
   sendChatMessage(text) {
     if (this.isHost && this.serverRoom) {
       const player = this.serverRoom.players.find(p => p.id === this.clientId);
+      const rate = this.consumeRoomChatRate(player?.uid || this.clientId);
+      if (!rate.allowed) {
+        this.triggerLocalEvent('chatRateLimited', { retryAfterMs: rate.retryAfterMs });
+        return false;
+      }
       this.sendRoomChatMessage({
         uid: player?.uid || '',
         username: player?.username || 'Jogador',
@@ -1656,9 +1682,10 @@ export class P2PSocketService {
         staffRole: player?.staffRole || '',
         text
       });
-      return;
+      return true;
     }
     this.emit('chatMessage', text);
+    return true;
   }
 
   addBot(team) {
@@ -2022,6 +2049,7 @@ export class P2PSocketService {
     this.off('publicRoomsList');
     this.off('matchRejoined');
     this.off('surrenderAccepted');
+    this.off('chatRateLimited');
   }
 
   // --------------------------------------------------------------------------
@@ -2091,6 +2119,11 @@ export class P2PSocketService {
         updatedAt: Date.now()
       }).catch(() => {});
     }, 3000);
+  }
+
+  onChatRateLimited(callback) {
+    this.off('chatRateLimited');
+    this.on('chatRateLimited', callback);
   }
 
   /** Keeps matchmaking visibility tied to the actual RTDB host connection. */
@@ -2215,6 +2248,18 @@ export class P2PSocketService {
       timestamp: Date.now()
     };
     if (!msg.text) return;
+    if (msg.uid) {
+      let retryAfterMs = 0;
+      const limiter = await runRtdbTransaction(ref(rtdb, `chatRateLimits/rooms/${this.roomCode}/${msg.uid}`), current => {
+        const result = consumeChatRateLimit(current, msg.timestamp);
+        retryAfterMs = result.retryAfterMs;
+        return result.allowed ? result.state : undefined;
+      }, { applyLocally: false }).catch(() => ({ committed: false }));
+      if (!limiter.committed) {
+        this.triggerLocalEvent('chatRateLimited', { retryAfterMs });
+        return;
+      }
+    }
     await push(ref(rtdb, `roomChats/${this.roomCode}`), msg).catch(() => {
       this.triggerLocalEvent('chatMessage', msg);
     });

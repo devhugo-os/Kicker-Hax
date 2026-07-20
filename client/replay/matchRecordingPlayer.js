@@ -257,13 +257,17 @@ export class MatchRecordingPlayer {
     if (!this.recording) return;
     const frame = this.getFrameAt(this.currentMs);
     const ended = this.currentMs >= Number(this.recording.durationMs || 0);
-    renderMatchRecordingFrame(this.canvas, this.recording, frame, {
+    const renderedFrame = ended && this.recording.finalScore
+      ? { ...frame, score: { ...this.recording.finalScore } }
+      : frame;
+    renderMatchRecordingFrame(this.canvas, this.recording, renderedFrame, {
       shake: !ended
         && frame?.status === 'playing'
         && frame.ball?.lastStrikeType === 'power'
         && Number(frame.ball?.strikeTimer || 0) > 0,
       ended,
-      endReason: this.recording.endReason || (this.match?.forfeit ? 'wo' : 'normal')
+      endReason: this.recording.endReason || (this.match?.forfeit ? 'wo' : 'normal'),
+      winnerTeam: this.recording.winnerTeam ?? this.match?.winnerTeam ?? this.match?.winner
     });
     this.timeline.value = String(Math.min(this.currentMs, this.recording.durationMs || 0));
     this.timeLabel.textContent = `${formatTime(this.currentMs)} / ${formatTime(this.recording.durationMs)}`;
@@ -276,9 +280,13 @@ export class MatchRecordingPlayer {
         title.className = 'recording-final-title';
         const isForfeit = this.recording.endReason === 'wo' || this.match?.forfeit;
         const reason = this.recording.forfeitReason?.message || this.match?.forfeitReason?.message || '';
+        const winner = this.recording.winnerTeam ?? this.match?.winnerTeam ?? this.match?.winner;
+        const winnerLabel = winner === Team.RED || winner === 'red'
+          ? 'Time Vermelho'
+          : winner === Team.BLUE || winner === 'blue' ? 'Time Azul' : '';
         title.textContent = isForfeit
-          ? `Fim da partida - W.O.${reason ? ` ${reason}` : ''}`
-          : 'Fim da partida - conclusão normal';
+          ? `Fim da partida - ${winnerLabel || 'vencedor'} por W.O.${reason ? ` ${reason}` : ''}`
+          : `Fim da partida - ${winnerLabel ? `vitória do ${winnerLabel}` : 'empate'}`;
         this.report.prepend(title);
       }
     }
@@ -316,8 +324,34 @@ export class MatchRecordingPlayer {
 
   async exportVideo() {
     if (this.exportTask) return this.exportTask;
-    if (!this.recording || !this.canvas?.captureStream || typeof MediaRecorder !== 'function') {
-      showToast('Este dispositivo não oferece exportação de vídeo.', 'error');
+    if (!this.recording) {
+      showToast('Nenhuma gravação foi carregada.', 'error');
+      return;
+    }
+    this.exportProgress = 0;
+    this.exportRecordingId = String(this.match?.recordingId || this.match?.matchId || Date.now());
+    try {
+      const { exportRecordingFast } = await import('./fastRecordingExporter.js');
+      this.exportTask = exportRecordingFast({
+        recording: this.recording,
+        getFrameAt: timeMs => this.getFrameAt(timeMs),
+        onProgress: progress => {
+          this.exportProgress = progress;
+          this.refreshExportButton();
+        }
+      });
+      this.exportBlob = await this.exportTask;
+      this.exportFilename = `Kicker-Hax-${this.match?.matchId || Date.now()}.mp4`;
+      showToast('Vídeo pronto. Clique em “Baixar vídeo pronto”.', 'success');
+      return;
+    } catch (error) {
+      console.warn('[Recording] Exportação rápida indisponível; usando modo compatível.', error);
+    } finally {
+      this.exportTask = null;
+      this.refreshExportButton();
+    }
+    if (!this.canvas?.captureStream || typeof MediaRecorder !== 'function') {
+      showToast('Este dispositivo não oferece exportação de vídeo compatível.', 'error');
       return;
     }
     const candidates = ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'];
@@ -327,7 +361,6 @@ export class MatchRecordingPlayer {
     // resume Web Audio before MediaRecorder attaches its audio track.
     soundFx.resumeAfterForeground(false, false, false);
     this.exportProgress = 0;
-    this.exportRecordingId = String(this.match?.recordingId || this.match?.matchId || Date.now());
     // Render on an isolated canvas so exporting never moves the visible player.
     const exportCanvas = document.createElement('canvas');
     const [fieldWidth, fieldHeight] = this.recording.field || [1024, 640];

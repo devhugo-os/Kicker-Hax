@@ -1,4 +1,6 @@
-export const MAX_REALTIME_BUFFERED_BYTES = 4 * 1024;
+// Keep at most roughly one compact snapshot queued. Old positions have no
+// value and are the main source of apparent high ping on distant peers.
+export const MAX_REALTIME_BUFFERED_BYTES = 2 * 1024;
 export const MAX_REALTIME_TEXT_LENGTH = 255;
 
 const OMITTED_REALTIME_FIELDS = new Set([

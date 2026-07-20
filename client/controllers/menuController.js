@@ -131,7 +131,11 @@ export const menuController = {
     });
 
     const publicProfileModal = document.getElementById('public-profile-modal');
-    document.getElementById('public-profile-close')?.addEventListener('click', () => publicProfileModal?.classList.add('hidden'));
+    document.getElementById('public-profile-close')?.addEventListener('click', () => {
+      publicProfileModal?.classList.add('hidden');
+      this.publicPresenceUnsub?.();
+      this.publicPresenceUnsub = null;
+    });
     publicProfileModal?.addEventListener('click', event => {
       if (event.target === publicProfileModal) publicProfileModal.classList.add('hidden');
     });
@@ -243,8 +247,10 @@ export const menuController = {
   async refreshQuickProfile() {
     if (!this.currentUser) return;
     try {
+      const gifts = await firebaseService.claimPendingSkinGifts(this.currentUser.uid).catch(() => []);
       this.profileData = await firebaseService.getUserProfile(this.currentUser.uid);
       if (!this.profileData) return;
+      gifts.forEach(gift => showToast(`${gift.senderUsername || 'Um jogador'} doou uma skin para você.`, 'success'));
 
       // Update Quick Profile HTML Elements
       const flagEl = document.getElementById('quick-profile-flag');
@@ -285,6 +291,10 @@ export const menuController = {
     const ownStaffTag = document.getElementById('profile-staff-tag');
     ownStaffTag?.replaceChildren();
     if (ownStaffTag) appendStaffTag(ownStaffTag, this.profileData.staffRole, { full: true });
+    this.ownPresenceUnsub?.();
+    this.ownPresenceUnsub = firebaseService.subscribeToUserPresence(this.currentUser.uid, presence => {
+      this.renderPresence(document.getElementById('profile-presence'), presence.online);
+    });
 
     // Bind edit fields
     const usernameInput = document.getElementById('profile-username-input');
@@ -590,6 +600,11 @@ export const menuController = {
     document.getElementById('public-profile-title').textContent = 'Carregando...';
     this.publicProfileUid = uid;
     this.publicProfileData = null;
+    this.publicPresenceUnsub?.();
+    this.renderPresence(document.getElementById('public-profile-presence'), false);
+    this.publicPresenceUnsub = firebaseService.subscribeToUserPresence(uid, presence => {
+      if (this.publicProfileUid === uid) this.renderPresence(document.getElementById('public-profile-presence'), presence.online);
+    });
     try {
       const [profile, stats] = await Promise.all([
         firebaseService.getUserProfile(uid),
@@ -732,6 +747,12 @@ export const menuController = {
     } catch (error) {
       list.textContent = 'Não foi possível carregar este histórico.';
     }
+  },
+
+  renderPresence(element, online) {
+    if (!element) return;
+    element.textContent = online ? 'Online agora' : 'Offline';
+    element.classList.toggle('online', !!online);
   },
 
   openMatchDetails(match, viewerUid) {

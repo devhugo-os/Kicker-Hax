@@ -103,6 +103,7 @@
           <div class="profile-title-group">
             <h2>Perfil do Jogador</h2>
             <span id="profile-staff-tag" aria-label="Cargo oficial"></span>
+            <span id="profile-presence" class="profile-presence" role="status">Verificando...</span>
           </div>
           <button id="profile-btn-logout" class="btn btn-danger btn-sm">Sair da Conta</button>
         </div>
@@ -212,6 +213,7 @@
           <div>
             <span class="market-eyebrow">Perfil público</span>
             <h2 id="public-profile-title">Jogador</h2>
+            <span id="public-profile-presence" class="profile-presence" role="status">Offline</span>
             <p id="public-profile-bio">Sem biografia.</p>
           </div>
           <div class="public-profile-ratings">
@@ -1031,7 +1033,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v52.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v53.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1075,6 +1077,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v53.0 - CONEXÃO EM JOGO</h4>
+            <p>Perfis agora mostram presença online, e o inventário permite doar skins com confirmação e entrega transacional. Chats receberam limite contra spam. O retorno à partida não fica mais preso esperando o canal rápido, conexões antigas são descartadas e snapshots congestionados deixam de aumentar o atraso. Gravações exibem o placar e o vencedor corretos em W.O., notas consideram derrota e diferença de gols, e a exportação MP4 ganhou codificação acelerada.</p>
+          </section>
           <section>
             <h4>v52.0 - PORTAS ABERTAS</h4>
             <p>A entrada em salas foi restaurada: o host agora valida bloqueios de retorno no estado autoritativo correto e sempre responde ao pedido do visitante, eliminando o timeout causado por uma vari&aacute;vel inexistente. A detec&ccedil;&atilde;o de contas por aparelho foi removida do competitivo, incluindo fingerprints, leases e dados enviados no WebRTC.</p>

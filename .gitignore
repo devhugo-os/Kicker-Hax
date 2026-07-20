@@ -1,6 +1,7 @@
 # Node dependencies
 node_modules/
 npm-debug.log*
+database-debug.log
 yarn-debug.log*
 yarn-error.log*
 

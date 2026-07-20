@@ -10,11 +10,14 @@ export function normalizeReportTeam(team) {
 }
 
 /** Produces a stable 1-10 match rating from the player's contribution. */
-export function calculateMatchRating(stats = {}, winnerTeam = 'draw') {
+export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}) {
   const team = normalizeReportTeam(stats.team);
   const won = winnerTeam !== 'draw' && team === normalizeReportTeam(winnerTeam);
   const lost = winnerTeam !== 'draw' && !won;
-  const resultImpact = won ? 0.65 : lost ? -0.35 : 0.1;
+  const teamScore = team === Team.RED ? Number(score.red || 0) : Number(score.blue || 0);
+  const opponentScore = team === Team.RED ? Number(score.blue || 0) : Number(score.red || 0);
+  const goalDifference = Math.min(6, Math.abs(teamScore - opponentScore));
+  const resultImpact = won ? 0.9 + goalDifference * 0.12 : lost ? -0.9 - goalDifference * 0.16 : 0.1;
   const possessionImpact = (Math.max(0, Math.min(100, Number(stats.possessionPct || 0))) - 50) * 0.008;
   const shots = Math.max(0, Number(stats.shots || 0));
   const goals = Math.max(0, Number(stats.goals || 0));
@@ -28,7 +31,10 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw') {
     - (Math.min(10, missedShots) * 0.1)
     - (Number(stats.ownGoals || 0) * 1.2)
     + possessionImpact;
-  return Math.round(Math.max(1, Math.min(10, raw)) * 10) / 10;
+  // A great individual performance can soften a loss, but cannot receive a
+  // perfect score while the team was defeated.
+  const upperBound = lost ? Math.max(7.6, 9 - goalDifference * 0.15) : 10;
+  return Math.round(Math.max(1, Math.min(upperBound, raw)) * 10) / 10;
 }
 
 export function buildTeamStats(playerStats = [], score = {}) {
@@ -71,7 +77,7 @@ export function buildMatchReport(result = {}) {
   const playerStats = (result.playerStats || []).map(player => ({
     ...player,
     team: normalizeReportTeam(player.team),
-    rating: Number(player.rating || calculateMatchRating(player, winnerTeam))
+    rating: Number(player.rating || calculateMatchRating(player, winnerTeam, score))
   }));
   const teamStats = result.teamStats || buildTeamStats(playerStats, score);
   return { score, winnerTeam: winnerTeam === 'draw' ? 'draw' : normalizeReportTeam(winnerTeam), playerStats, teamStats };

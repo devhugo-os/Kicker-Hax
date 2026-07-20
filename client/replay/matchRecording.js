@@ -270,7 +270,7 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 8,
+      v: 9,
       field: this.field,
       sampleMs: SAMPLE_INTERVAL_MS,
       durationMs: Math.max(0, this.virtualTimeMs),
@@ -279,7 +279,12 @@ export class MatchRecordingSession {
       reports: this.reports,
       markers: this.markers,
       endReason: result?.forfeit ? 'wo' : 'normal',
-      forfeitReason: result?.forfeitReason || null
+      forfeitReason: result?.forfeitReason || null,
+      finalScore: {
+        red: Number(result?.score?.red ?? result?.scoreRed ?? 0),
+        blue: Number(result?.score?.blue ?? result?.scoreBlue ?? 0)
+      },
+      winnerTeam: result?.winnerTeam ?? result?.winner ?? 'draw'
     };
     let payload = await compressText(JSON.stringify(base));
     let stride = 1;
@@ -300,7 +305,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 8,
+      recordingVersion: 9,
       competitive: true,
       createdAt: new Date().toISOString()
     };

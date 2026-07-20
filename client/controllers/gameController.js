@@ -487,6 +487,9 @@ export const gameController = {
         socketService.getSocket().off('roomChatCleared');
         socketService.onLobbyUpdate((room) => this.updateLobbyView(room));
         socketService.onChat((msg) => this.appendChatMessage(msg));
+        socketService.onChatRateLimited?.(({ retryAfterMs }) => {
+          showToast(`Aguarde ${Math.max(1, Math.ceil(Number(retryAfterMs || 0) / 1000))}s para enviar outra mensagem.`, 'info');
+        });
         socketService.onMatchStarted((matchMeta) => {
           this.onlineMatchMeta = matchMeta || null;
           if (!socketService.isHost && this.currentUser?.uid && this.activeRoom?.code) {
@@ -2737,6 +2740,9 @@ export const gameController = {
     socketService.onChat((msg) => {
       this.appendChatMessage(msg);
     });
+    socketService.onChatRateLimited?.(({ retryAfterMs }) => {
+      showToast(`Aguarde ${Math.max(1, Math.ceil(Number(retryAfterMs || 0) / 1000))}s para enviar outra mensagem.`, 'info');
+    });
 
     socketService.getSocket().off('matchAborted');
     socketService.getSocket().off('kicked');
@@ -3051,6 +3057,11 @@ export const gameController = {
     this.tutorialSession?.destroy();
     this.tutorialSession = null;
     this.stopLocalReplayRecording();
+    clearTimeout(this.replayFallbackTimer);
+    this.replayFallbackTimer = null;
+    this.replayFrames = [];
+    this.onlineReplayBuffer = [];
+    this.inReplay = false;
     soundFx.stopCrowd();
     socketService.clearListeners();
     if (this.pingInterval) clearInterval(this.pingInterval);
@@ -3082,6 +3093,10 @@ export const gameController = {
     document.getElementById('mobile-stats-toggle')?.classList.add('hidden');
     document.getElementById('mobile-pause-toggle')?.classList.add('hidden');
     this.closeMobileHudEditorUI();
+    if (this.matchRecording) this.matchRecording.active = false;
+    this.matchRecording = null;
+    this.players = [];
+    this.ball = null;
     document.getElementById('ping-indicator')?.classList.add('hidden');
     document.getElementById('match-screen')?.classList.remove('mobile-match', 'mobile-stats-open', 'hud-editor-mode');
     this.hudEditorMode = false;

@@ -45,6 +45,7 @@ import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } f
 import { getFeaturedCycle } from '../utils/featuredCycle.js';
 import { getSaoPauloChatDayWindow } from '../utils/chatRetention.js';
 import { getSeasonId } from '../utils/seasonCycle.js';
+import { consumeChatRateLimit } from '../utils/chatRateLimit.js';
 
 const _dec = (val) => atob(val);
 const firebaseConfig = {
@@ -95,7 +96,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '52.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '53.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -737,6 +738,85 @@ export const firebaseService = {
     }));
   },
 
+  subscribeToUserPresence(uid, callback) {
+    if (!uid) return () => {};
+    return onValue(ref(rtdb, `presence/${uid}`), snapshot => {
+      const value = snapshot.val() || {};
+      callback?.({ online: snapshot.exists() && value.online !== false, ...value });
+    }, () => callback?.({ online: false }));
+  },
+
+  async findUserByUsername(username) {
+    const normalized = String(username || '').trim().toLowerCase();
+    if (!normalized) return null;
+    const snapshot = await getDocs(query(collection(db, 'users'), where('username', '==', normalized), limit(1)));
+    if (snapshot.empty) return null;
+    const result = snapshot.docs[0];
+    return { uid: result.id, ...normalizeCosmetics(result.data()) };
+  },
+
+  async donateSkin(senderUid, recipientUsername, skinId) {
+    const recipient = await this.findUserByUsername(recipientUsername);
+    if (!recipient) throw new Error('Nenhum jogador foi encontrado com esse nome.');
+    if (recipient.uid === senderUid) throw new Error('Você não pode doar uma skin para si mesmo.');
+    if (!skinId || skinId === 'rookie') throw new Error('A skin Novato não pode ser doada.');
+    const senderRef = doc(db, 'users', senderUid);
+    const recipientRef = doc(db, 'users', recipient.uid);
+    const giftRef = doc(collection(db, 'skinGifts'));
+    await runTransaction(db, async transaction => {
+      const [senderSnap, recipientSnap] = await Promise.all([transaction.get(senderRef), transaction.get(recipientRef)]);
+      if (!senderSnap.exists() || !recipientSnap.exists()) throw new Error('Um dos perfis não está disponível.');
+      const sender = senderSnap.data();
+      const receiver = recipientSnap.data();
+      const owned = Array.isArray(sender.ownedSkins) ? sender.ownedSkins : ['rookie'];
+      if (!owned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
+      if ((sender.equippedSkinId || 'rookie') === skinId) throw new Error('Equipe outra skin antes de doar esta.');
+      if ((receiver.ownedSkins || ['rookie']).includes(skinId)) throw new Error('Esse jogador já possui esta skin.');
+      const purchaseValues = { ...(sender.skinPurchaseValues || {}) };
+      const skinValue = Math.max(0, Number(purchaseValues[skinId] || 0));
+      delete purchaseValues[skinId];
+      transaction.update(senderRef, { ownedSkins: owned.filter(id => id !== skinId), skinPurchaseValues: purchaseValues });
+      transaction.set(giftRef, {
+        senderUid,
+        senderUsername: sender.username || '',
+        recipientUid: recipient.uid,
+        recipientUsername: receiver.username || '',
+        skinId,
+        skinValue,
+        status: 'pending',
+        createdAt: Date.now()
+      });
+    });
+    return recipient;
+  },
+
+  async claimPendingSkinGifts(uid) {
+    // A consulta usa apenas o destinatario para funcionar sem indice composto;
+    // o status e validado novamente dentro da transacao antes da entrega.
+    const gifts = await getDocs(query(collection(db, 'skinGifts'), where('recipientUid', '==', uid), limit(30)));
+    const claimed = [];
+    for (const giftSnap of gifts.docs) {
+      const gift = giftSnap.data();
+      if (gift.status !== 'pending') continue;
+      const userRef = doc(db, 'users', uid);
+      const accepted = await runTransaction(db, async transaction => {
+        const [freshGift, userSnap] = await Promise.all([transaction.get(giftSnap.ref), transaction.get(userRef)]);
+        if (!freshGift.exists() || freshGift.data().status !== 'pending' || !userSnap.exists()) return false;
+        const profile = userSnap.data();
+        const owned = Array.isArray(profile.ownedSkins) ? [...profile.ownedSkins] : ['rookie'];
+        if (!owned.includes(gift.skinId)) owned.push(gift.skinId);
+        transaction.update(userRef, {
+          ownedSkins: owned,
+          skinPurchaseValues: { ...(profile.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) }
+        });
+        transaction.update(giftSnap.ref, { status: 'claimed', claimedAt: Date.now() });
+        return true;
+      });
+      if (accepted) claimed.push(gift);
+    }
+    return claimed;
+  },
+
   async saveMatchRecording(recordingId, recordingData) {
     if (!auth.currentUser?.uid || !recordingId || !recordingData?.data) {
       throw new Error('Gravação inválida.');
@@ -1040,6 +1120,14 @@ export const firebaseService = {
     // Run cleanup in background before sending
     this.pruneOldChatMessages().catch(err => console.warn(err));
 
+    const now = Date.now();
+    let retryAfterMs = 0;
+    const limiter = await runRtdbTransaction(ref(rtdb, `chatRateLimits/global/${profile.uid}`), current => {
+      const result = consumeChatRateLimit(current, now);
+      retryAfterMs = result.retryAfterMs;
+      return result.allowed ? result.state : undefined;
+    }, { applyLocally: false });
+    if (!limiter.committed) throw new Error(`Aguarde ${Math.max(1, Math.ceil(retryAfterMs / 1000))}s antes de enviar outra mensagem.`);
     const chatRef = ref(rtdb, 'globalChat');
     await push(chatRef, {
       uid: profile.uid,
@@ -1047,7 +1135,7 @@ export const firebaseService = {
       badge: profile.badge || '👤',
       staffRole: profile.staffRole || '',
       text: String(text || '').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH),
-      timestamp: Date.now()
+      timestamp: now
     });
   },
 
