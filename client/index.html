@@ -950,7 +950,6 @@
           <span id="recording-time">0:00 / 0:00</span>
           <label>Velocidade <select id="recording-speed"></select></label>
           <label>Volume <input id="recording-volume" type="range" min="0" max="100" value="70"></label>
-          <button id="recording-export" class="btn btn-primary" type="button">Salvar MP4</button>
         </div>
         <div id="recording-live-report" class="match-report recording-report"></div>
       </div>
@@ -1038,7 +1037,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v54.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v55.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1082,6 +1081,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v55.0 - RETORNO DIRETO</h4>
+            <p>Os dois bot&otilde;es de retorno agora usam exatamente a mesma opera&ccedil;&atilde;o autoritativa, sem depender de cliques artificiais entre elementos da arena. O chat recomp&otilde;e sua posi&ccedil;&atilde;o e classes ao alternar entre desktop e viewport mobile. Nomes de jogadores nos relat&oacute;rios abrem o perfil p&uacute;blico desde a inicializa&ccedil;&atilde;o. As grava&ccedil;&otilde;es permanecem dispon&iacute;veis no reprodutor, mas toda fun&ccedil;&atilde;o de exportar ou baixar v&iacute;deo foi removida.</p>
+          </section>
           <section>
             <h4>v54.0 - SEMPRE EM CAMPO</h4>
             <p>O retorno &agrave; partida agora aceita o estado autoritativo que comprova o novo Peer ID, mant&eacute;m uma janela segura para a estabiliza&ccedil;&atilde;o do WebRTC e impede a expuls&atilde;o tardia. Nomes nos resultados abrem o perfil correspondente. A exporta&ccedil;&atilde;o MP4 preserva as dimens&otilde;es do campo durante toda a codifica&ccedil;&atilde;o, recuperando o movimento e a velocidade do reprodutor. A rede e a grava&ccedil;&atilde;o usam cad&ecirc;ncias mais leves, e as notas passam a punir com mais rigor derrotas e diferen&ccedil;as no placar. Os cr&eacute;ditos recebem uma homenagem permanente ao Bidu.</p>

@@ -69,10 +69,6 @@ export const gameController = {
   onlineMatchFinished: false,
   replayFrameIdx: 0,
   replayTimer: 0,
-  replayBlob: null,
-  mediaRecorder: null,
-  recordedChunks: [],
-  isRecording: false,
   matchRecording: null,
   recordingFinalizePromise: null,
   serverClockOffsetMs: 0,
@@ -789,12 +785,6 @@ export const gameController = {
       };
     }
 
-    const btnSaveReplay = document.getElementById('btn-save-replay');
-    if (btnSaveReplay) {
-      btnSaveReplay.onclick = () => {
-        this.downloadReplay();
-      };
-    }
     document.getElementById('live-match-report-close')?.addEventListener('click', () => {
       this.showLiveMatchReport(false);
     });
@@ -1008,8 +998,6 @@ export const gameController = {
     if (!this.hudEditorMode) this.closeMobileHudEditorUI();
     this.canvas = document.getElementById('match-canvas');
     this.ctx = this.canvas.getContext('2d', { alpha: false });
-    this.recordedChunks = [];
-    this.isRecording = false;
     // Match views are disposable. Do not carry a paused menu or host pause
     // marker into a new game after a player exits and comes back.
     this.isPaused = false;
@@ -1035,6 +1023,7 @@ export const gameController = {
     this.boundResizeHandler = () => {
       this.resizeCanvasContainer();
       this.refreshMobileMatchChrome();
+      this.syncMatchChatLayout();
     };
     window.addEventListener('resize', this.boundResizeHandler);
     if (this.boundFullscreenHandler) document.removeEventListener('fullscreenchange', this.boundFullscreenHandler);
@@ -1121,20 +1110,7 @@ export const gameController = {
       } else if (mobileChatToggle) {
         mobileChatToggle.classList.add('hidden');
       }
-      if (this.mode === 'multiplayer') {
-        const leftSidebar = document.getElementById('match-side-left');
-        const matchScreen = document.getElementById('match-screen');
-        if (this.isTouchDevice() && matchScreen && gameChat.parentElement !== matchScreen) {
-          matchScreen.appendChild(gameChat);
-      } else if (!this.isTouchDevice() && leftSidebar && gameChat.parentElement !== leftSidebar) {
-        leftSidebar.innerHTML = '<div class="side-title">Chat</div>';
-        leftSidebar.appendChild(gameChat);
-      }
-      if (!this.isTouchDevice() && this.mode === 'multiplayer') {
-        document.getElementById('game-chat-form')?.classList.add('active');
-        requestAnimationFrame(() => this.scrollChatToLatest('game-chat-messages'));
-      }
-    }
+      if (this.mode === 'multiplayer') this.syncMatchChatLayout(true);
     }
     if (mobileStatsToggle) {
       mobileStatsToggle.onclick = () => {
@@ -1511,8 +1487,6 @@ export const gameController = {
               MatchSim.countdownTimer = (this.replayFrames.length * C.REPLAY_SLOWMO_FACTOR)
                 + Math.ceil(C.REPLAY_POST_GOAL_FREEZE_MS / (1000 / 60));
 
-              // Start local recording
-              this.startLocalReplayRecording();
             }
           } else if (MatchSim.status === 'replay') {
             MatchSim.countdownTimer--;
@@ -2261,7 +2235,6 @@ export const gameController = {
 
   localMatchEnd(score) {
     cancelAnimationFrame(this.localPhysicsTick);
-    this.stopLocalReplayRecording();
 
     // Stop background crowd noise to prevent audio leak to menu
     soundFx.stopCrowd();
@@ -2300,7 +2273,6 @@ export const gameController = {
   showOnlineMatchEnd(result) {
     if (this.administrativeMatchAbort) return;
     showToast('Partida finalizada!', 'info');
-    this.stopLocalReplayRecording();
     if (result?.lobbyInfo) this.activeRoom = result.lobbyInfo;
 
     const score = result?.score || result || { red: 0, blue: 0 };
@@ -3056,7 +3028,6 @@ export const gameController = {
     cancelAnimationFrame(this.localPhysicsTick);
     this.tutorialSession?.destroy();
     this.tutorialSession = null;
-    this.stopLocalReplayRecording();
     clearTimeout(this.replayFallbackTimer);
     this.replayFallbackTimer = null;
     this.replayFrames = [];
@@ -3116,6 +3087,60 @@ export const gameController = {
     }
     // Fullscreen on mobile must be user-initiated; automatic calls are blocked
     // by browsers and spam the console during HUD editing.
+  },
+
+  /** Rebuilds chat placement after DevTools/mobile viewport capability changes. */
+  syncMatchChatLayout(resetVisibility = false) {
+    if (this.mode !== 'multiplayer') return;
+    const gameChat = document.getElementById('game-chat-overlay');
+    const matchScreen = document.getElementById('match-screen');
+    const leftSidebar = document.getElementById('match-side-left');
+    const form = document.getElementById('game-chat-form');
+    const mobileToggle = document.getElementById('mobile-chat-toggle');
+    if (!gameChat || !matchScreen || !leftSidebar) return;
+
+    const mobile = this.isTouchDevice();
+    const layoutChanged = this.matchChatMobileLayout !== mobile;
+    this.matchChatMobileLayout = mobile;
+    gameChat.classList.toggle('mobile-chat-box', mobile);
+    mobileToggle?.classList.toggle('hidden', !mobile);
+
+    if (mobile) {
+      if (gameChat.parentElement !== matchScreen) matchScreen.appendChild(gameChat);
+      let closeButton = document.getElementById('mobile-chat-close');
+      if (!closeButton) {
+        closeButton = document.createElement('button');
+        closeButton.id = 'mobile-chat-close';
+        closeButton.type = 'button';
+        closeButton.className = 'mobile-chat-close';
+        closeButton.textContent = '×';
+        closeButton.onclick = () => {
+          gameChat.classList.add('hidden');
+          gameChat.classList.remove('mobile-chat-modal');
+          form?.classList.remove('active');
+        };
+        gameChat.prepend(closeButton);
+      }
+      if (layoutChanged || resetVisibility) {
+        gameChat.classList.add('hidden');
+        gameChat.classList.remove('mobile-chat-modal');
+        form?.classList.remove('active');
+      }
+    } else {
+      document.getElementById('mobile-chat-close')?.remove();
+      gameChat.classList.remove('mobile-chat-modal', 'mobile-chat-box', 'hidden');
+      form?.classList.add('active');
+      if (gameChat.parentElement !== leftSidebar) {
+        const title = document.createElement('div');
+        title.className = 'side-title';
+        title.textContent = 'Chat';
+        leftSidebar.replaceChildren(title, gameChat);
+      }
+    }
+
+    if (layoutChanged || resetVisibility) {
+      requestAnimationFrame(() => this.scrollChatToLatest('game-chat-messages'));
+    }
   },
 
   applyMobileHudSettings() {
@@ -3574,75 +3599,6 @@ export const gameController = {
     modal.classList.remove('hidden');
   },
 
-  // ==========================================================================
-  // REPLAY CAPTURE & EXPORT (MP4 LOCAL REC)
-  // ==========================================================================
-  startLocalReplayRecording() {
-    if (!this.canvas || this.isRecording) return;
-    if (this.isTouchDevice()) {
-      // MediaRecorder on mobile browsers is expensive enough to stutter the
-      // mandatory goal replay, so phones/tablets render only the playback.
-      this.replayBlob = null;
-      this.recordedChunks = [];
-      return;
-    }
-
-    try {
-      const stream = this.canvas.captureStream(30); // 30 FPS stream
-
-      // Get Web Audio API mixed stream
-      const audioDest = soundFx.getRecordingStreamDestination();
-      if (audioDest) {
-        const audioTracks = audioDest.stream.getAudioTracks();
-        audioTracks.forEach(track => stream.addTrack(track));
-      }
-
-      this.recordedChunks = [];
-      this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9,opus' });
-
-      this.mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          this.recordedChunks.push(e.data);
-        }
-      };
-
-      this.mediaRecorder.onstop = () => {
-        this.replayBlob = new Blob(this.recordedChunks, { type: 'video/webm' });
-        this.isRecording = false;
-
-        // Show save button
-        const saveBtn = document.getElementById('btn-save-replay');
-        if (saveBtn) saveBtn.style.display = 'inline-block';
-      };
-
-      this.mediaRecorder.start();
-      this.isRecording = true;
-    } catch (e) {
-      console.warn("Replay recording not supported on this browser.", e);
-    }
-  },
-
-  stopLocalReplayRecording() {
-    if (this.mediaRecorder && this.isRecording) {
-      try {
-        this.mediaRecorder.stop();
-      } catch (e) {}
-    }
-  },
-
-  downloadReplay() {
-    if (!this.replayBlob) return;
-    const url = URL.createObjectURL(this.replayBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `KickerHax-Replay-${Date.now()}.webm`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Replay baixado com sucesso!', 'success');
-  },
-
   playbackReplay() {
     if (this.replayFrames.length === 0) return;
     const now = Date.now();
@@ -3738,7 +3694,6 @@ export const gameController = {
     clearTimeout(this.replayFallbackTimer);
     this.replayFallbackTimer = null;
     this.inReplay = false;
-    this.stopLocalReplayRecording();
     document.getElementById('replay-overlay')?.classList.add('hidden');
     const captionEl = document.getElementById('replay-caption');
     if (captionEl) captionEl.style.display = 'none';
@@ -3815,7 +3770,6 @@ export const gameController = {
       replayVoteButton.textContent = `Pular replay (0/${this.players.length || 1})`;
       replayVoteButton.onclick = canVoteReplay ? () => socketService.voteSkipReplay() : null;
     }
-    this.startLocalReplayRecording();
   },
 
   recordOnlineReplayFrame(state) {
@@ -4291,68 +4245,7 @@ export const gameController = {
     if (this.latestRooms) this.renderRoomsList(this.latestRooms);
     button.classList.remove('hidden');
     abandonButton?.classList.remove('hidden');
-    const getRejoinCredentials = async () => {
-        let profile = {
-        uid: this.currentUser.uid,
-        username: menuController.profileData.username,
-        badge: menuController.profileData.badge || '🏳️',
-        skin: getEquippedSkin(menuController.profileData).image,
-        skinId: menuController.profileData.equippedSkinId || 'rookie',
-        staffRole: menuController.profileData.staffRole || ''
-      };
-      let password = '';
-      try {
-        const lastRoom = JSON.parse(localStorage.getItem(`kicker_hax_last_room_${this.currentUser.uid}`) || 'null');
-        if (lastRoom?.code === saved.code) password = lastRoom.password || '';
-      } catch { /* Rejoining a public room does not need a saved password. */ }
-      return { profile, password };
-    };
-    button.onclick = async () => {
-      const { profile, password } = await getRejoinCredentials();
-      button.disabled = true;
-      if (abandonButton) abandonButton.disabled = true;
-      const restoreActions = () => {
-        button.disabled = false;
-        if (abandonButton) abandonButton.disabled = false;
-      };
-      // Enter the online view immediately and let its ready requests wait for
-      // PeerJS. This removes the arena-side race where the host restored the
-      // player but the returning client never mounted the match listeners.
-      this.mode = 'multiplayer';
-      this.practiceMode = false;
-      this.tutorialMode = false;
-      this.activeRoom = this.rejoinRoomMeta || room;
-      this.fieldSize = this.activeRoom?.fieldSize || 'medium';
-      this.onlineMatchMeta = { rejoined: true, matchId: saved.matchId };
-      this.onlineMatchFinished = false;
-      this.pendingRejoinConfirmation = { timeout: null };
-      this.rejoinRemountInProgress = true;
-      try {
-        router.show('match-screen');
-      } finally {
-        this.rejoinRemountInProgress = false;
-      }
-      try {
-        const payload = await socketService.rejoinMatch(saved.code, password, profile, saved.matchId);
-        restoreActions();
-        this.activeRoom = payload.lobbyInfo || this.rejoinRoomMeta || room;
-        this.fieldSize = this.activeRoom?.fieldSize || 'medium';
-        this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
-        socketService.sendMatchClientReady();
-        showToast('Retorno aceito. Sincronizando a partida...', 'info');
-      } catch (error) {
-        restoreActions();
-        socketService.leaveRoom();
-        const reservation = await socketService.getActiveMatchReservation(this.currentUser?.uid).catch(() => null);
-        if (!reservation) {
-          this.rejoinRoomMeta = null;
-          await this.refreshRejoinMatchAction();
-          socketService.refreshPublicRooms();
-        }
-        if (router.currentScreenId === 'match-screen') router.show('multiplayer-screen');
-        showToast(error?.message || 'Não foi possível voltar para a partida.', 'error');
-      }
-    };
+    button.onclick = () => this.rejoinReservedMatch();
     if (abandonButton) abandonButton.onclick = async () => {
       const confirmed = await confirmDialog({
         title: 'Abandonar esta partida?',
@@ -4361,7 +4254,7 @@ export const gameController = {
         danger: true
       });
       if (!confirmed) return;
-      const { profile, password } = await getRejoinCredentials();
+      const { profile, password } = await this.getReservedMatchCredentials(saved);
       button.disabled = true;
       abandonButton.disabled = true;
       socketService.off('abandonAccepted');
@@ -4382,6 +4275,87 @@ export const gameController = {
       });
       socketService.abandonMatch(saved.code, password, profile, saved.matchId);
     };
+  },
+
+  async getReservedMatchCredentials(saved) {
+    const profile = {
+      uid: this.currentUser.uid,
+      username: menuController.profileData.username,
+      badge: menuController.profileData.badge || '🏳️',
+      skin: getEquippedSkin(menuController.profileData).image,
+      skinId: menuController.profileData.equippedSkinId || 'rookie',
+      staffRole: menuController.profileData.staffRole || ''
+    };
+    let password = '';
+    try {
+      const lastRoom = JSON.parse(localStorage.getItem(`kicker_hax_last_room_${this.currentUser.uid}`) || 'null');
+      if (lastRoom?.code === saved.code) password = lastRoom.password || '';
+    } catch { /* Rejoining a public room does not need a saved password. */ }
+    return { profile, password };
+  },
+
+  /** Shared return operation for the toolbar and the reserved room row. */
+  async rejoinReservedMatch() {
+    if (this.activeRejoinPromise) return this.activeRejoinPromise;
+    this.activeRejoinPromise = (async () => {
+      const reservation = await socketService.getActiveMatchReservation(this.currentUser?.uid);
+      if (!reservation) {
+        this.rejoinRoomMeta = null;
+        await this.refreshRejoinMatchAction();
+        socketService.refreshPublicRooms();
+        showToast('Esta partida não está mais disponível para retorno.', 'error');
+        return;
+      }
+      const { saved, room } = reservation;
+      this.rejoinRoomMeta = room;
+      const { profile, password } = await this.getReservedMatchCredentials(saved);
+      const button = document.getElementById('multi-btn-rejoin-match');
+      const abandonButton = document.getElementById('multi-btn-abandon-match');
+      if (button) button.disabled = true;
+      if (abandonButton) abandonButton.disabled = true;
+      const restoreActions = () => {
+        if (button) button.disabled = false;
+        if (abandonButton) abandonButton.disabled = false;
+      };
+
+      // Mount listeners before requesting the authoritative player rebind.
+      this.mode = 'multiplayer';
+      this.practiceMode = false;
+      this.tutorialMode = false;
+      this.activeRoom = room;
+      this.fieldSize = room.fieldSize || 'medium';
+      this.onlineMatchMeta = { rejoined: true, matchId: saved.matchId };
+      this.onlineMatchFinished = false;
+      this.pendingRejoinConfirmation = { timeout: null };
+      this.rejoinRemountInProgress = true;
+      try {
+        router.show('match-screen');
+      } finally {
+        this.rejoinRemountInProgress = false;
+      }
+
+      try {
+        const payload = await socketService.rejoinMatch(saved.code, password, profile, saved.matchId);
+        this.activeRoom = payload.lobbyInfo || room;
+        this.fieldSize = this.activeRoom.fieldSize || 'medium';
+        this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
+        socketService.sendMatchClientReady();
+        showToast('Retorno aceito. Sincronizando a partida...', 'info');
+      } catch (error) {
+        socketService.leaveRoom();
+        const activeReservation = await socketService.getActiveMatchReservation(this.currentUser?.uid).catch(() => null);
+        if (!activeReservation) {
+          this.rejoinRoomMeta = null;
+          await this.refreshRejoinMatchAction();
+          socketService.refreshPublicRooms();
+        }
+        if (router.currentScreenId === 'match-screen') router.show('multiplayer-screen');
+        showToast(error?.message || 'Não foi possível voltar para a partida.', 'error');
+      } finally {
+        restoreActions();
+      }
+    })().finally(() => { this.activeRejoinPromise = null; });
+    return this.activeRejoinPromise;
   },
 
   renderRoomsList(rooms) {
@@ -4493,7 +4467,7 @@ export const gameController = {
         joinBtn.onclick = async () => {
           if (this.joiningRoomCode) return;
           if (r.rejoinOnly) {
-            document.getElementById('multi-btn-rejoin-match')?.click();
+            await this.rejoinReservedMatch();
             return;
           }
           if (r.hasPassword || r.password) {

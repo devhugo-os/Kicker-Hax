@@ -36,6 +36,10 @@ export const menuController = {
     this.currentUser = user;
     if (!user) return;
 
+    // Reports are rendered from results, history and recordings. Bind profile
+    // navigation at startup instead of waiting for the editable profile view.
+    setMatchReportProfileHandler(uid => this.openPublicProfile(uid));
+
     // Authentication and profile creation are separate Firebase operations.
     // Hydrate the profile before binding UI that depends on onboarding fields,
     // especially after a seasonal reset creates a brand-new document.
@@ -558,7 +562,6 @@ export const menuController = {
   clearProfileDraft() {
     this.profileDraft = null;
     this.profileDirty = false;
-    setMatchReportProfileHandler(uid => this.openPublicProfile(uid));
   },
 
   discardProfileChanges() {
