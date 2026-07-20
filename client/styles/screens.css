@@ -1144,6 +1144,21 @@ html.app-runtime #menu-btn-download-app {
   gap: 10px;
 }
 
+.credits-memorial {
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid rgba(96, 165, 250, 0.32);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.credits-memorial p {
+  margin: 7px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .multiplayer-page-title {
   margin: 0;
   text-align: center;
@@ -3451,6 +3466,16 @@ html.app-runtime #menu-btn-download-app {
 }
 .match-report-header { min-height: 24px; border: 0; color: var(--text-muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .match-report-player { overflow: hidden; color: var(--text-primary); font-weight: 700; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.match-report-profile-link {
+  min-width: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+.match-report-profile-link:hover,
+.match-report-profile-link:focus-visible { text-decoration: underline; outline: none; }
 .match-report-row.team-red .match-report-player { color: #fca5a5; }
 .match-report-row.team-blue .match-report-player { color: #93c5fd; }
 .match-report-rating { color: #facc15; font-size: 13px; font-weight: 900; }

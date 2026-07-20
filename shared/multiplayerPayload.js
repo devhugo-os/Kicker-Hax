@@ -53,3 +53,11 @@ export function compactMultiplayerPayload(data) {
     key === 'lobbyInfo' ? compactLobbyInfo(value) : compactMultiplayerPayload(value)
   ]));
 }
+
+/** Confirms a rejoin only when the host snapshot contains the rebound player. */
+export function isAuthoritativeRejoinState(state, { uid = '', clientId = '', matchId = '' } = {}) {
+  if (!state || !Array.isArray(state.players) || !uid || !clientId) return false;
+  if (matchId && String(state.matchId || '') !== String(matchId)) return false;
+  return state.players.some(player => String(player.uid || '') === String(uid)
+    && String(player.id || '') === String(clientId));
+}

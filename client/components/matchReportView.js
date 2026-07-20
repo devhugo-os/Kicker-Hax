@@ -6,6 +6,13 @@ const TEAM_META = {
   [Team.BLUE]: { label: 'Time Azul', className: 'blue' }
 };
 
+let openProfileHandler = null;
+
+/** Keeps report rendering independent while allowing every screen to open profiles. */
+export function setMatchReportProfileHandler(handler) {
+  openProfileHandler = typeof handler === 'function' ? handler : null;
+}
+
 function cell(text, className = '') {
   const element = document.createElement('span');
   element.className = className;
@@ -63,8 +70,19 @@ function renderPlayers(report, mvp) {
       const row = document.createElement('div');
       row.className = `match-report-row team-${player.team === Team.RED ? 'red' : 'blue'}`;
       const isMvp = mvp && (mvp.uid === player.uid || mvp.playerId === player.playerId);
+      const playerLabel = `${isMvp ? 'MVP · ' : ''}${player.username || 'Jogador'}`;
+      const playerReference = player.uid && openProfileHandler
+        ? document.createElement('button')
+        : cell(playerLabel, 'match-report-player');
+      if (playerReference instanceof HTMLButtonElement) {
+        playerReference.type = 'button';
+        playerReference.className = 'match-report-player match-report-profile-link';
+        playerReference.textContent = playerLabel;
+        playerReference.title = `Abrir perfil de ${player.username || 'Jogador'}`;
+        playerReference.addEventListener('click', () => openProfileHandler(player.uid));
+      }
       row.append(
-        cell(`${isMvp ? 'MVP · ' : ''}${player.username || 'Jogador'}`, 'match-report-player'),
+        playerReference,
         cell(Number(player.rating || 0).toFixed(1), 'match-report-rating'),
         cell(String(player.goals || 0)), cell(String(player.assists || 0)),
         cell(String(player.shots || 0)), cell(String(player.dribbles || 0)),

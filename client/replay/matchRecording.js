@@ -1,4 +1,7 @@
-const SAMPLE_INTERVAL_MS = 50;
+// Twelve to thirteen authoritative samples per second are enough because the
+// player/exporter interpolate every rendered frame. This halves recording
+// allocations during long competitive matches without changing playback FPS.
+const SAMPLE_INTERVAL_MS = 80;
 const REPORT_INTERVAL_MS = 1000;
 export const MAX_RECORDING_BASE64_LENGTH = 850_000;
 const RECORDABLE_STATUSES = new Set(['loading', 'playing', 'countdown', 'freeze']);

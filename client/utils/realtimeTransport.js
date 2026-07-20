@@ -16,6 +16,7 @@ const OMITTED_REALTIME_FIELDS = new Set([
 const REALTIME_KEYS = Object.freeze({
   sequence: 'q', transportSequence: 'Q', serverSentAt: 'a', ball: 'b', players: 'p',
   score: 's', matchTime: 'm', status: 'S', countdown: 'c', phaseEndsAt: 'e',
+  matchId: 'H',
   goalInfo: 'g', soundEffects: 'f', isHostPaused: 'h', id: 'i', uid: 'u', team: 't',
   vx: 'X', vy: 'Y', dir: 'D', stamina: 'n', staminaLock: 'N', stun: 'z',
   shootHalo: 'o', kickCharge: 'k', invuln: 'v', tackle_cd: 'l', dribble_cd: 'r',

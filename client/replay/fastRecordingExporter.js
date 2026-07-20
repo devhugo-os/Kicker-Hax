@@ -2,7 +2,10 @@ import { AudioBufferSource, BufferTarget, CanvasSource, Mp4OutputFormat, Output 
 import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
 
 const FPS = 24;
-const SAMPLE_RATE = 22_050;
+// Chrome/Android WebCodecs commonly reject HE-AAC at 22.05 kHz. Using the
+// native 48 kHz AAC-LC path keeps fast export enabled instead of silently
+// falling back to the real-time MediaRecorder implementation.
+const SAMPLE_RATE = 48_000;
 const SOUND_TONES = {
   kick: [[520, .05, .18], [260, .06, .09]], pickup: [[330, .045, .08], [440, .05, .07, .035]],
   tackle: [[140, .06, .22]], dribble: [[800, .05, .12], [600, .05, .08]],
@@ -32,13 +35,15 @@ function createAudioBuffer(recording) {
 export async function exportRecordingFast({ recording, getFrameAt, onProgress }) {
   if (typeof VideoEncoder !== 'function' || typeof AudioEncoder !== 'function') throw new Error('WebCodecs indisponível');
   const [fieldWidth, fieldHeight] = recording.field || [1024, 640];
-  const scale = Math.min(1, 854 / Math.max(fieldWidth, fieldHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(2, Math.round(fieldWidth * scale) & ~1);
-  canvas.height = Math.max(2, Math.round(fieldHeight * scale) & ~1);
+  // The renderer uses authoritative field coordinates and guarantees this
+  // exact size. Initializing CanvasSource at another resolution made the
+  // encoder keep the first frame after renderMatchRecordingFrame resized it.
+  canvas.width = Math.max(2, Math.round(fieldWidth) & ~1);
+  canvas.height = Math.max(2, Math.round(fieldHeight) & ~1);
   const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
   const video = new CanvasSource(canvas, { codec: 'avc', bitrate: 900_000 });
-  const audio = new AudioBufferSource({ codec: 'aac', bitrate: 80_000 });
+  const audio = new AudioBufferSource({ codec: 'aac', bitrate: 128_000 });
   output.addVideoTrack(video);
   output.addAudioTrack(audio);
   output.setMetadataTags({ title: 'Kicker Hax - Gravação da partida', artist: 'Kicker Hax' });
@@ -51,7 +56,7 @@ export async function exportRecordingFast({ recording, getFrameAt, onProgress })
     const sourceFrame = getFrameAt(seconds * 1000);
     const frame = ended && recording.finalScore ? { ...sourceFrame, score: { ...recording.finalScore } } : sourceFrame;
     renderMatchRecordingFrame(canvas, recording, frame, { ended, endReason: recording.endReason, winnerTeam: recording.winnerTeam });
-    await video.add(seconds, 1 / FPS);
+    await video.add(seconds, 1 / FPS, { keyFrame: index % (FPS * 2) === 0 });
     if (index % 12 === 0) onProgress?.(Math.min(96, Math.round(index / frameCount * 96)));
   }
   await audio.add(createAudioBuffer(recording));

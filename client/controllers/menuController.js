@@ -10,7 +10,7 @@ import { createProfileDraft, profilesDiffer } from '../utils/profileDraft.js';
 import { PROFILE_BIO_MAX_LENGTH, USERNAME_MAX_LENGTH } from '../../shared/constants.js';
 import { appendStaffTag } from '../utils/staffTags.js';
 import { calculateOverallRating, getAverageMatchRating } from '../utils/rankingScore.js';
-import { renderMatchReport } from '../components/matchReportView.js';
+import { renderMatchReport, setMatchReportProfileHandler } from '../components/matchReportView.js';
 import { MatchRecordingPlayer } from '../replay/matchRecordingPlayer.js';
 
 function isVersionNewer(candidate, installed) {
@@ -558,6 +558,7 @@ export const menuController = {
   clearProfileDraft() {
     this.profileDraft = null;
     this.profileDirty = false;
+    setMatchReportProfileHandler(uid => this.openPublicProfile(uid));
   },
 
   discardProfileChanges() {

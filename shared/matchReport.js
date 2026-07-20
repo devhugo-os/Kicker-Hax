@@ -17,7 +17,7 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
   const teamScore = team === Team.RED ? Number(score.red || 0) : Number(score.blue || 0);
   const opponentScore = team === Team.RED ? Number(score.blue || 0) : Number(score.red || 0);
   const goalDifference = Math.min(6, Math.abs(teamScore - opponentScore));
-  const resultImpact = won ? 0.9 + goalDifference * 0.12 : lost ? -0.9 - goalDifference * 0.16 : 0.1;
+  const resultImpact = won ? 1 + goalDifference * 0.14 : lost ? -1.45 - goalDifference * 0.2 : 0.1;
   const possessionImpact = (Math.max(0, Math.min(100, Number(stats.possessionPct || 0))) - 50) * 0.008;
   const shots = Math.max(0, Number(stats.shots || 0));
   const goals = Math.max(0, Number(stats.goals || 0));
@@ -33,7 +33,7 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
     + possessionImpact;
   // A great individual performance can soften a loss, but cannot receive a
   // perfect score while the team was defeated.
-  const upperBound = lost ? Math.max(7.6, 9 - goalDifference * 0.15) : 10;
+  const upperBound = lost ? Math.max(7, 8.2 - goalDifference * 0.2) : 10;
   return Math.round(Math.max(1, Math.min(upperBound, raw)) * 10) / 10;
 }
 

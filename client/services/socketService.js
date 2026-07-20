@@ -13,6 +13,7 @@ import {
 } from '../utils/realtimeTransport.js';
 import {
   compactMultiplayerPayload,
+  isAuthoritativeRejoinState,
   sanitizeMultiplayerProfile
 } from '../../shared/multiplayerPayload.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
@@ -759,6 +760,25 @@ export class P2PSocketService {
           realtimeConn.on('close', clearRealtime);
           realtimeConn.on('error', clearRealtime);
         };
+        const acceptRejoin = (data = {}) => {
+          if (joinAccepted) return false;
+          joinAccepted = true;
+          finishJoinOperation();
+          this.roomOperation = null;
+          openRealtimeChannel();
+          this.listenToRoomChat(roomCode);
+          this.watchHostLifecycle(roomCode);
+          const accepted = {
+            roomCode,
+            matchId: data.matchId || matchId,
+            lobbyInfo: data.lobbyInfo || null,
+            joinAttemptId
+          };
+          this.syncMatchLifecycle('matchRejoined', accepted);
+          if (onAccepted) onAccepted(accepted);
+          else this.triggerLocalEvent('matchRejoined', accepted);
+          return true;
+        };
         const handleHostPayload = (payload) => {
           const packet = this.consumeControlChunk(payload);
           if (!packet) return;
@@ -795,23 +815,19 @@ export class P2PSocketService {
             try {
               conn.send({ event: 'joinConfirmed', data: { roomCode, joinAttemptId } });
             } catch { /* Host retries until the ACK can be delivered. */ }
-            if (joinAccepted) return;
-            joinAccepted = true;
-            finishJoinOperation();
-            this.roomOperation = null;
-            openRealtimeChannel();
-            this.listenToRoomChat(roomCode);
-            this.watchHostLifecycle(roomCode);
-            // The callback rejoin path bypasses triggerLocalEvent. Synchronize
-            // the match id before the newly mounted view announces readiness.
-            this.syncMatchLifecycle('matchRejoined', data);
-            if (onAccepted) onAccepted(data);
-            else this.triggerLocalEvent('matchRejoined', data);
+            acceptRejoin(data);
             if (!data?.lobbyInfo) {
               try {
                 conn.send({ event: 'requestLobbySync', data: { joinAttemptId } });
               } catch { /* A subsequent lobby broadcast provides the same state. */ }
             }
+          } else if (event === 'gameState' && rejoin
+            && isAuthoritativeRejoinState(data, { uid: profile?.uid, clientId: this.clientId, matchId })) {
+            // A complete bootstrap containing this exact UID and new Peer ID
+            // is stronger proof than a lifecycle ACK. Accept it immediately;
+            // the retried matchRejoined packet will still be acknowledged.
+            acceptRejoin({ matchId: data.matchId || matchId });
+            this.triggerLocalEvent('gameState', data);
           } else if (event === 'abandonAccepted') {
             if (joinAccepted) return;
             joinAccepted = true;
@@ -1909,10 +1925,10 @@ export class P2PSocketService {
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;
-    // Direction changes stay capped at 50 Hz and button edges bypass the cap.
-    // An unchanged held direction only needs a 12.5 Hz heartbeat because the
+    // Direction changes stay capped at 30 Hz and button edges bypass the cap.
+    // An unchanged held direction only needs a 10 Hz heartbeat because the
     // authoritative simulation keeps the last input, cutting guest uplink load.
-    const minimumInterval = movementChanged ? 20 : 80;
+    const minimumInterval = movementChanged ? 33 : 100;
     if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;

@@ -649,6 +649,7 @@ export class ServerMatch {
     // a silent guest by the missing input heartbeat before simulating a frame.
     const staleGuest = this.players.find(player => !player.cpu
       && player.id !== this.hostPlayerId
+      && Date.now() >= Number(player.rejoinGraceUntil || 0)
       && Date.now() - (player.lastSeenAt || 0) > 12000);
     if (staleGuest && this.status !== 'ended') {
       this.onGuestConnectionLost?.(staleGuest);
@@ -665,6 +666,7 @@ export class ServerMatch {
       }
       // Just broadcast state with isHostPaused=true, do not simulate physics
       const snap = {
+        matchId: this.matchId,
         ball: {
           x: this.ball.x,
           y: this.ball.y,
@@ -675,6 +677,7 @@ export class ServerMatch {
         },
         players: this.players.map(p => ({
           id: p.id,
+          uid: p.uid || '',
           team: p.team,
           x: p.x,
           y: p.y,
@@ -893,6 +896,7 @@ export class ServerMatch {
     const sequence = ++this.snapshotSequence;
     const includeExtendedState = sequence === 1 || sequence % 30 === 0;
     const snap = {
+      matchId: this.matchId,
       sequence,
       serverSentAt: Date.now(),
       ball: {
@@ -960,6 +964,7 @@ export class ServerMatch {
     }
     const sequence = ++this.snapshotSequence;
     return {
+      matchId: this.matchId,
       sequence,
       serverSentAt: Date.now(),
       ball: {
@@ -1040,10 +1045,10 @@ export class ServerMatch {
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
       // Physics remains at 60 Hz. Velocity-aware rendering fills the gap
-      // between 40 Hz snapshots while the lower cadence leaves headroom for
+      // between 30 Hz snapshots while the lower cadence leaves headroom for
       // remote/mobile WebRTC links and rooms with several spectators.
       const finalFrame = frame === frames - 1;
-      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 25;
+      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 33;
       this.tick();
       if (!this.skipBroadcast) this.lastBroadcastAt = now;
       if (this.status === 'ended') break;
@@ -1137,6 +1142,9 @@ export class ServerMatch {
     player.skin = lobbyPlayer.skin || player.skin;
     player.skinId = lobbyPlayer.skinId || player.skinId;
     player.lastSeenAt = Date.now();
+    // ICE and the unordered channel can settle after the reliable bootstrap.
+    // Do not interpret that short negotiation window as a second disconnect.
+    player.rejoinGraceUntil = Date.now() + 30000;
     if (this.ball.owner === previousId) this.ball.owner = nextId;
     if (this.ball.lastTouch === previousId) this.ball.lastTouch = nextId;
     if (this.ball.noPickupFrom === previousId) this.ball.noPickupFrom = nextId;
@@ -1193,6 +1201,7 @@ export class ServerMatch {
 
   buildDisconnectPauseState(remaining) {
     return {
+      matchId: this.matchId,
       sequence: ++this.snapshotSequence,
       serverSentAt: Date.now(),
       ball: { ...this.ball },
