@@ -3491,6 +3491,7 @@ html.app-runtime #menu-btn-download-app {
   padding: 22px;
 }
 #match-details-modal { z-index: 2100; }
+#public-profile-modal { z-index: 2300; }
 .match-details-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 14px; }
 .match-details-heading h2 { margin: 0; }
 .match-details-heading p { margin: 3px 0 0; }
