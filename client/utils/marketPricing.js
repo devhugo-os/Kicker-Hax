@@ -10,7 +10,7 @@ export function getInsufficientCoinsMessage(balance, price, itemLabel) {
   return `KX Coins insuficientes para ${label}. Faltam ${missing} KX Coins.`;
 }
 
-const FEATURED_SKIN_VALUES = Object.freeze({ daily: 90, weekly: 180, monthly: 360 });
+const FEATURED_SKIN_VALUES = Object.freeze({ hourly: 45, daily: 90, weekly: 180, monthly: 360 });
 
 /**
  * Returns the collection value actually paid for a community skin.

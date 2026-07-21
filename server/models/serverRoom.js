@@ -41,6 +41,7 @@ export class ServerRoom {
       skin: playerProfile.skin || '',
       skinId: playerProfile.skinId || playerProfile.equippedSkinId || '',
       staffRole: normalizeStaffRole(playerProfile.staffRole),
+      overall: Math.max(40, Math.min(99, Number(playerProfile.overall) || 40)),
       team: team, // 'red' | 'blue' | 'spectator'
       ready: false,
       ping: 0,

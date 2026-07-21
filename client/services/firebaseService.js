@@ -27,7 +27,13 @@ import {
 } from 'firebase/firestore';
 import { getDatabase, ref, push, onChildAdded, onChildRemoved, onValue, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update, set, remove, onDisconnect, runTransaction as runRtdbTransaction } from 'firebase/database';
 import { groupSeasonHistoryByUid, mergeCompetitiveHistoryStats } from '../utils/statReconciliation.js';
-import { getPendingSkinRequests, getSkinQueueCleanup, normalizeCommunitySkinName } from '../utils/skinQueue.js';
+import {
+  getHourlySkinQueue,
+  getPendingSkinRequests,
+  getSkinQueueCleanup,
+  normalizeCommunitySkinName,
+  pickHourlySkin
+} from '../utils/skinQueue.js';
 import {
   calculateOverallRating,
   compareOverallRanking,
@@ -100,7 +106,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '57.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '58.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -607,6 +613,36 @@ export const firebaseService = {
     const currentRequests = Object.fromEntries(Object.entries(requestsByDay)
       .filter(([requestDay]) => requestDay.startsWith(`${CURRENT_SEASON_ID}_`)));
     const allFeatured = allFeaturedSnapshot.val() || {};
+    if (cadence === 'hourly') {
+      const queue = getHourlySkinQueue(currentRequests, allFeatured, this.skinDayKey());
+      const winner = pickHourlySkin(queue, cycle.cycleIndex);
+      if (!winner) return null;
+      const requestId = winner.requestId || `${winner.requestDay}_${winner.uid}`;
+      const selected = {
+        id: winner.id || `community_${requestId.replace(/[^a-zA-Z0-9_-]/g, '_')}`,
+        name: normalizeCommunitySkinName(winner.name) || 'Skin da comunidade',
+        username: winner.username,
+        creatorUid: winner.creatorUid || winner.uid,
+        image: winner.image,
+        requestId,
+        requestDay: winner.requestDay,
+        cadence,
+        period,
+        startsAt: cycle.startsAt,
+        expiresAt: cycle.expiresAt,
+        createdAt: Date.now(),
+        ...(winner.sourceCadence ? {
+          carried: true,
+          sourceCadence: winner.sourceCadence,
+          sourcePeriod: winner.sourcePeriod
+        } : {})
+      };
+      const committed = await runRtdbTransaction(
+        ref(rtdb, `skinFeatured/${cadence}/${period}`),
+        current => current || selected
+      );
+      return committed.snapshot.val();
+    }
     const candidates = getPendingSkinRequests(currentRequests, allFeatured, this.skinDayKey());
     if (!candidates.length) {
       const previousEntries = Object.entries(allFeatured).flatMap(([sourceCadence, periods]) =>
@@ -656,7 +692,8 @@ export const firebaseService = {
     const daily = await this.getFeaturedSkin('daily');
     const weekly = await this.getFeaturedSkin('weekly');
     const monthly = await this.getFeaturedSkin('monthly');
-    const result = { daily, weekly, monthly };
+    const hourly = await this.getFeaturedSkin('hourly');
+    const result = { hourly, daily, weekly, monthly };
     this.cleanupSkinRequestQueue().catch(error => console.warn('[Kicker Market] Limpeza da fila adiada:', error));
     return result;
   },
@@ -782,7 +819,15 @@ export const firebaseService = {
       const purchaseValues = { ...(sender.skinPurchaseValues || {}) };
       const skinValue = Math.max(0, Number(purchaseValues[skinId] || 0));
       delete purchaseValues[skinId];
+      const receiverOwned = Array.isArray(receiver.ownedSkins) ? [...receiver.ownedSkins] : ['rookie'];
+      receiverOwned.push(skinId);
+      const claimedAt = Date.now();
       transaction.update(senderRef, { ownedSkins: owned.filter(id => id !== skinId), skinPurchaseValues: purchaseValues });
+      transaction.update(recipientRef, {
+        ownedSkins: receiverOwned,
+        skinPurchaseValues: { ...(receiver.skinPurchaseValues || {}), [skinId]: skinValue },
+        lastReceivedGiftId: giftRef.id
+      });
       transaction.set(giftRef, {
         senderUid,
         senderUsername: sender.username || '',
@@ -790,11 +835,41 @@ export const firebaseService = {
         recipientUsername: receiver.username || '',
         skinId,
         skinValue,
-        status: 'pending',
-        createdAt: Date.now()
+        status: 'claimed',
+        createdAt: claimedAt,
+        claimedAt
       });
     });
     return recipient;
+  },
+
+  /** Completes gifts created by older releases that waited for recipient login. */
+  async finalizeSentSkinGifts(senderUid, recipientUid = '') {
+    if (!senderUid) return [];
+    const snapshots = await getDocs(query(collection(db, 'skinGifts'), where('senderUid', '==', senderUid), limit(30)));
+    const completed = [];
+    for (const giftSnap of snapshots.docs) {
+      const gift = giftSnap.data();
+      if (gift.status !== 'pending' || (recipientUid && gift.recipientUid !== recipientUid)) continue;
+      const accepted = await runTransaction(db, async transaction => {
+        const receiverRef = doc(db, 'users', gift.recipientUid);
+        const [freshGift, receiverSnap] = await Promise.all([transaction.get(giftSnap.ref), transaction.get(receiverRef)]);
+        if (!freshGift.exists() || freshGift.data().status !== 'pending' || !receiverSnap.exists()) return false;
+        const receiver = receiverSnap.data();
+        const owned = Array.isArray(receiver.ownedSkins) ? [...receiver.ownedSkins] : ['rookie'];
+        if (owned.includes(gift.skinId)) return false;
+        owned.push(gift.skinId);
+        transaction.update(receiverRef, {
+          ownedSkins: owned,
+          skinPurchaseValues: { ...(receiver.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) },
+          lastReceivedGiftId: giftSnap.id
+        });
+        transaction.update(giftSnap.ref, { status: 'claimed', claimedAt: Date.now() });
+        return true;
+      });
+      if (accepted) completed.push(gift);
+    }
+    return completed;
   },
 
   async claimPendingSkinGifts(uid) {

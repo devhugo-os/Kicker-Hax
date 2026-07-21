@@ -16,6 +16,7 @@ import {
   isAuthoritativeRejoinState,
   sanitizeMultiplayerProfile
 } from '../../shared/multiplayerPayload.js';
+import { balancePlayersByOverall } from '../../shared/teamBalancer.js';
 import { CHAT_MESSAGE_MAX_LENGTH, ROOM_NAME_MAX_LENGTH, ROOM_PASSWORD_MAX_LENGTH } from '../../shared/constants.js';
 import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
 import { consumeChatRateLimit } from '../utils/chatRateLimit.js';
@@ -2284,9 +2285,10 @@ export class P2PSocketService {
   applyCompetitiveStartRules() {
     const humans = this.serverRoom.players.filter(p => !p.cpu && !p.disconnected && p.status === 'lobby');
     const evenCount = humans.length - (humans.length % 2);
-    const shuffled = humans.slice().sort(() => Math.random() - 0.5);
-    shuffled.forEach((p, index) => {
-      p.team = index < evenCount / 2 ? 'red' : 'blue';
+    const activePlayers = humans.slice(0, evenCount);
+    const balanced = balancePlayersByOverall(activePlayers);
+    humans.forEach(player => {
+      player.team = balanced.assignments.get(player.id) || 'spectator';
     });
     const activeCount = evenCount;
     this.serverRoom.duration = 5;
@@ -2299,10 +2301,10 @@ export class P2PSocketService {
 
   randomizeCasualTeams() {
     if (!this.serverRoom || this.serverRoom.competitive) return;
-    const humans = this.serverRoom.players.filter(p => !p.cpu);
-    const shuffled = humans.slice().sort(() => Math.random() - 0.5);
-    shuffled.forEach((p, index) => {
-      p.team = index % 2 === 0 ? 'red' : 'blue';
+    const humans = this.serverRoom.players.filter(p => !p.cpu && !p.disconnected && p.status === 'lobby');
+    const balanced = balancePlayersByOverall(humans);
+    humans.forEach(p => {
+      p.team = balanced.assignments.get(p.id);
       p.ready = false;
     });
   }

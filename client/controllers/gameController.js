@@ -19,7 +19,7 @@ import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
 import { TutorialSession, tutorialNeedsAlly, tutorialNeedsBall, tutorialNeedsEnemy } from '../tutorial/tutorialSession.js';
-import { getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
+import { calculateOverallRating, getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
 import { buildMatchReport } from '../../shared/matchReport.js';
 import { renderMatchReport } from '../components/matchReportView.js';
 import { buildLiveMatchReport } from '../replay/liveMatchReport.js';
@@ -158,6 +158,19 @@ export const gameController = {
     } catch (e) {
       console.warn("[Socket.IO] Failed to connect on startup:", e);
     }
+  },
+
+  async buildMultiplayerProfile() {
+    const stats = await firebaseService.getUserStats(this.currentUser.uid).catch(() => ({}));
+    return {
+      uid: this.currentUser.uid,
+      username: menuController.profileData.username,
+      badge: menuController.profileData.badge || '\u{1F3F3}\uFE0F',
+      skin: getEquippedSkin(menuController.profileData).image,
+      skinId: menuController.profileData.equippedSkinId || 'rookie',
+      staffRole: menuController.profileData.staffRole || '',
+      overall: calculateOverallRating(stats || {})
+    };
   },
 
   isTypingTarget(target = document.activeElement) {
@@ -687,14 +700,7 @@ export const gameController = {
         const fieldSize = competitive ? 'medium' : (sizeSelect ? sizeSelect.value : 'medium');
         const showReplay = localStorage.getItem('kicker_hax_show_replay') !== 'false';
 
-        let profile = {
-          uid: this.currentUser.uid,
-          username: menuController.profileData.username,
-          badge: menuController.profileData.badge || '🏳️',
-          skin: getEquippedSkin(menuController.profileData).image,
-          skinId: menuController.profileData.equippedSkinId || 'rookie',
-          staffRole: menuController.profileData.staffRole || ''
-        };
+        const profile = await this.buildMultiplayerProfile();
 
         const s = socketService.getSocket();
         if (s) {
@@ -748,14 +754,7 @@ export const gameController = {
           ? document.getElementById('join-password-input').value
           : '';
 
-        let profile = {
-          uid: this.currentUser.uid,
-          username: menuController.profileData.username,
-          badge: menuController.profileData.badge || '🏳️',
-          skin: getEquippedSkin(menuController.profileData).image,
-          skinId: menuController.profileData.equippedSkinId || 'rookie',
-          staffRole: menuController.profileData.staffRole || ''
-        };
+        const profile = await this.buildMultiplayerProfile();
 
         const roomMeta = await socketService.getPublicRoomMeta(code).catch(() => null);
         if (!roomMeta) return showToast('A sala não existe mais ou o host está desconectado.', 'error');
@@ -4522,14 +4521,7 @@ export const gameController = {
     }
     this.joiningRoomCode = String(code || '').toUpperCase();
     this.renderRoomsList(this.latestRooms || []);
-    let profile = {
-      uid: this.currentUser.uid,
-      username: menuController.profileData.username,
-      badge: menuController.profileData.badge || '🏳️',
-      skin: getEquippedSkin(menuController.profileData).image,
-      skinId: menuController.profileData.equippedSkinId || 'rookie',
-      staffRole: menuController.profileData.staffRole || ''
-    };
+    const profile = await this.buildMultiplayerProfile();
     this.registerJoinResult((joinData) => {
       const room = joinData?.lobbyInfo;
       if (room) {

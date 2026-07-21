@@ -15,6 +15,7 @@ import { soundFx } from '../utils/soundFx.js';
 import { formatFeaturedTimeLeft } from '../utils/featuredCycle.js';
 
 const FEATURED = {
+  hourly: { label: 'Skin da hora', price: 45, reset: 'Troca a cada hora' },
   daily: { label: 'Skin do dia', price: 90, reset: 'Troca diariamente' },
   weekly: { label: 'Skin da semana', price: 180, reset: 'Troca toda semana' },
   monthly: { label: 'Skin do mês', price: 360, reset: 'Troca a cada 4 semanas' }
@@ -264,7 +265,9 @@ export const marketController = {
       }
       const owned = (menuController.profileData?.ownedSkins || []).includes(skin.id);
       const resetLabel = skin.expiresAt ? formatFeaturedTimeLeft(skin.expiresAt) : config.reset;
-      card.innerHTML = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name || config.label)}"><div><span class="market-eyebrow">${escapeHtml(config.label)} • ${escapeHtml(resetLabel)}${skin.carried ? ' • mantida por falta de nova candidata' : ''}</span><h3>${escapeHtml(skin.name || 'Skin da comunidade')}</h3><p>Enviada por ${escapeHtml(skin.username || 'Jogador')}</p><strong>${config.price} KX Coins</strong><button class="btn btn-primary" type="button" ${owned ? 'disabled' : ''}>${owned ? 'Já adquirida' : 'Comprar'}</button></div>`;
+      const loopLabel = cadence === 'hourly' ? ' • fila rotativa' : '';
+      const carriedLabel = skin.carried && cadence !== 'hourly' ? ' • mantida por falta de nova candidata' : '';
+      card.innerHTML = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name || config.label)}"><div><span class="market-eyebrow">${escapeHtml(config.label)} • ${escapeHtml(resetLabel)}${loopLabel}${carriedLabel}</span><h3>${escapeHtml(skin.name || 'Skin da comunidade')}</h3><p>Enviada por ${escapeHtml(skin.username || 'Jogador')}</p><strong>${config.price} KX Coins</strong><button class="btn btn-primary" type="button" ${owned ? 'disabled' : ''}>${owned ? 'Já adquirida' : 'Comprar'}</button></div>`;
       card.querySelector('button')?.addEventListener('click', async () => {
         const purchaseButton = card.querySelector('button');
         if (purchaseButton?.disabled) return;

@@ -218,12 +218,13 @@
 .daily-skin-card > img { width: min(330px, 100%); aspect-ratio: 1; border-radius: 50%; border: 5px solid #fde047; }
 .daily-skin-card > div { display: grid; gap: 12px; }
 .daily-skin-card strong { color: #fde047; font-size: 26px; }
-.featured-skin-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; height: 100%; }
+.featured-skin-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; height: 100%; }
 .featured-skin-card { border: 1px solid #263653; background: #080d20; padding: 14px; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; border-radius: 8px; min-height: 0; }
 .featured-skin-card > img, .featured-placeholder { width: min(190px, 100%); aspect-ratio: 1; border-radius: 50%; margin: auto; object-fit: cover; }
 .featured-placeholder { display: grid; place-items: center; border: 3px dashed #334155; color: #64748b; font-size: 56px; }
 .featured-skin-card > div { display: grid; gap: 5px; }
 .featured-skin-card strong { color: #fde047; }
+.featured-hourly { border-color: rgba(34,197,94,.62); }
 .featured-weekly { border-color: rgba(59,130,246,.55); }
 .featured-monthly { border-color: rgba(168,85,247,.62); }
 .market-empty { text-align: center; padding: 70px 20px; }
@@ -303,7 +304,7 @@
   .daily-skin-card h3 { font-size: 16px; }
   .daily-skin-card p { font-size: 10px; }
   .daily-skin-card strong { font-size: 18px; }
-  .featured-skin-grid { gap: 6px; }
+  .featured-skin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .featured-skin-card { padding: 7px; gap: 4px; }
   .featured-skin-card > img, .featured-placeholder { width: min(94px, 25dvh); }
   .featured-skin-card h3 { font-size: 13px; }

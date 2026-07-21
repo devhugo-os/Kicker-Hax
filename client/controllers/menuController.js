@@ -610,6 +610,9 @@ export const menuController = {
       if (this.publicProfileUid === uid) this.renderPresence(document.getElementById('public-profile-presence'), presence.online);
     });
     try {
+      // Repair gifts sent by older versions before loading the public profile,
+      // so the donated skin is immediately visible to its sender as well.
+      await firebaseService.finalizeSentSkinGifts(this.currentUser?.uid, uid).catch(() => []);
       const [profile, stats] = await Promise.all([
         firebaseService.getUserProfile(uid),
         firebaseService.getUserStats(uid)

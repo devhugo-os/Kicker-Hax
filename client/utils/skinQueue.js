@@ -24,6 +24,43 @@ export function getPendingSkinRequests(requestsByDay, allFeatured, today) {
     .filter(request => request?.image && request?.uid && !used.has(request.requestId || `${request.requestDay}_${request.uid}`));
 }
 
+function stableQueueHash(value) {
+  return [...String(value || '')].reduce((hash, char) => ((hash * 33) ^ char.charCodeAt(0)) >>> 0, 2166136261);
+}
+
+/**
+ * Builds one stable, shuffled-looking queue from pending and previously
+ * featured community skins. Hourly showcases walk this queue before looping.
+ */
+export function getHourlySkinQueue(requestsByDay, allFeatured, today) {
+  const unique = new Map();
+  Object.entries(requestsByDay || {})
+    .filter(([requestDay]) => requestDay <= today)
+    .forEach(([requestDay, requests]) => Object.values(requests || {}).forEach(request => {
+      if (!request?.image || !request?.uid) return;
+      const requestId = request.requestId || `${requestDay}_${request.uid}`;
+      unique.set(requestId, { ...request, requestId, requestDay });
+    }));
+
+  Object.entries(allFeatured || {}).forEach(([sourceCadence, periods]) => {
+    Object.entries(periods || {}).forEach(([sourcePeriod, item]) => {
+      if (!item?.image || !item?.requestId || unique.has(item.requestId)) return;
+      unique.set(item.requestId, { ...item, sourceCadence, sourcePeriod });
+    });
+  });
+
+  return [...unique.values()].sort((a, b) => {
+    const hashDifference = stableQueueHash(a.requestId) - stableQueueHash(b.requestId);
+    return hashDifference || String(a.requestId).localeCompare(String(b.requestId));
+  });
+}
+
+export function pickHourlySkin(queue = [], cycleIndex = 0) {
+  if (!queue.length) return null;
+  const index = ((Number(cycleIndex) % queue.length) + queue.length) % queue.length;
+  return queue[index];
+}
+
 /** Keeps only the newest pending requests after removing entries already featured. */
 export function getSkinQueueCleanup(requestsByDay, allFeatured, today, maxPending = 180) {
   const used = getUsedSkinRequestIds(allFeatured);
