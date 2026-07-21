@@ -44,7 +44,7 @@ import {
 } from '../utils/rankingScore.js';
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
-import { appendChestPurchaseReceipt, findChestPurchaseReceipt, getDuplicateChestRefund, normalizeChestPurchaseId } from '../utils/chestPurchase.js';
+import { appendChestPurchaseReceipt, findChestPurchaseReceipt, normalizeChestPurchaseId, resolveChestReward } from '../utils/chestPurchase.js';
 import { getMatchParticipantUids, getWritableHistoryUids, matchIncludesPlayer } from '../utils/matchHistory.js';
 import { findStaffProfileByRole } from '../utils/staffProfiles.js';
 import { CHAT_MESSAGE_MAX_LENGTH, SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
@@ -91,7 +91,7 @@ const normalizeCosmetics = profile => {
     ...(activeSeason ? {} : { level: 1, xp: 0, processedXpMatchIds: {} }),
     ...(activeCosmetics ? {} : {
       ownedSkins: ['rookie'], equippedSkinId: 'rookie', equippedSkinImage: null,
-      skinPurchaseValues: {}, chestPurchaseReceipts: []
+      skinPurchaseValues: {}, skinGiftOrigins: {}, chestPurchaseReceipts: []
     })
   };
 };
@@ -106,7 +106,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '58.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '59.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -210,6 +210,7 @@ export const firebaseService = {
         coins: 0,
         ownedSkins: ['rookie'],
         equippedSkinId: 'rookie',
+        skinGiftOrigins: {},
         cosmeticResetId: CURRENT_COSMETIC_RESET_ID,
         seasonId: CURRENT_SEASON_ID,
         isNewUser: true, // Mark as new user to force username pick
@@ -252,6 +253,7 @@ export const firebaseService = {
           equippedSkinImage: null,
           cosmeticResetId: CURRENT_COSMETIC_RESET_ID,
           skinPurchaseValues: {},
+          skinGiftOrigins: {},
           chestPurchaseReceipts: []
         });
       } else {
@@ -503,24 +505,23 @@ export const firebaseService = {
       if (coins < chest.price) {
         throw new Error(getInsufficientCoinsMessage(coins, chest.price, `abrir o ${chest.name}`));
       }
-      const owned = Array.isArray(profile.ownedSkins) ? [...profile.ownedSkins] : ['rookie'];
-      const duplicate = owned.includes(skin.id);
+      const outcome = resolveChestReward(profile.ownedSkins, skin, chest.price);
+      const { noPrize, duplicate, refund } = outcome;
       // The refund is committed together with the receipt. If the app closes,
       // replaying the same purchase ID returns this receipt without charging
       // again, while preserving the already-applied 25% duplicate refund.
-      const refund = duplicate ? getDuplicateChestRefund(chest.price) : 0;
-      if (!duplicate) owned.push(skin.id);
       const receipt = {
         id: safePurchaseId,
         chestId: chest.id,
         skinId: skin.id,
+        noPrize,
         duplicate,
         refund,
         createdAt: Date.now()
       };
       const next = {
         coins: coins - chest.price + refund,
-        ownedSkins: owned,
+        ownedSkins: outcome.owned,
         chestPurchaseReceipts: appendChestPurchaseReceipt(profile.chestPurchaseReceipts, receipt)
       };
       transaction.update(userRef, next);
@@ -782,6 +783,37 @@ export const firebaseService = {
     }));
   },
 
+  /** Permanently removes one unequipped collectible and credits its recycle reward. */
+  async discardSkin(uid, skinId, reward = 30) {
+    if (!uid || !skinId || skinId === 'rookie' || skinId === 'none') {
+      throw new Error('Esta skin não pode ser descartada.');
+    }
+    const safeReward = Math.max(0, Math.min(30, Number(reward) || 0));
+    const userRef = doc(db, 'users', uid);
+    return runTransaction(db, async transaction => {
+      const snapshot = await transaction.get(userRef);
+      if (!snapshot.exists()) throw new Error('Perfil não encontrado.');
+      const profile = snapshot.data();
+      const owned = Array.isArray(profile.ownedSkins) ? [...profile.ownedSkins] : ['rookie'];
+      if (!owned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
+      if ((profile.equippedSkinId || 'rookie') === skinId) {
+        throw new Error('Equipe outra skin antes de descartar esta.');
+      }
+      const skinPurchaseValues = { ...(profile.skinPurchaseValues || {}) };
+      const skinGiftOrigins = { ...(profile.skinGiftOrigins || {}) };
+      delete skinPurchaseValues[skinId];
+      delete skinGiftOrigins[skinId];
+      const updated = {
+        ownedSkins: owned.filter(id => id !== skinId),
+        skinPurchaseValues,
+        skinGiftOrigins,
+        coins: Math.max(0, Number(profile.coins || 0)) + safeReward
+      };
+      transaction.update(userRef, updated);
+      return updated;
+    });
+  },
+
   subscribeToUserPresence(uid, callback) {
     if (!uid) return () => {};
     return onValue(ref(rtdb, `presence/${uid}`), snapshot => {
@@ -817,15 +849,23 @@ export const firebaseService = {
       if ((sender.equippedSkinId || 'rookie') === skinId) throw new Error('Equipe outra skin antes de doar esta.');
       if ((receiver.ownedSkins || ['rookie']).includes(skinId)) throw new Error('Esse jogador já possui esta skin.');
       const purchaseValues = { ...(sender.skinPurchaseValues || {}) };
+      const senderGiftOrigins = { ...(sender.skinGiftOrigins || {}) };
       const skinValue = Math.max(0, Number(purchaseValues[skinId] || 0));
       delete purchaseValues[skinId];
+      delete senderGiftOrigins[skinId];
       const receiverOwned = Array.isArray(receiver.ownedSkins) ? [...receiver.ownedSkins] : ['rookie'];
       receiverOwned.push(skinId);
       const claimedAt = Date.now();
-      transaction.update(senderRef, { ownedSkins: owned.filter(id => id !== skinId), skinPurchaseValues: purchaseValues });
+      const giftOrigin = { senderUid, senderUsername: sender.username || '', giftedAt: claimedAt };
+      transaction.update(senderRef, {
+        ownedSkins: owned.filter(id => id !== skinId),
+        skinPurchaseValues: purchaseValues,
+        skinGiftOrigins: senderGiftOrigins
+      });
       transaction.update(recipientRef, {
         ownedSkins: receiverOwned,
         skinPurchaseValues: { ...(receiver.skinPurchaseValues || {}), [skinId]: skinValue },
+        skinGiftOrigins: { ...(receiver.skinGiftOrigins || {}), [skinId]: giftOrigin },
         lastReceivedGiftId: giftRef.id
       });
       transaction.set(giftRef, {
@@ -862,6 +902,10 @@ export const firebaseService = {
         transaction.update(receiverRef, {
           ownedSkins: owned,
           skinPurchaseValues: { ...(receiver.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) },
+          skinGiftOrigins: {
+            ...(receiver.skinGiftOrigins || {}),
+            [gift.skinId]: { senderUid: gift.senderUid, senderUsername: gift.senderUsername || '', giftedAt: Date.now() }
+          },
           lastReceivedGiftId: giftSnap.id
         });
         transaction.update(giftSnap.ref, { status: 'claimed', claimedAt: Date.now() });
@@ -889,12 +933,37 @@ export const firebaseService = {
         if (!owned.includes(gift.skinId)) owned.push(gift.skinId);
         transaction.update(userRef, {
           ownedSkins: owned,
-          skinPurchaseValues: { ...(profile.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) }
+          skinPurchaseValues: { ...(profile.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) },
+          skinGiftOrigins: {
+            ...(profile.skinGiftOrigins || {}),
+            [gift.skinId]: { senderUid: gift.senderUid, senderUsername: gift.senderUsername || '', giftedAt: Date.now() }
+          }
         });
         transaction.update(giftSnap.ref, { status: 'claimed', claimedAt: Date.now() });
         return true;
       });
       if (accepted) claimed.push(gift);
+    }
+    // Release 58 delivered gifts immediately but did not yet persist their
+    // visible origin. Repair those owned gifts when the recipient opens inventory.
+    const userRef = doc(db, 'users', uid);
+    const profileSnapshot = await getDoc(userRef);
+    if (profileSnapshot.exists()) {
+      const profile = profileSnapshot.data();
+      const owned = new Set(profile.ownedSkins || ['rookie']);
+      const origins = { ...(profile.skinGiftOrigins || {}) };
+      let changed = false;
+      gifts.docs.forEach(snapshot => {
+        const gift = snapshot.data();
+        if (!owned.has(gift.skinId) || origins[gift.skinId]) return;
+        origins[gift.skinId] = {
+          senderUid: gift.senderUid,
+          senderUsername: gift.senderUsername || '',
+          giftedAt: Number(gift.claimedAt || gift.createdAt || Date.now())
+        };
+        changed = true;
+      });
+      if (changed) await updateDoc(userRef, { skinGiftOrigins: origins });
     }
     return claimed;
   },

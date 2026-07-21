@@ -1,7 +1,7 @@
 import { router } from '../router.js';
 import { firebaseService } from '../services/firebaseService.js';
 import { menuController } from './menuController.js';
-import { CHESTS, SKINS, getSkinById, getSkinValue, rollChest } from '../data/skins.js';
+import { CHESTS, NO_PRIZE, SKINS, getChestRarityChances, getSkinById, getSkinValue, rollChest } from '../data/skins.js';
 import { showToast } from '../utils/toast.js';
 import { buildChestReel, getReelTargetOffset } from '../utils/chestReel.js';
 import { escapeHtml, safeImageSource } from '../utils/safeHtml.js';
@@ -21,6 +21,10 @@ const FEATURED = {
   monthly: { label: 'Skin do mês', price: 360, reset: 'Troca a cada 4 semanas' }
 };
 const rarityLabel = { none: 'Sem skin', common: 'Comum', rare: 'Rara', epic: 'Épica', legendary: 'Lendária', custom: 'Skin do dia' };
+const chestRarityLabel = { ...rarityLabel, none: 'Sem prêmio' };
+const chestOddsMarkup = chestId => getChestRarityChances(chestId)
+  .map(chance => `<span class="rarity-chance rarity-${escapeHtml(chance.rarity)}"><b>${escapeHtml(chestRarityLabel[chance.rarity])}</b> ${chance.percentage}%</span>`)
+  .join('');
 
 export const marketController = {
   crop: { image: null, x: 0, y: 0, zoom: 1, dragging: false },
@@ -81,7 +85,8 @@ export const marketController = {
       card.className = `market-chest chest-${chest.id}`;
       card.style.setProperty('--chest-accent', chest.accent);
       const glyph = chest.id === 'common' ? 'C' : chest.id === 'golden' ? 'G' : 'O';
-      card.innerHTML = `<div class="chest-art"><div class="chest-aura"></div><div class="chest-spark spark-a"></div><div class="chest-spark spark-b"></div><div class="chest-glow"></div><div class="chest-lid"></div><div class="chest-lock">${glyph}</div><div class="chest-body"><span>KX</span></div><div class="chest-base"></div></div><div><span class="market-eyebrow">${chest.rarities.map(r => rarityLabel[r]).join(' • ')}</span><h3>${escapeHtml(chest.name)}</h3><p>Uma coleção temática com prêmio garantido. Duplicatas devolvem 25% do preço.</p></div><button class="btn btn-primary" type="button">Abrir por ${chest.price} KX Coins</button>`;
+      const rewardText = chest.guaranteed ? 'Sempre entrega uma skin.' : 'Pode vir sem prêmio.';
+      card.innerHTML = `<div class="chest-art"><div class="chest-aura"></div><div class="chest-spark spark-a"></div><div class="chest-spark spark-b"></div><div class="chest-glow"></div><div class="chest-lid"></div><div class="chest-lock">${glyph}</div><div class="chest-body"><span>KX</span></div><div class="chest-base"></div></div><div><div class="chest-rarity-odds">${chestOddsMarkup(chest.id)}</div><h3>${escapeHtml(chest.name)}</h3><p>${rewardText} Duplicatas devolvem 25% do preço.</p></div><button class="btn btn-primary" type="button">Abrir por ${chest.price} KX Coins</button>`;
       card.querySelector('button').onclick = () => this.openChest(chest.id);
       grid.appendChild(card);
     });
@@ -131,10 +136,12 @@ export const marketController = {
     const track = document.getElementById('chest-roulette-track');
     const result = document.getElementById('chest-result');
     this.lastChestReward = null;
+    const odds = document.getElementById('chest-roulette-odds');
+    if (odds) odds.innerHTML = chestOddsMarkup(chest.id);
     modal?.classList.remove('hidden');
     result?.classList.add('hidden');
     const winnerIndex = 37;
-    const reel = buildChestReel(SKINS, won, { length: 42, winnerIndex });
+    const reel = buildChestReel([...SKINS, NO_PRIZE], won, { length: 42, winnerIndex });
     track.innerHTML = reel.map(skin => `<div class="roulette-skin rarity-${escapeHtml(skin.rarity)}" data-skin-id="${escapeHtml(skin.id)}"><img src="${safeImageSource(skin.image)}" alt=""><span>${escapeHtml(skin.name)}</span></div>`).join('');
     track.style.transition = 'none';
     track.style.transform = 'translateX(0)';
@@ -160,7 +167,10 @@ export const marketController = {
         track.style.transition = 'none';
         track.style.transform = `translateX(${targetOffset}px)`;
         const canOpenAgain = Number(menuController.profileData?.coins || 0) >= chest.price;
-        result.innerHTML = `<img src="${safeImageSource(won.image)}" alt="${escapeHtml(won.name)}"><div class="chest-result-info"><span class="rarity-${escapeHtml(won.rarity)}">${escapeHtml(rarityLabel[won.rarity])}</span><h3>${escapeHtml(won.name)}</h3><p>${duplicate ? `Duplicata: ${refund} KX Coins devolvidos.` : 'Adicionada ao seu perfil.'}</p>${canOpenAgain ? `<button class="btn btn-primary chest-open-again" type="button">Abrir novamente por ${chest.price} KX Coins</button>` : ''}</div>`;
+        const rewardMessage = won.noPrize
+          ? 'A abertura veio vazia. Tente novamente quando quiser.'
+          : duplicate ? `Duplicata: ${refund} KX Coins devolvidos.` : 'Adicionada ao seu perfil.';
+        result.innerHTML = `<img src="${safeImageSource(won.image)}" alt="${escapeHtml(won.name)}"><div class="chest-result-info"><span class="rarity-${escapeHtml(won.rarity)}">${escapeHtml(chestRarityLabel[won.rarity])}</span><h3>${escapeHtml(won.name)}</h3><p>${rewardMessage}</p>${canOpenAgain ? `<button class="btn btn-primary chest-open-again" type="button">Abrir novamente por ${chest.price} KX Coins</button>` : ''}</div>`;
         result.querySelector('.chest-open-again')?.addEventListener('click', async event => {
           const button = event.currentTarget;
           button.disabled = true;
@@ -173,7 +183,7 @@ export const marketController = {
         this.finishChestRoulette = null;
         this.lastChestReward = won;
         this.clearPendingChestPurchase(purchaseId);
-        if (!duplicate) soundFx.play('reward');
+        if (!duplicate && !won.noPrize) soundFx.play('reward');
         resolve();
       };
       this.finishChestRoulette = finish;
@@ -187,7 +197,8 @@ export const marketController = {
     this.stopRouletteSound?.();
     this.stopRouletteSound = null;
     document.getElementById('chest-roulette-modal')?.classList.add('hidden');
-    if (this.lastChestReward) showToast(`${this.lastChestReward.name} já está no seu inventário.`, 'success');
+    if (this.lastChestReward?.noPrize) showToast('O baú veio sem prêmio desta vez.', 'info');
+    else if (this.lastChestReward) showToast(`${this.lastChestReward.name} já está no seu inventário.`, 'success');
   },
 
   pendingChestStorageKey() {
@@ -324,6 +335,7 @@ export const marketController = {
       const skin = getSkinById(id);
       return { ...skin, value: getSkinValue(skin) };
     }))).filter(Boolean);
+    ownedItems.forEach(item => { item.giftOrigin = menuController.profileData?.skinGiftOrigins?.[item.id] || null; });
     this.inventoryItems = ownedItems;
     this.inventoryRarity ||= 'all';
     this.renderInventory();
@@ -359,8 +371,11 @@ export const marketController = {
       const visual = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name)}">`;
       const valueLabel = skin.id === 'rookie' ? 'Sem valor' : `${skin.value} KX Coins`;
       const equippedLabel = skinPending ? 'Selecionada, salve o perfil' : 'Em uso';
-      const canDonate = skin.id !== 'rookie' && !equipped;
-      card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong><div class="inventory-skin-actions"><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" data-action="equip" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button>${canDonate ? '<button class="btn btn-secondary" data-action="donate" type="button">Doar</button>' : ''}</div></div>`;
+      const canTransfer = skin.id !== 'rookie' && !equipped;
+      const giftLabel = skin.giftOrigin?.senderUsername
+        ? `<p class="skin-gift-origin">Doada por <b>${escapeHtml(skin.giftOrigin.senderUsername)}</b></p>`
+        : '';
+      card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong>${giftLabel}<div class="inventory-skin-actions"><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" data-action="equip" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button>${canTransfer ? '<button class="btn btn-secondary" data-action="donate" type="button">Doar</button><button class="btn btn-danger" data-action="discard" type="button">Descartar +30</button>' : ''}</div></div>`;
       card.querySelector('[data-action="equip"]')?.addEventListener('click', () => {
         menuController.selectProfileSkinDraft(skin);
         this.renderInventory();
@@ -387,6 +402,27 @@ export const marketController = {
           await this.loadInventory();
         } catch (error) {
           showToast(error.message || 'Não foi possível concluir a doação.', 'error');
+        }
+      });
+      card.querySelector('[data-action="discard"]')?.addEventListener('click', async event => {
+        const confirmed = await confirmDialog({
+          title: `Descartar ${skin.name}?`,
+          message: 'Esta ação é permanente. A skin sairá do inventário e você receberá 30 KX Coins.',
+          confirmLabel: 'Descartar por 30',
+          danger: true
+        });
+        if (!confirmed) return;
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const updated = await firebaseService.discardSkin(this.user.uid, skin.id, 30);
+          menuController.profileData = { ...menuController.profileData, ...updated };
+          soundFx.play('reward');
+          showToast(`${skin.name} foi descartada. Você recebeu 30 KX Coins.`, 'success');
+          await this.loadInventory();
+        } catch (error) {
+          button.disabled = false;
+          showToast(error.message || 'Não foi possível descartar a skin.', 'error');
         }
       });
       grid.appendChild(card);

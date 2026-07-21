@@ -23,6 +23,16 @@ export function getDuplicateChestRefund(chestPrice) {
   return Math.floor(Math.max(0, Number(chestPrice) || 0) * 0.25);
 }
 
+/** Resolves ownership changes without ever adding the empty-roll marker. */
+export function resolveChestReward(ownedSkins, skin, chestPrice) {
+  const owned = Array.isArray(ownedSkins) ? [...ownedSkins] : ['rookie'];
+  const noPrize = skin?.id === 'no_prize' || skin?.noPrize === true;
+  const duplicate = !noPrize && owned.includes(skin?.id);
+  const refund = duplicate ? getDuplicateChestRefund(chestPrice) : 0;
+  if (!noPrize && !duplicate && skin?.id) owned.push(skin.id);
+  return { owned, noPrize, duplicate, refund };
+}
+
 export function markChestPurchaseCommitted(pending, result) {
   if (!pending?.purchaseId) return null;
   return {

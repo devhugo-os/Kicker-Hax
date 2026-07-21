@@ -681,7 +681,11 @@ export const menuController = {
         name.textContent = `${skin.name || 'Skin da comunidade'}${(profile.equippedSkinId || 'rookie') === skin.id ? ' · Em uso' : ''}`;
         const value = document.createElement('span');
         value.textContent = `${getSkinValue(skin)} KX`;
+        const giftOrigin = profile.skinGiftOrigins?.[skin.id];
+        const giftedBy = document.createElement('small');
+        if (giftOrigin?.senderUsername) giftedBy.textContent = `Doada por ${giftOrigin.senderUsername}`;
         item.append(image, name, value);
+        if (giftedBy.textContent) item.appendChild(giftedBy);
         inventory.appendChild(item);
       });
       if (!skins.length) inventory.textContent = 'Nenhuma skin na coleção.';
