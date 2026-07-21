@@ -947,6 +947,7 @@
         </div>
         <div class="recording-controls">
           <button id="recording-play-toggle" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Reproduzir">&#9654;</button>
+          <button id="recording-next-highlight" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Avan&ccedil;ar para o pr&oacute;ximo lance importante" title="Pr&oacute;ximo gol ou lance perigoso">&#9197;</button>
           <span id="recording-time">0:00 / 0:00</span>
           <label>Velocidade <select id="recording-speed"></select></label>
           <label>Volume <input id="recording-volume" type="range" min="0" max="100" value="70"></label>
@@ -1037,7 +1038,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v56.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v57.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1081,6 +1082,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v57.0 - JOGO EM MOVIMENTO</h4>
+            <p>As notas agora equilibram resultado e desempenho individual: vencer ajuda sem apagar uma atua&ccedil;&atilde;o excepcional, e o MVP considera todos os jogadores. Rein&iacute;cios alternam as posi&ccedil;&otilde;es dentro de cada time. No mobile, o zoom acidental foi bloqueado e os controles deixam de prender o chute ao perder o toque. O chat ganhou prote&ccedil;&atilde;o mais firme contra spam sem poluir o console com avisos esperados. As grava&ccedil;&otilde;es permitem saltar diretamente ao pr&oacute;ximo gol ou lance perigoso.</p>
+          </section>
           <section>
             <h4>v56.0 - ETERNO BIDU</h4>
             <p>Os chats global, do lobby e da partida voltam a enviar mensagens normalmente com permiss&otilde;es seguras para o controle de spam. Perfis abertos pelas estat&iacute;sticas do hist&oacute;rico agora aparecem acima dos detalhes da partida, sem ficarem escondidos.</p>

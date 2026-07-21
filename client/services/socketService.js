@@ -2261,7 +2261,7 @@ export class P2PSocketService {
       text: String(message.text || '').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH),
       // Host wall time is immediately sortable. serverTimestamp resolves later
       // and caused clients to append old messages grouped by sender.
-      timestamp: Date.now()
+      timestamp: firebaseService.getRealtimeNow()
     };
     if (!msg.text) return;
     if (msg.uid) {

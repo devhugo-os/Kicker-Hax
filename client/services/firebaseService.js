@@ -69,6 +69,10 @@ const authPersistenceReady = setPersistence(auth, browserLocalPersistence)
   .catch(err => console.warn('[Auth] Local persistence was not enabled:', err));
 const db = getFirestore(app);
 const rtdb = getDatabase(app);
+let realtimeServerOffsetMs = 0;
+onValue(ref(rtdb, '.info/serverTimeOffset'), snapshot => {
+  realtimeServerOffsetMs = Number(snapshot.val() || 0);
+}, () => {});
 // Every São Paulo calendar month starts a new competitive season. Cosmetics
 // and KX Coins are lifetime account assets and are intentionally preserved.
 export const CURRENT_SEASON_ID = getSeasonId('monthly');
@@ -96,7 +100,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '53.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '57.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -149,6 +153,9 @@ const nativeAuthReady = (async () => {
 });
 
 export const firebaseService = {
+  getRealtimeNow() {
+    return Date.now() + realtimeServerOffsetMs;
+  },
   // The Cordova frame survives app restarts as the same device. A stable ID
   // avoids treating that restored Firebase login as a second browser session.
   sessionId: sessionStorageForRuntime.getItem('kicker_hax_session_id') || `session_${Math.random().toString(36).slice(2)}_${Date.now()}`,
@@ -1120,14 +1127,19 @@ export const firebaseService = {
     // Run cleanup in background before sending
     this.pruneOldChatMessages().catch(err => console.warn(err));
 
-    const now = Date.now();
+    const now = this.getRealtimeNow();
     let retryAfterMs = 0;
     const limiter = await runRtdbTransaction(ref(rtdb, `chatRateLimits/global/${profile.uid}`), current => {
       const result = consumeChatRateLimit(current, now);
       retryAfterMs = result.retryAfterMs;
       return result.allowed ? result.state : undefined;
     }, { applyLocally: false });
-    if (!limiter.committed) throw new Error(`Aguarde ${Math.max(1, Math.ceil(retryAfterMs / 1000))}s antes de enviar outra mensagem.`);
+    if (!limiter.committed) {
+      const cooldownError = new Error(`Aguarde ${Math.max(1, Math.ceil(retryAfterMs / 1000))}s antes de enviar outra mensagem.`);
+      cooldownError.code = 'chat-rate-limited';
+      cooldownError.retryAfterMs = retryAfterMs;
+      throw cooldownError;
+    }
     const chatRef = ref(rtdb, 'globalChat');
     await push(chatRef, {
       uid: profile.uid,

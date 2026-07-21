@@ -1,7 +1,7 @@
 export const CHAT_RATE_LIMIT = Object.freeze({
-  maxMessages: 4,
+  maxMessages: 3,
   windowMs: 8_000,
-  minimumIntervalMs: 650
+  minimumIntervalMs: 900
 });
 
 /** Returns a bounded chat window without depending on rendering frequency. */

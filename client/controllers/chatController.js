@@ -10,6 +10,7 @@ export const chatController = {
   identityCache: new Map(),
   unsubscribeGlobalChat: null,
   dailyCleanupTimer: null,
+  sendPending: false,
 
   init() {
     if (this.initialized) return;
@@ -46,19 +47,24 @@ export const chatController = {
     chatForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const text = chatInput.value.trim();
-      if (!text) return;
+      if (!text || this.sendPending) return;
       if (!menuController.profileData) {
         showToast('Perfil não carregado ainda.', 'error');
         return;
       }
 
       chatInput.value = '';
+      this.sendPending = true;
       try {
         await firebaseService.sendGlobalChatMessage(menuController.profileData, text);
       } catch (err) {
         chatInput.value = text;
-        showToast(err?.message || 'Erro ao enviar mensagem.', 'error');
-        console.error(err);
+        const rateLimited = err?.code === 'chat-rate-limited';
+        showToast(err?.message || 'Erro ao enviar mensagem.', rateLimited ? 'info' : 'error');
+        // Cooldown is an expected user-flow response, not an application error.
+        if (!rateLimited) console.error(err);
+      } finally {
+        this.sendPending = false;
       }
     });
 

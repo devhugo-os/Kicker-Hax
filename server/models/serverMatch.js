@@ -2,6 +2,7 @@
 import * as C from '../../shared/constants.js';
 import { createRealtimeTicker } from '../../shared/realtimeTicker.js';
 import { buildMatchReport } from '../../shared/matchReport.js';
+import { assignKickoffSlots } from '../../shared/kickoff.js';
 import { ServerPhysics } from './serverPhysics.js';
 
 export class ServerMatch {
@@ -90,6 +91,7 @@ export class ServerMatch {
     this.assistCandidateId = null;
     this.assistRecipientId = null;
     this.assistShotCount = 0;
+    this.kickoffSlots = { red: new Map(), blue: new Map() };
     this.resetPlayerStats();
 
     // The P2P host remains authoritative even while its tab is hidden. The
@@ -266,7 +268,7 @@ export class ServerMatch {
     const redPlayers = this.players.filter(p => p.team === C.Team.RED);
     const bluePlayers = this.players.filter(p => p.team === C.Team.BLUE);
 
-    const assignPositions = (teamPlayers, isRed) => {
+    const assignPositions = (teamPlayers, isRed, teamKey) => {
       const positions = [
         { dx: 120, dy: 0.5 },  // Player 1: Goalkeeper/Defender
         { dx: 250, dy: 0.5 },  // Player 2: Striker
@@ -274,7 +276,9 @@ export class ServerMatch {
         { dx: 180, dy: 0.7 }   // Player 4: Midfielder 2
       ];
 
-      teamPlayers.forEach((p, index) => {
+      const assignment = assignKickoffSlots(teamPlayers, this.kickoffSlots[teamKey]);
+      this.kickoffSlots[teamKey] = assignment.slots;
+      assignment.ordered.forEach((p, index) => {
         const layout = positions[index % positions.length];
         const jitterX = (Math.random() - 0.5) * 20;
         const jitterY = (Math.random() - 0.5) * 20;
@@ -302,8 +306,8 @@ export class ServerMatch {
       });
     };
 
-    assignPositions(redPlayers, true);
-    assignPositions(bluePlayers, false);
+    assignPositions(redPlayers, true, 'red');
+    assignPositions(bluePlayers, false, 'blue');
 
     // Reset ball kickoff
     this.ball.x = this.w * 0.5;
@@ -1308,8 +1312,9 @@ export class ServerMatch {
     );
 
     const report = buildMatchReport({ score: this.score, winnerTeam, playerStats });
+    // MVP is the best individual performance in the whole match. This keeps
+    // the result relevant to ratings without hiding an exceptional loser.
     const mvp = report.playerStats
-      .filter(stats => winnerTeam !== 'draw' ? stats.team === winnerTeam : true)
       .sort((a, b) => {
         const ratingA = Number(a.rating || 0);
         const ratingB = Number(b.rating || 0);

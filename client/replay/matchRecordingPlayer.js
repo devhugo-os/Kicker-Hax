@@ -6,6 +6,7 @@ import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
 import firebaseService from '../services/firebaseService.js';
 import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { soundFx } from '../utils/soundFx.js';
+import { findNextRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 
@@ -28,6 +29,7 @@ export class MatchRecordingPlayer {
     this.canvas = root?.querySelector('#recording-canvas');
     this.timeline = root?.querySelector('#recording-timeline');
     this.playButton = root?.querySelector('#recording-play-toggle');
+    this.nextHighlightButton = root?.querySelector('#recording-next-highlight');
     this.speedSelect = root?.querySelector('#recording-speed');
     this.volumeInput = root?.querySelector('#recording-volume');
     this.timeLabel = root?.querySelector('#recording-time');
@@ -45,6 +47,7 @@ export class MatchRecordingPlayer {
 
   bind() {
     this.playButton?.addEventListener('click', () => this.toggle());
+    this.nextHighlightButton?.addEventListener('click', () => this.seekToNextHighlight());
     this.timeline?.addEventListener('input', () => {
       soundFx.stopCrowd();
       this.currentMs = Number(this.timeline.value || 0);
@@ -248,7 +251,15 @@ export class MatchRecordingPlayer {
   renderMarkers() {
     this.markers.replaceChildren();
     const duration = Math.max(1, Number(this.recording.durationMs || 1));
-    (this.recording.markers || []).filter(marker => marker.type !== 'sound').forEach(marker => {
+    const visibleMarkers = (this.recording.markers || []).filter(marker => marker.type !== 'sound');
+    const hasHighlights = hasRecordingHighlights(visibleMarkers);
+    if (this.nextHighlightButton) {
+      this.nextHighlightButton.disabled = !hasHighlights;
+      this.nextHighlightButton.title = hasHighlights
+        ? 'Pr\u00f3ximo gol ou lance perigoso'
+        : 'Nenhum lance importante nesta grava\u00e7\u00e3o';
+    }
+    visibleMarkers.forEach(marker => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `recording-marker recording-marker-${marker.type || 'event'}`;
@@ -262,6 +273,16 @@ export class MatchRecordingPlayer {
       });
       this.markers.appendChild(button);
     });
+  }
+
+  seekToNextHighlight() {
+    if (!this.recording) return;
+    const marker = findNextRecordingHighlight(this.recording.markers, this.currentMs);
+    if (!marker) return;
+    this.currentMs = Math.max(0, Number(marker.t || 0));
+    this.lastTick = performance.now();
+    this.lastAudioMarkerMs = this.currentMs;
+    this.render();
   }
 
   playMarkerAudio(fromMs, toMs) {

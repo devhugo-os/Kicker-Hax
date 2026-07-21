@@ -20,7 +20,7 @@ installLowLatencyDataChannelPatch();
 
 // Vite replaces the build constant in production. The fallback keeps the
 // local development server usable when it serves the source module directly.
-const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '56.0.0';
+const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '57.0.0';
 const DISPLAY_VERSION = APP_VERSION.split('.').length > 2
   ? APP_VERSION.replace(/\.0$/, '')
   : APP_VERSION;
@@ -35,6 +35,7 @@ function initApp() {
   setupAppRuntimeOptimizations();
   setupMandatoryUpdateCheck();
   setupDesktopFullscreenLock();
+  setupMobileZoomProtection();
   disableInputSuggestions();
   setupCharacterLimitWarnings();
   setupBackgroundAudioPolicy();
@@ -205,6 +206,25 @@ function setupDesktopFullscreenLock() {
     // Fullscreen may only be requested directly by a user gesture. Do not
     // auto-reenter here: Android/Chrome rejects it and fills the console.
   });
+}
+
+function setupMobileZoomProtection() {
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  if (!coarsePointer) return;
+  const blockGesture = event => event.preventDefault();
+  document.addEventListener('gesturestart', blockGesture, { passive: false });
+  document.addEventListener('gesturechange', blockGesture, { passive: false });
+  document.addEventListener('gestureend', blockGesture, { passive: false });
+  document.addEventListener('dblclick', event => event.preventDefault(), { passive: false });
+
+  let lastTouchEndAt = 0;
+  document.addEventListener('touchend', event => {
+    const now = performance.now();
+    const target = event.target;
+    const typing = target?.matches?.('input, textarea, select, [contenteditable="true"]');
+    if (!typing && now - lastTouchEndAt < 320) event.preventDefault();
+    lastTouchEndAt = now;
+  }, { passive: false });
 }
 
 function disableInputSuggestions() {

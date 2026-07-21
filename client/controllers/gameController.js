@@ -30,6 +30,7 @@ import {
   interpolateReplayFrame
 } from '../replay/goalReplay.js';
 import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
+import { pickNextKickoffVariant } from '../../shared/kickoff.js';
 
 export const gameController = {
   currentUser: null,
@@ -52,6 +53,7 @@ export const gameController = {
   lastOnlineActionInput: {},
   localActionSoundUntil: {},
   lastMatchReadySentAt: 0,
+  lastRoomChatSubmitAt: 0,
 
   // Render & Physics Loop
   canvas: null,
@@ -333,23 +335,29 @@ export const gameController = {
       btn.addEventListener('pointerleave', release);
     });
 
+    this.mobileActionPointers = new Map();
     controls.querySelectorAll('[data-mobile-action]').forEach(btn => {
       const action = btn.dataset.mobileAction;
       const press = (e) => {
         e.preventDefault();
         if (this.hudEditorMode) return;
+        this.mobileActionPointers.set(action, e.pointerId);
+        btn.setPointerCapture?.(e.pointerId);
         this.virtualInput[action] = true;
         this.flushMobileOnlineInput();
       };
       const release = (e) => {
         e.preventDefault();
+        const activePointer = this.mobileActionPointers.get(action);
+        if (activePointer !== undefined && e.pointerId !== activePointer) return;
+        this.mobileActionPointers.delete(action);
         this.virtualInput[action] = false;
         this.flushMobileOnlineInput();
       };
       btn.addEventListener('pointerdown', press);
       btn.addEventListener('pointerup', release);
       btn.addEventListener('pointercancel', release);
-      btn.addEventListener('pointerleave', release);
+      btn.addEventListener('lostpointercapture', release);
     });
 
     [
@@ -638,8 +646,7 @@ export const gameController = {
         const input = document.getElementById('lobby-chat-input');
         const txt = input.value.trim();
         if (txt) {
-          socketService.sendChatMessage(txt);
-          input.value = '';
+          if (this.submitRoomChatMessage(txt)) input.value = '';
         }
       };
     }
@@ -800,8 +807,7 @@ export const gameController = {
         const input = document.getElementById('game-chat-input');
         const txt = input.value.trim();
         if (txt && this.mode === 'multiplayer') {
-          socketService.sendChatMessage(txt);
-          input.value = '';
+          if (this.submitRoomChatMessage(txt)) input.value = '';
         }
         // Sending a message is the explicit end of chat input. Blur the field
         // so the next keys immediately control the player again.
@@ -1991,11 +1997,19 @@ export const gameController = {
         }
       };
 
+      let localKickoffVariant = -1;
       const resetFieldPositions = () => {
+        if (!this.tutorialMode) localKickoffVariant = pickNextKickoffVariant(localKickoffVariant);
+        const localLayouts = [
+          { dx: 120, blueY: 0.5, redY: 0.5 },
+          { dx: 180, blueY: 0.36, redY: 0.64 },
+          { dx: 225, blueY: 0.64, redY: 0.36 }
+        ];
+        const localLayout = this.tutorialMode ? localLayouts[0] : localLayouts[Math.max(0, localKickoffVariant)];
         const jitterX1 = (Math.random() - 0.5) * 20;
         const jitterY1 = (Math.random() - 0.5) * 20;
-        bluePlayer.x = this.canvas.width - C.BORDER - 120 + jitterX1;
-        bluePlayer.y = this.canvas.height * 0.5 + jitterY1;
+        bluePlayer.x = this.canvas.width - C.BORDER - localLayout.dx + jitterX1;
+        bluePlayer.y = this.canvas.height * localLayout.blueY + jitterY1;
         bluePlayer.vx = bluePlayer.vy = 0;
         bluePlayer.kickCharge = 0;
         bluePlayer.stamina = 1.0;
@@ -2013,8 +2027,8 @@ export const gameController = {
 
         const jitterX2 = (Math.random() - 0.5) * 20;
         const jitterY2 = (Math.random() - 0.5) * 20;
-        redPlayer.x = C.BORDER + 120 + jitterX2;
-        redPlayer.y = this.canvas.height * 0.5 + jitterY2;
+        redPlayer.x = C.BORDER + localLayout.dx + jitterX2;
+        redPlayer.y = this.canvas.height * localLayout.redY + jitterY2;
         redPlayer.vx = redPlayer.vy = 0;
         redPlayer.kickCharge = 0;
         redPlayer.stamina = 1.0;
@@ -2373,6 +2387,17 @@ export const gameController = {
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
     renderMatchReport(document.getElementById('post-match-report'), result);
     router.show('post-game-screen');
+  },
+
+  submitRoomChatMessage(text) {
+    const now = performance.now();
+    if (this.lastRoomChatSubmitAt > 0 && now - this.lastRoomChatSubmitAt < 900) {
+      showToast('Aguarde 1s antes de enviar outra mensagem.', 'info');
+      return false;
+    }
+    const accepted = socketService.sendChatMessage(text);
+    if (accepted !== false) this.lastRoomChatSubmitAt = now;
+    return accepted !== false;
   },
 
   finalizeMatchRecording(matchId, result, recordingId = null) {

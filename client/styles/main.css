@@ -479,6 +479,11 @@ input[type="range"] {
   width: 100%;
 }
 
+@media (pointer: coarse) {
+  html, body, #app, button, .btn, .mode-card { touch-action: manipulation; }
+  input, textarea, select { font-size: max(16px, 1em); }
+}
+
 .lobby-player-name,
 .ranking-profile-trigger,
 #public-profile-title {
