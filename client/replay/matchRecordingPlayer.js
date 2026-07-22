@@ -325,7 +325,7 @@ export class MatchRecordingPlayer {
       if (this.root?.classList.contains('recording-fullscreen-active')) {
         this.root.classList.add('recording-controls-hidden');
       }
-    }, 2200);
+    }, 5000);
   }
 
   playMarkerAudio(fromMs, toMs) {

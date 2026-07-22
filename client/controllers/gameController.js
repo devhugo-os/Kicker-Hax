@@ -403,7 +403,14 @@ export const gameController = {
 
     const cardPractice = document.getElementById('mode-card-practice');
     if (cardPractice) {
-      cardPractice.onclick = () => {
+      cardPractice.onclick = async () => {
+        const confirmed = await confirmDialog({
+          title: 'Entrar no treino livre?',
+          message: 'O treino livre não conta XP, moedas, estatísticas ou histórico. Ele serve só para praticar sem tempo e sem limite de gols.',
+          confirmLabel: 'Ir para treino',
+          cancelLabel: 'Cancelar'
+        });
+        if (!confirmed) return;
         this.mode = 'solo';
         this.practiceMode = true;
         this.tutorialMode = false;
@@ -1503,8 +1510,11 @@ export const gameController = {
 
             }
           } else if (MatchSim.status === 'replay') {
-            MatchSim.countdownTimer--;
-            if (MatchSim.countdownTimer <= 0) {
+            const position = this.getReplayPositionState(Date.now(), false);
+            const replayTotalMs = (this.replayFrames.length * (this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR)))
+              + C.REPLAY_POST_GOAL_FREEZE_MS;
+            MatchSim.countdownTimer = Math.max(0, Math.ceil((replayTotalMs - Number(position.elapsedMs || 0)) / (1000 / 60)));
+            if (position.ended) {
               this.endReplayPlayback();
               const goalsTotal = MatchSim.score.red >= this.goalLimit || MatchSim.score.blue >= this.goalLimit;
               if (goalsTotal && this.goalLimit > 0) {
@@ -2126,6 +2136,7 @@ export const gameController = {
 
       const recordLocalFrame = () => {
         const snap = localPlayers.filter(p => !p.tutorialHidden).map(p => ({
+          id: p.id,
           x: p.x,
           y: p.y,
           dir: p.dir,
@@ -5205,8 +5216,8 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
   }
 
   const speed = Math.hypot(Number(vx || 0), Number(vy || 0));
-  if (speed > 0.35) {
-    drawPlayerDirectionArrow(cx, x, y, Math.atan2(vy, vx), team, hasBall);
+  if (!hasBall && speed > 0.35) {
+    drawPlayerDirectionArrow(cx, x, y, Math.atan2(vy, vx), team);
   }
 
   if (name) {
@@ -5221,23 +5232,23 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
   drawStaffTagOnCanvas(cx, x, y - C.PLAYER_RADIUS - 31, staffRole);
 }
 
-function drawPlayerDirectionArrow(cx, x, y, angle, team, hasBall = false) {
-  const distance = C.PLAYER_RADIUS + (hasBall ? 21 : 17);
+function drawPlayerDirectionArrow(cx, x, y, angle, team) {
+  const distance = C.PLAYER_RADIUS + 11;
   const baseX = x + Math.cos(angle) * distance;
   const baseY = y + Math.sin(angle) * distance;
   cx.save();
   cx.translate(baseX, baseY);
   cx.rotate(angle);
   cx.shadowColor = 'rgba(0,0,0,.7)';
-  cx.shadowBlur = 5;
+  cx.shadowBlur = 4;
   cx.fillStyle = team === C.Team.RED ? '#fecaca' : '#bfdbfe';
   cx.strokeStyle = 'rgba(2, 6, 23, .92)';
-  cx.lineWidth = 3;
+  cx.lineWidth = 2.5;
   cx.beginPath();
-  cx.moveTo(13, 0);
-  cx.lineTo(-6, -8);
+  cx.moveTo(10, 0);
+  cx.lineTo(-5, -6);
   cx.lineTo(-2, 0);
-  cx.lineTo(-6, 8);
+  cx.lineTo(-5, 6);
   cx.closePath();
   cx.stroke();
   cx.fill();

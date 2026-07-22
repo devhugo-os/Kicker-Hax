@@ -168,10 +168,8 @@ export const menuController = {
       if (!match?.recordingId || !this.recordingPlayer) return;
       button.disabled = true;
       button.textContent = 'Carregando...';
-      // History overlays sit above the recording player. Close every layer so
-      // opening a demo goes directly to the player.
-      ['match-details-modal', 'profile-history-modal', 'public-profile-modal', 'public-profile-history-modal', 'public-profile-inventory-modal']
-        .forEach(id => document.getElementById(id)?.classList.add('hidden'));
+      // Keep the history/profile modal stack alive behind the recording. This
+      // lets the player close the demo and return exactly where they were.
       this.recordingPlayer.prepareOpen();
       this.bringModalToFront(document.getElementById('match-recording-modal'));
       try {

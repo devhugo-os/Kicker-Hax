@@ -3538,24 +3538,30 @@ html.app-runtime #menu-btn-download-app {
 
 .recording-modal { z-index: 2200; }
 .recording-card {
-  width: min(920px, calc(100vw - 20px));
+  width: min(1040px, calc(100vw - 20px));
+  height: min(690px, calc(100dvh - 20px));
   max-height: calc(100dvh - 20px);
-  overflow-y: auto;
-  padding: 12px;
+  overflow: hidden;
+  padding: 10px;
+  display: grid;
+  grid-template: auto minmax(0, 1fr) auto auto / minmax(420px, 1.35fr) minmax(260px, .85fr);
+  gap: 6px 10px;
 }
-.recording-heading { position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; background: inherit; }
+.recording-heading { grid-column: 1 / -1; position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; background: inherit; }
 .recording-heading h2, .recording-heading p { margin: 0 44px 4px 0; }
-.recording-stage { width: 100%; aspect-ratio: var(--recording-aspect, 16 / 10); overflow: hidden; border: 1px solid rgba(148, 163, 184, .2); border-radius: 8px; background: #020617; display: grid; place-items: center; }
+.recording-stage { grid-column: 1; grid-row: 2; width: 100%; height: 100%; min-height: 0; aspect-ratio: var(--recording-aspect, 16 / 10); overflow: hidden; border: 1px solid rgba(148, 163, 184, .2); border-radius: 8px; background: #020617; display: grid; place-items: center; }
 #recording-canvas { display: block; width: 100%; height: 100%; aspect-ratio: var(--recording-aspect, 16 / 10); background: #020617; }
-.recording-timeline-wrap { position: relative; margin-top: 10px; }
+.recording-timeline-wrap { grid-column: 1; grid-row: 3; position: relative; margin-top: 0; }
 #recording-timeline { width: 100%; margin: 0; }
 .recording-markers { position: absolute; inset: -2px 8px auto; height: 12px; pointer-events: none; }
 .recording-marker { position: absolute; top: 0; width: 4px; height: 12px; padding: 0; border: 0; border-radius: 2px; background: #facc15; transform: translateX(-50%); pointer-events: auto; cursor: pointer; }
 .recording-marker-power { background: #38bdf8; }
-.recording-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 6px 0; }
+.recording-controls { grid-column: 1; grid-row: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 0; }
 .recording-controls label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; }
 .recording-icon-btn { width: 40px; min-width: 40px; padding-inline: 0; }
-.recording-report { margin-top: 6px; }
+.recording-report { grid-column: 2; grid-row: 2 / 5; margin-top: 0; min-height: 0; overflow: auto; align-content: start; }
+.recording-report .match-report-teams { grid-template-columns: 1fr; }
+.recording-report .match-report-table { min-width: 640px; }
 .recording-final-title { margin: 4px 0 10px; color: #fff; text-align: center; font-size: 22px; }
 .recording-modal.recording-fullscreen-active {
   background: #000;
@@ -3568,7 +3574,7 @@ html.app-runtime #menu-btn-download-app {
   border: 0;
   border-radius: 0;
   display: grid;
-  grid-template: minmax(0, 1fr) auto auto / 1fr;
+  grid-template: minmax(0, 1fr) 22px 30px / 1fr;
   gap: 4px;
   padding: 4px;
   overflow: hidden;
@@ -3579,6 +3585,8 @@ html.app-runtime #menu-btn-download-app {
   display: none;
 }
 .recording-modal.recording-fullscreen-active .recording-stage {
+  grid-column: 1;
+  grid-row: 1;
   width: 100%;
   height: 100%;
   min-height: 0;
@@ -3587,16 +3595,22 @@ html.app-runtime #menu-btn-download-app {
 }
 .recording-modal.recording-fullscreen-active .recording-timeline-wrap,
 .recording-modal.recording-fullscreen-active .recording-controls {
-  width: min(760px, calc(100vw - 16px));
+  width: min(640px, calc(100vw - 16px));
   justify-self: center;
-  background: rgba(2, 6, 23, .46);
-  border: 1px solid rgba(148, 163, 184, .16);
-  border-radius: 9px;
-  padding: 3px 6px;
+  background: rgba(2, 6, 23, .32);
+  border: 1px solid rgba(148, 163, 184, .12);
+  border-radius: 8px;
+  padding: 2px 6px;
   transition: opacity .2s ease, transform .2s ease;
 }
+.recording-modal.recording-fullscreen-active .recording-timeline-wrap {
+  grid-column: 1;
+  grid-row: 2;
+}
 .recording-modal.recording-fullscreen-active .recording-controls {
-  min-height: 34px;
+  grid-column: 1;
+  grid-row: 3;
+  min-height: 28px;
   justify-content: center;
 }
 .recording-modal.recording-fullscreen-active.recording-controls-hidden .recording-timeline-wrap,
@@ -3634,9 +3648,20 @@ html.app-runtime #menu-btn-download-app {
   .match-details-heading h2 { font-size: 15px; }
   .match-details-heading p { font-size: 8px; }
   .match-details-score { font-size: 21px; }
-  .recording-card { width: calc(100vw - 8px); max-height: calc(100dvh - 8px); padding: 7px; }
+  .recording-card {
+    width: calc(100vw - 8px);
+    height: calc(100dvh - 8px);
+    max-height: calc(100dvh - 8px);
+    padding: 7px;
+    grid-template: auto minmax(0, 1fr) auto auto minmax(110px, .52fr) / 1fr;
+    overflow: hidden;
+  }
   .recording-heading h2 { font-size: 15px; }
   .recording-heading p { font-size: 8px; }
+  .recording-stage { grid-column: 1; grid-row: 2; }
+  .recording-timeline-wrap { grid-column: 1; grid-row: 3; }
+  .recording-controls { grid-column: 1; grid-row: 4; }
+  .recording-report { grid-column: 1; grid-row: 5; min-height: 0; overflow: auto; }
   .recording-controls { gap: 5px; font-size: 9px; }
   .recording-controls label { font-size: 8px; }
   .recording-controls input[type="range"] { width: 72px; }
@@ -3644,11 +3669,9 @@ html.app-runtime #menu-btn-download-app {
 
 @media (pointer: coarse) and (orientation: landscape) {
   .recording-card {
-    display: grid;
     grid-template: auto minmax(0, 1fr) auto auto / minmax(300px, 1.35fr) minmax(250px, .85fr);
     gap: 5px 8px;
     height: calc(100dvh - 8px);
-    overflow: hidden;
   }
   .recording-heading { grid-column: 1 / -1; }
   .recording-stage { grid-column: 1; grid-row: 2; min-height: 0; }

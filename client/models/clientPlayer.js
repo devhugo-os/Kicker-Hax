@@ -110,11 +110,17 @@ export class ClientPlayer {
     }
     const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
 
+    const previousX = this.x;
+    const previousY = this.y;
+
     // Advance the visual target between snapshots. The six-frame cap keeps
     // remote movement continuous during a short mobile/network jitter burst;
     // authoritative targets still correct every received snapshot.
     this.x += (expectedX - this.x) * correction;
     this.y += (expectedY - this.y) * correction;
+    const renderDx = this.x - previousX;
+    const renderDy = this.y - previousY;
+    if (Math.hypot(renderDx, renderDy) > 0.12) this.lastMoveAngle = Math.atan2(renderDy, renderDx);
     
     // Interpolate direction angles smoothly
     let diff = this.targetDir - this.dir;
@@ -182,10 +188,10 @@ export class ClientPlayer {
       ctx.setLineDash([]);
     }
 
-    // 7) Draw movement direction arrow outside the player body so skins,
-    // badges and the ball possession marker never hide it.
+    // 7) Draw movement direction arrow only while the player does not have
+    // the ball. This keeps possession readable and avoids a giant marker.
     const speed = Math.hypot(this.vx || 0, this.vy || 0);
-    if (speed > 0.25) this.drawDirectionArrow(ctx, ballOwnerId === this.id);
+    if (ballOwnerId !== this.id && speed > 0.25) this.drawDirectionArrow(ctx);
 
     // 8) Draw Ball Possession indicator triangle
     if (ballOwnerId === this.id) {
@@ -239,24 +245,24 @@ export class ClientPlayer {
     }
   }
 
-  drawDirectionArrow(ctx, hasBall = false) {
+  drawDirectionArrow(ctx) {
     const angle = this.lastMoveAngle;
-    const distance = this.r + (hasBall ? 21 : 17);
+    const distance = this.r + 11;
     const baseX = this.x + Math.cos(angle) * distance;
     const baseY = this.y + Math.sin(angle) * distance;
     ctx.save();
     ctx.translate(baseX, baseY);
     ctx.rotate(angle);
     ctx.shadowColor = 'rgba(0,0,0,.75)';
-    ctx.shadowBlur = 5;
+    ctx.shadowBlur = 4;
     ctx.fillStyle = this.team === C.Team.RED ? '#fecaca' : '#bfdbfe';
     ctx.strokeStyle = 'rgba(2, 6, 23, .92)';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(13, 0);
-    ctx.lineTo(-6, -8);
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-5, -6);
     ctx.lineTo(-2, 0);
-    ctx.lineTo(-6, 8);
+    ctx.lineTo(-5, 6);
     ctx.closePath();
     ctx.stroke();
     ctx.fill();
