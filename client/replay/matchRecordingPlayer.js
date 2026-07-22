@@ -44,6 +44,7 @@ export class MatchRecordingPlayer {
     this.raf = 0;
     this.lastAudioMarkerMs = 0;
     this.playbackRate = 1;
+    this.hideControlsTimer = 0;
     this.bind();
   }
 
@@ -69,7 +70,13 @@ export class MatchRecordingPlayer {
     document.addEventListener('fullscreenchange', () => {
       const fullscreen = document.fullscreenElement === this.root;
       this.root?.classList.toggle('recording-fullscreen-active', fullscreen);
-      if (this.fullscreenButton) this.fullscreenButton.textContent = fullscreen ? '🡼' : '⛶';
+      this.root?.classList.remove('recording-controls-hidden');
+      if (this.fullscreenButton) this.fullscreenButton.textContent = fullscreen ? '↙' : '⛶';
+      if (fullscreen) this.showFullscreenControls();
+      else clearTimeout(this.hideControlsTimer);
+    });
+    ['mousemove', 'pointermove', 'pointerdown', 'touchstart'].forEach(eventName => {
+      this.root?.addEventListener(eventName, () => this.showFullscreenControls(), { passive: true });
     });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden || !this.playing) return;
@@ -108,6 +115,7 @@ export class MatchRecordingPlayer {
     this.root.style.setProperty('--recording-aspect', `${fieldWidth} / ${fieldHeight}`);
     this.renderMarkers();
     this.root.classList.remove('hidden');
+    this.showFullscreenControls();
     this.render();
   }
 
@@ -148,6 +156,8 @@ export class MatchRecordingPlayer {
     // when the player closes so no recording audio leaks into other screens.
     soundFx.stopCrowd();
     if (this.playButton) this.playButton.textContent = '▶';
+    clearTimeout(this.hideControlsTimer);
+    this.root?.classList.remove('recording-controls-hidden');
     this.root?.classList.add('hidden');
   }
 
@@ -305,6 +315,17 @@ export class MatchRecordingPlayer {
     } catch (error) {
       console.warn('[Kicker Recording] Fullscreen indisponivel:', error);
     }
+  }
+
+  showFullscreenControls() {
+    if (!this.root?.classList.contains('recording-fullscreen-active')) return;
+    this.root.classList.remove('recording-controls-hidden');
+    clearTimeout(this.hideControlsTimer);
+    this.hideControlsTimer = setTimeout(() => {
+      if (this.root?.classList.contains('recording-fullscreen-active')) {
+        this.root.classList.add('recording-controls-hidden');
+      }
+    }, 2200);
   }
 
   playMarkerAudio(fromMs, toMs) {

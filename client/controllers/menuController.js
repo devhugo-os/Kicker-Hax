@@ -170,9 +170,10 @@ export const menuController = {
       button.textContent = 'Carregando...';
       // History overlays sit above the recording player. Close every layer so
       // opening a demo goes directly to the player.
-      ['match-details-modal', 'profile-history-modal', 'public-profile-history-modal']
+      ['match-details-modal', 'profile-history-modal', 'public-profile-modal', 'public-profile-history-modal', 'public-profile-inventory-modal']
         .forEach(id => document.getElementById(id)?.classList.add('hidden'));
       this.recordingPlayer.prepareOpen();
+      this.bringModalToFront(document.getElementById('match-recording-modal'));
       try {
         const recording = await firebaseService.getMatchRecording(match.recordingId);
         if (!recording) throw new Error('Gravação não encontrada.');

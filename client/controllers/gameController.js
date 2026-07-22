@@ -1486,6 +1486,9 @@ export const gameController = {
               this.replayTimer = 0;
               this.replayFrameMs = (1000 / 60) * C.REPLAY_SLOWMO_FACTOR;
               this.replayStartedAtWall = Date.now();
+              this.replayUseWallClock = false;
+              this.replayElapsedMs = 0;
+              this.replayLastTickAt = this.replayStartedAtWall;
               document.getElementById('replay-overlay')?.classList.remove('hidden');
               const localSkip = document.getElementById('replay-vote-skip-btn');
               if (localSkip) {
@@ -1907,6 +1910,8 @@ export const gameController = {
             p.x = phys.x;
             p.y = phys.y;
             p.dir = phys.dir;
+            p.vx = phys.vx;
+            p.vy = phys.vy;
             p.stamina = phys.stamina;
             p.staminaLock = phys.staminaLock;
             p.stun = phys.stun;
@@ -2125,6 +2130,8 @@ export const gameController = {
           y: p.y,
           dir: p.dir,
           team: p.team,
+          vx: p.vx,
+          vy: p.vy,
           has: (localBallSim.owner === p.id),
           name: p.id === 'p1' ?username : 'CPU Bot',
           badge: p.id === 'p1' ? badge : '⚙️',
@@ -3666,16 +3673,11 @@ export const gameController = {
       return;
     }
     if (this.replayPauseStartedAt) {
-      this.replayStartedAtWall += now - this.replayPauseStartedAt;
+      if (this.replayUseWallClock === false) this.replayLastTickAt = now;
+      else this.replayStartedAtWall += now - this.replayPauseStartedAt;
       this.replayPauseStartedAt = null;
     }
-    const position = getReplayPosition(
-      this.replayStartedAtWall || now,
-      this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
-      this.replayFrames.length,
-      now,
-      C.REPLAY_POST_GOAL_FREEZE_MS
-    );
+    const position = this.getReplayPositionState(now, true);
     if (position.ended) {
       this.endReplayPlayback();
       return;
@@ -3710,7 +3712,7 @@ export const gameController = {
     frame.players.forEach(p => {
       const replaySkin = p.skin || this.players.find(player => player.id === p.id || player.name === p.name)?.skin || '';
       const replayRole = p.staffRole || this.players.find(player => player.id === p.id || player.name === p.name)?.staffRole || '';
-      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, p.name, p.badge, replaySkin, p.halo, p.inv, p.stun, p.has, replayRole);
+      ctxPlayerDraw(this.ctx, p.x, p.y, p.team, p.name, p.badge, replaySkin, p.halo, p.inv, p.stun, p.has, replayRole, p.vx, p.vy);
     });
 
     // Replay text info
@@ -3724,13 +3726,7 @@ export const gameController = {
 
   getCurrentReplayFrame(now = Date.now()) {
     if (!this.inReplay || !this.replayFrames.length) return null;
-    const position = getReplayPosition(
-      this.replayStartedAtWall || now,
-      this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
-      this.replayFrames.length,
-      now,
-      C.REPLAY_POST_GOAL_FREEZE_MS
-    );
+    const position = this.getReplayPositionState(now, false);
     return interpolateReplayFrame(
       this.replayFrames[position.index],
       this.replayFrames[Math.min(this.replayFrames.length - 1, position.index + 1)],
@@ -3740,13 +3736,28 @@ export const gameController = {
 
   isReplayPostGoalHold(now = Date.now()) {
     if (!this.inReplay || !this.replayFrames.length) return false;
+    return this.getReplayPositionState(now, false).holding;
+  },
+
+  getReplayPositionState(now = Date.now(), advanceLocal = true) {
+    const frameMs = this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR);
+    if (this.replayUseWallClock === false) {
+      const totalMs = (this.replayFrames.length * frameMs) + C.REPLAY_POST_GOAL_FREEZE_MS;
+      if (advanceLocal) {
+        const lastTick = this.replayLastTickAt || now;
+        const delta = Math.max(0, Math.min(34, now - lastTick));
+        this.replayElapsedMs = Math.min(totalMs, Number(this.replayElapsedMs || 0) + delta);
+        this.replayLastTickAt = now;
+      }
+      return getReplayPosition(1, frameMs, this.replayFrames.length, 1 + this.replayElapsedMs, C.REPLAY_POST_GOAL_FREEZE_MS);
+    }
     return getReplayPosition(
       this.replayStartedAtWall || now,
-      this.replayFrameMs || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR),
+      frameMs,
       this.replayFrames.length,
       now,
       C.REPLAY_POST_GOAL_FREEZE_MS
-    ).holding;
+    );
   },
 
   endReplayPlayback() {
@@ -3759,6 +3770,9 @@ export const gameController = {
     this.replayStartedAtWall = null;
     this.replayFrameMs = null;
     this.replayPauseStartedAt = null;
+    this.replayUseWallClock = true;
+    this.replayElapsedMs = 0;
+    this.replayLastTickAt = null;
     this.lastReplaySfxIdx = -1;
 
     // Resume persistent stadium audio
@@ -3813,6 +3827,9 @@ export const gameController = {
     this.replayTimer = 0;
     this.lastGoal = goalInfo || this.lastGoal;
     this.replayFrameMs = Number(replayFrameMs) || ((1000 / 60) * C.REPLAY_SLOWMO_FACTOR);
+    this.replayUseWallClock = true;
+    this.replayElapsedMs = 0;
+    this.replayLastTickAt = null;
     // The host schedules one shared future instant. The offset estimated from
     // authoritative snapshots maps that instant to each device clock.
     this.replayStartedAtWall = getSynchronizedReplayStart(replayStartAt, this.serverClockOffsetMs);
@@ -3853,6 +3870,8 @@ export const gameController = {
           y: p.y,
           dir: p.dir,
           team: p.team,
+          vx: p.vx,
+          vy: p.vy,
           has: state.ball.owner === p.id,
           name: p.name || known?.name || '',
           badge: p.badge || known?.badge || '',
@@ -5128,7 +5147,7 @@ function ctxBallDraw(cx, x, y, strikeType = null, strikeTimer = 0, vx = 0, vy = 
   cx.fill();
 }
 
-function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBall, staffRole = '') {
+function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBall, staffRole = '', vx = 0, vy = 0) {
   // Trail details
   ctxPlayerShadow(cx, x, y);
 
@@ -5185,6 +5204,11 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
     cx.fill();
   }
 
+  const speed = Math.hypot(Number(vx || 0), Number(vy || 0));
+  if (speed > 0.35) {
+    drawPlayerDirectionArrow(cx, x, y, Math.atan2(vy, vx), team, hasBall);
+  }
+
   if (name) {
     cx.font = '700 12px system-ui';
     cx.textAlign = 'center';
@@ -5195,6 +5219,29 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
     cx.fillText(name, x, y - C.PLAYER_RADIUS - 14);
   }
   drawStaffTagOnCanvas(cx, x, y - C.PLAYER_RADIUS - 31, staffRole);
+}
+
+function drawPlayerDirectionArrow(cx, x, y, angle, team, hasBall = false) {
+  const distance = C.PLAYER_RADIUS + (hasBall ? 21 : 17);
+  const baseX = x + Math.cos(angle) * distance;
+  const baseY = y + Math.sin(angle) * distance;
+  cx.save();
+  cx.translate(baseX, baseY);
+  cx.rotate(angle);
+  cx.shadowColor = 'rgba(0,0,0,.7)';
+  cx.shadowBlur = 5;
+  cx.fillStyle = team === C.Team.RED ? '#fecaca' : '#bfdbfe';
+  cx.strokeStyle = 'rgba(2, 6, 23, .92)';
+  cx.lineWidth = 3;
+  cx.beginPath();
+  cx.moveTo(13, 0);
+  cx.lineTo(-6, -8);
+  cx.lineTo(-2, 0);
+  cx.lineTo(-6, 8);
+  cx.closePath();
+  cx.stroke();
+  cx.fill();
+  cx.restore();
 }
 
 function ctxPlayerShadow(cx, x, y) {

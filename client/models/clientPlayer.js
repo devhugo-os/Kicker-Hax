@@ -22,6 +22,7 @@ export class ClientPlayer {
     this.targetDir = serverPlayer.dir || 0;
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
+    this.lastMoveAngle = this.dir;
     this.staffRole = serverPlayer.staffRole || '';
     this.extrapolateMotion = true;
     this.stateReceivedAt = performance.now();
@@ -52,6 +53,7 @@ export class ClientPlayer {
     
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
+    if (Math.hypot(this.vx, this.vy) > 0.2) this.lastMoveAngle = Math.atan2(this.vy, this.vx);
     this.targetX = serverPlayer.x;
     this.targetY = serverPlayer.y;
     this.targetDir = serverPlayer.dir;
@@ -180,29 +182,10 @@ export class ClientPlayer {
       ctx.setLineDash([]);
     }
 
-    // 7) Draw movement direction arrow. It is intentionally simple so mobile
-    // matches gain readability without adding expensive effects.
+    // 7) Draw movement direction arrow outside the player body so skins,
+    // badges and the ball possession marker never hide it.
     const speed = Math.hypot(this.vx || 0, this.vy || 0);
-    if (speed > 0.35) {
-      const angle = Math.atan2(this.vy, this.vx);
-      const baseX = this.x + Math.cos(angle) * (this.r + 9);
-      const baseY = this.y + Math.sin(angle) * (this.r + 9);
-      ctx.save();
-      ctx.translate(baseX, baseY);
-      ctx.rotate(angle);
-      ctx.fillStyle = this.team === C.Team.RED ? 'rgba(252, 165, 165, .92)' : 'rgba(147, 197, 253, .92)';
-      ctx.strokeStyle = 'rgba(2, 6, 23, .75)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(10, 0);
-      ctx.lineTo(-4, -6);
-      ctx.lineTo(-1, 0);
-      ctx.lineTo(-4, 6);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.fill();
-      ctx.restore();
-    }
+    if (speed > 0.25) this.drawDirectionArrow(ctx, ballOwnerId === this.id);
 
     // 8) Draw Ball Possession indicator triangle
     if (ballOwnerId === this.id) {
@@ -254,5 +237,29 @@ export class ClientPlayer {
       ctx.fillText('PASSE!', 0, -2);
       ctx.restore();
     }
+  }
+
+  drawDirectionArrow(ctx, hasBall = false) {
+    const angle = this.lastMoveAngle;
+    const distance = this.r + (hasBall ? 21 : 17);
+    const baseX = this.x + Math.cos(angle) * distance;
+    const baseY = this.y + Math.sin(angle) * distance;
+    ctx.save();
+    ctx.translate(baseX, baseY);
+    ctx.rotate(angle);
+    ctx.shadowColor = 'rgba(0,0,0,.75)';
+    ctx.shadowBlur = 5;
+    ctx.fillStyle = this.team === C.Team.RED ? '#fecaca' : '#bfdbfe';
+    ctx.strokeStyle = 'rgba(2, 6, 23, .92)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(13, 0);
+    ctx.lineTo(-6, -8);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-6, 8);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    ctx.restore();
   }
 }

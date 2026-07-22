@@ -1,5 +1,7 @@
 import { SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 
+export const COMMUNITY_SKIN_QUEUE_LIMIT = 10;
+
 export function getUsedSkinRequestIds(allFeatured) {
   return new Set(Object.values(allFeatured || {})
     .flatMap(periods => Object.values(periods || {}))
@@ -52,7 +54,7 @@ export function getHourlySkinQueue(requestsByDay, allFeatured, today) {
   return [...unique.values()].sort((a, b) => {
     const hashDifference = stableQueueHash(a.requestId) - stableQueueHash(b.requestId);
     return hashDifference || String(a.requestId).localeCompare(String(b.requestId));
-  });
+  }).slice(0, COMMUNITY_SKIN_QUEUE_LIMIT);
 }
 
 export function pickHourlySkin(queue = [], cycleIndex = 0) {
@@ -62,7 +64,7 @@ export function pickHourlySkin(queue = [], cycleIndex = 0) {
 }
 
 /** Keeps only the newest pending requests after removing entries already featured. */
-export function getSkinQueueCleanup(requestsByDay, allFeatured, today, maxPending = 180) {
+export function getSkinQueueCleanup(requestsByDay, allFeatured, today, maxPending = COMMUNITY_SKIN_QUEUE_LIMIT) {
   const used = getUsedSkinRequestIds(allFeatured);
   const entries = Object.entries(requestsByDay || {}).flatMap(([requestDay, requests]) =>
     Object.entries(requests || {}).map(([uid, request]) => ({

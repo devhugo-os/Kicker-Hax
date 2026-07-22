@@ -51,6 +51,8 @@ export function interpolateReplayFrame(first, second, ratio = 0) {
         x: mix(player.x, next.x),
         y: mix(player.y, next.y),
         dir: mix(player.dir, next.dir),
+        vx: mix(player.vx, next.vx),
+        vy: mix(player.vy, next.vy),
         halo: mix(player.halo, next.halo)
       } : player;
     })

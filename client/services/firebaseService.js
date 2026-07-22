@@ -106,7 +106,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '60.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '61.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -699,7 +699,7 @@ export const firebaseService = {
     return result;
   },
 
-  async cleanupSkinRequestQueue(maxPending = 180) {
+  async cleanupSkinRequestQueue(maxPending = 10) {
     const [requestsSnapshot, featuredSnapshot] = await Promise.all([
       get(ref(rtdb, 'skinRequests')),
       get(ref(rtdb, 'skinFeatured'))
