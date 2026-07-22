@@ -54,7 +54,7 @@ export class ClientPlayer {
     
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
-    if (Math.hypot(this.vx, this.vy) > 0.2) this.lastMoveAngle = Math.atan2(this.vy, this.vx);
+    this.trackMovement(this.vx, this.vy, 0.2);
     this.targetX = serverPlayer.x;
     this.targetY = serverPlayer.y;
     this.targetDir = serverPlayer.dir;
@@ -121,21 +121,28 @@ export class ClientPlayer {
     this.y += (expectedY - this.y) * correction;
     const renderDx = this.x - previousX;
     const renderDy = this.y - previousY;
-    const renderedSpeed = Math.hypot(renderDx, renderDy) / elapsedFrames;
-    if (renderedSpeed > 0.03) {
-      // Network snapshots can briefly report zero velocity while the rendered
-      // player is moving, so the visible displacement drives the guide arrow.
-      this.lastMoveAngle = Math.atan2(renderDy, renderDx);
-      this.lastMoveSpeed = renderedSpeed;
-    } else {
-      this.lastMoveSpeed *= 0.78;
-    }
+    // Network snapshots can briefly report zero velocity while the rendered
+    // player is moving, so the visible displacement drives the guide arrow.
+    this.trackMovement(renderDx / elapsedFrames, renderDy / elapsedFrames, 0.03);
     
     // Interpolate direction angles smoothly
     let diff = this.targetDir - this.dir;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     this.dir += diff * correction;
     this.lastRenderAt = now;
+  }
+
+  /** Keeps the visual guide in front of the player's real movement vector. */
+  trackMovement(vx, vy, threshold = 0.08) {
+    const safeVx = Number(vx || 0);
+    const safeVy = Number(vy || 0);
+    const speed = Math.hypot(safeVx, safeVy);
+    if (speed > threshold) {
+      this.lastMoveAngle = Math.atan2(safeVy, safeVx);
+      this.lastMoveSpeed = speed;
+    } else {
+      this.lastMoveSpeed *= 0.78;
+    }
   }
 
   draw(ctx, ballOwnerId) {

@@ -30,7 +30,6 @@ import {
   interpolateReplayFrame
 } from '../replay/goalReplay.js';
 import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
-import { pickNextKickoffVariant } from '../../shared/kickoff.js';
 
 export const gameController = {
   currentUser: null,
@@ -1917,6 +1916,9 @@ export const gameController = {
           this.players.forEach(p => {
             const phys = localPlayers.find(item => item.id === p.id);
             if (!phys || phys.tutorialHidden) return;
+            // Solo and training copy physics directly instead of calling
+            // interpolate(), so explicitly track the rendered movement here.
+            p.trackMovement(phys.vx, phys.vy);
             p.x = phys.x;
             p.y = phys.y;
             p.dir = phys.dir;
@@ -2019,19 +2021,14 @@ export const gameController = {
         }
       };
 
-      let localKickoffVariant = -1;
       const resetFieldPositions = () => {
-        if (!this.tutorialMode) localKickoffVariant = pickNextKickoffVariant(localKickoffVariant);
-        const localLayouts = [
-          { dx: 120, blueY: 0.5, redY: 0.5 },
-          { dx: 180, blueY: 0.36, redY: 0.64 },
-          { dx: 225, blueY: 0.64, redY: 0.36 }
-        ];
-        const localLayout = this.tutorialMode ? localLayouts[0] : localLayouts[Math.max(0, localKickoffVariant)];
-        const jitterX1 = (Math.random() - 0.5) * 20;
-        const jitterY1 = (Math.random() - 0.5) * 20;
-        bluePlayer.x = this.canvas.width - C.BORDER - localLayout.dx + jitterX1;
-        bluePlayer.y = this.canvas.height * localLayout.blueY + jitterY1;
+        // Solo/free training have one player per side, therefore their spawn
+        // is the fixed straight striker slot closest to the centre ball.
+        const localLayout = this.tutorialMode
+          ? { dx: 120, blueY: 0.5, redY: 0.5 }
+          : { dx: 250, blueY: 0.5, redY: 0.5 };
+        bluePlayer.x = this.canvas.width - C.BORDER - localLayout.dx;
+        bluePlayer.y = this.canvas.height * localLayout.blueY;
         bluePlayer.vx = bluePlayer.vy = 0;
         bluePlayer.kickCharge = 0;
         bluePlayer.stamina = 1.0;
@@ -2047,10 +2044,8 @@ export const gameController = {
         bluePlayer.dash_time = 0;
         bluePlayer.invuln = 0;
 
-        const jitterX2 = (Math.random() - 0.5) * 20;
-        const jitterY2 = (Math.random() - 0.5) * 20;
-        redPlayer.x = C.BORDER + localLayout.dx + jitterX2;
-        redPlayer.y = this.canvas.height * localLayout.redY + jitterY2;
+        redPlayer.x = C.BORDER + localLayout.dx;
+        redPlayer.y = this.canvas.height * localLayout.redY;
         redPlayer.vx = redPlayer.vy = 0;
         redPlayer.kickCharge = 0;
         redPlayer.stamina = 1.0;

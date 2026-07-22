@@ -3538,6 +3538,7 @@ html.app-runtime #menu-btn-download-app {
 
 .recording-modal { z-index: 2200; }
 .recording-card {
+  position: relative;
   width: min(1280px, calc(100vw - 28px));
   height: auto;
   max-height: calc(100dvh - 20px);
@@ -3576,7 +3577,7 @@ html.app-runtime #menu-btn-download-app {
   border: 0;
   border-radius: 0;
   display: grid;
-  grid-template: minmax(0, 1fr) 18px 38px / 1fr;
+  grid-template: minmax(0, 1fr) / 1fr;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -3598,17 +3599,19 @@ html.app-runtime #menu-btn-download-app {
 }
 .recording-modal.recording-fullscreen-active .recording-timeline-wrap,
 .recording-modal.recording-fullscreen-active .recording-controls {
+  position: absolute;
+  left: 50%;
   width: min(760px, calc(100vw - 10px));
-  justify-self: center;
-  background: rgba(2, 6, 23, .14);
-  border: 1px solid rgba(148, 163, 184, .08);
+  z-index: 5;
+  background: rgba(2, 6, 23, .04);
+  border: 0;
   border-radius: 8px;
   padding: 2px 6px;
+  transform: translateX(-50%);
   transition: opacity .2s ease, transform .2s ease;
 }
 .recording-modal.recording-fullscreen-active .recording-timeline-wrap {
-  grid-column: 1;
-  grid-row: 2;
+  bottom: 42px;
 }
 .recording-modal.recording-fullscreen-active #recording-canvas {
   width: 100%;
@@ -3616,8 +3619,7 @@ html.app-runtime #menu-btn-download-app {
   object-fit: fill;
 }
 .recording-modal.recording-fullscreen-active .recording-controls {
-  grid-column: 1;
-  grid-row: 3;
+  bottom: 3px;
   min-height: 38px;
   justify-content: center;
   flex-wrap: nowrap;
@@ -3645,17 +3647,26 @@ html.app-runtime #menu-btn-download-app {
 .recording-modal.recording-fullscreen-active .recording-controls input[type="range"] {
   width: 92px;
 }
-.recording-modal.recording-fullscreen-active.recording-timeline-hidden .recording-card {
-  grid-template: minmax(0, 1fr) 38px / 1fr;
+.recording-modal.recording-fullscreen-active.recording-playback-hidden .recording-timeline-wrap {
+  display: none;
 }
-.recording-modal.recording-fullscreen-active.recording-timeline-hidden .recording-controls {
-  grid-row: 2;
+.recording-modal.recording-fullscreen-active.recording-playback-hidden .recording-controls {
+  left: auto;
+  right: 6px;
+  bottom: 6px;
+  width: 32px;
+  padding: 0;
+  transform: none;
+  background: transparent;
 }
-.recording-modal.recording-fullscreen-active.recording-controls-hidden .recording-timeline-wrap,
-.recording-modal.recording-fullscreen-active.recording-controls-hidden .recording-controls {
+.recording-modal.recording-fullscreen-active.recording-playback-hidden .recording-controls > :not(#recording-toggle-timeline) {
+  display: none;
+}
+.recording-modal.recording-fullscreen-active.recording-controls-hidden:not(.recording-playback-hidden) .recording-timeline-wrap,
+.recording-modal.recording-fullscreen-active.recording-controls-hidden:not(.recording-playback-hidden) .recording-controls {
   opacity: 0;
   pointer-events: none;
-  transform: translateY(8px);
+  transform: translate(-50%, 8px);
 }
 .lobby-player-name.profile-trigger {
   cursor: pointer;
@@ -4060,4 +4071,30 @@ html.native-app .modal-overlay { height: 100dvh; overscroll-behavior: none; }
     padding: 5px 7px;
     font-size: 10px;
   }
+}
+
+/* Keep the recording surface pinned to the real fullscreen viewport. These
+   final overrides intentionally come after every responsive recording rule:
+   landscape/mobile aspect-ratio declarations must never make the canvas
+   taller than the screen and hide the bottom of the pitch. */
+.recording-modal.recording-fullscreen-active .recording-stage {
+  position: relative;
+  inset: auto;
+  width: 100vw;
+  height: 100dvh;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.recording-modal.recording-fullscreen-active #recording-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto !important;
+  object-fit: fill;
 }

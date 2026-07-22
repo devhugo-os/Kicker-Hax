@@ -75,7 +75,9 @@ export class MatchRecordingPlayer {
       const fullscreen = document.fullscreenElement === this.root;
       this.root?.classList.toggle('recording-fullscreen-active', fullscreen);
       this.root?.classList.remove('recording-controls-hidden');
+      if (!fullscreen) this.root?.classList.remove('recording-playback-hidden');
       if (this.fullscreenButton) this.fullscreenButton.textContent = fullscreen ? '↙' : '⛶';
+      this.updatePlaybackToggle();
       if (fullscreen) this.showFullscreenControls();
       else clearTimeout(this.hideControlsTimer);
     });
@@ -117,12 +119,8 @@ export class MatchRecordingPlayer {
     this.playbackRate = 1;
     const [fieldWidth, fieldHeight] = this.recording.field || [1024, 640];
     this.root.style.setProperty('--recording-aspect', `${fieldWidth} / ${fieldHeight}`);
-    this.root.classList.remove('recording-timeline-hidden');
-    if (this.timelineToggleButton) {
-      this.timelineToggleButton.textContent = '▾';
-      this.timelineToggleButton.title = 'Ocultar barra';
-      this.timelineToggleButton.setAttribute('aria-label', 'Ocultar barra de reprodução');
-    }
+    this.root.classList.remove('recording-timeline-hidden', 'recording-playback-hidden');
+    this.updatePlaybackToggle();
     this.renderMarkers();
     this.root.classList.remove('hidden');
     this.showFullscreenControls();
@@ -167,8 +165,7 @@ export class MatchRecordingPlayer {
     soundFx.stopCrowd();
     if (this.playButton) this.playButton.textContent = '▶';
     clearTimeout(this.hideControlsTimer);
-    this.root?.classList.remove('recording-controls-hidden');
-    this.root?.classList.remove('recording-timeline-hidden');
+    this.root?.classList.remove('recording-controls-hidden', 'recording-timeline-hidden', 'recording-playback-hidden');
     this.root?.classList.add('hidden');
   }
 
@@ -346,13 +343,27 @@ export class MatchRecordingPlayer {
 
   toggleTimeline() {
     if (!this.root) return;
-    const hidden = this.root.classList.toggle('recording-timeline-hidden');
-    if (this.timelineToggleButton) {
-      this.timelineToggleButton.textContent = hidden ? '▴' : '▾';
-      this.timelineToggleButton.title = hidden ? 'Mostrar barra' : 'Ocultar barra';
-      this.timelineToggleButton.setAttribute('aria-label', hidden ? 'Mostrar barra de reprodução' : 'Ocultar barra de reprodução');
-    }
+    const fullscreen = this.root.classList.contains('recording-fullscreen-active')
+      || document.fullscreenElement === this.root;
+    const hidden = fullscreen
+      ? this.root.classList.toggle('recording-playback-hidden')
+      : this.root.classList.toggle('recording-timeline-hidden');
+    this.updatePlaybackToggle(hidden, fullscreen);
     this.showFullscreenControls();
+  }
+
+  updatePlaybackToggle(hidden = null, fullscreen = null) {
+    if (!this.timelineToggleButton || !this.root) return;
+    const inFullscreen = fullscreen ?? (this.root.classList.contains('recording-fullscreen-active')
+      || document.fullscreenElement === this.root);
+    const isHidden = hidden ?? this.root.classList.contains(
+      inFullscreen ? 'recording-playback-hidden' : 'recording-timeline-hidden'
+    );
+    if (this.timelineToggleButton) {
+      this.timelineToggleButton.textContent = isHidden ? '▴' : '▾';
+      this.timelineToggleButton.title = isHidden ? 'Mostrar controles' : 'Ocultar controles';
+      this.timelineToggleButton.setAttribute('aria-label', isHidden ? 'Mostrar controles de reprodução' : 'Ocultar controles de reprodução');
+    }
   }
 
   showFullscreenControls() {

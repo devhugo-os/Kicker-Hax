@@ -20,7 +20,7 @@ installLowLatencyDataChannelPatch();
 
 // Vite replaces the build constant in production. The fallback keeps the
 // local development server usable when it serves the source module directly.
-const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '64.0.0';
+const APP_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '65.0.0';
 const DISPLAY_VERSION = APP_VERSION.split('.').length > 2
   ? APP_VERSION.replace(/\.0$/, '')
   : APP_VERSION;
