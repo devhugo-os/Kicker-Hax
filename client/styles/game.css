@@ -546,6 +546,52 @@
   background: rgba(245, 158, 11, 0.88);
 }
 
+.match-ending-animation {
+  position: fixed;
+  inset: 0;
+  z-index: 28;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(59, 130, 246, .18), rgba(0, 0, 0, .28));
+  animation: matchEndFade .68s ease both;
+}
+
+.match-ending-card {
+  min-width: min(420px, 82vw);
+  padding: 24px 30px;
+  border: 1px solid rgba(147, 197, 253, .45);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, .84);
+  box-shadow: 0 22px 80px rgba(37, 99, 235, .32);
+  text-align: center;
+  transform: scale(.94);
+  animation: matchEndPop .58s cubic-bezier(.2, 1.2, .2, 1) both;
+}
+
+.match-ending-card strong {
+  display: block;
+  color: #fff;
+  font: 900 clamp(26px, 5vw, 44px) 'Outfit', system-ui;
+}
+
+.match-ending-card span {
+  display: block;
+  margin-top: 6px;
+  color: #93c5fd;
+  font-weight: 800;
+}
+
+@keyframes matchEndPop {
+  0% { opacity: 0; transform: translateY(10px) scale(.85); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes matchEndFade {
+  0%, 90% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* Guided tutorial floats above the real simulation without covering controls. */
 .tutorial-guide {
   position: fixed;

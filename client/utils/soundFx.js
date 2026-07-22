@@ -333,6 +333,10 @@ export const soundFx = {
         this.createTone(330, 0.045, 'triangle', 0.08);
         setTimeout(() => this.createTone(440, 0.05, 'triangle', 0.07), 35);
         break;
+      case 'requestPass':
+        this.createTone(740, 0.05, 'triangle', 0.07);
+        setTimeout(() => this.createTone(980, 0.06, 'sine', 0.06), 45);
+        break;
       case 'roulette':
         this.createTone(920, 0.025, 'square', 0.045);
         this.percuss(0.035, 0.012);
@@ -385,6 +389,10 @@ export const soundFx = {
       case 'pickup':
         this.createTone(330, 0.045, 'triangle', 0.08, true);
         setTimeout(() => this.createTone(440, 0.05, 'triangle', 0.07, true), 35);
+        break;
+      case 'requestPass':
+        this.createTone(740, 0.05, 'triangle', 0.07, true);
+        setTimeout(() => this.createTone(980, 0.06, 'sine', 0.06, true), 45);
         break;
       case 'tackle':
         this.percuss(0.22, 0.03, true);

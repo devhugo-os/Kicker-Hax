@@ -22,7 +22,7 @@ const REALTIME_KEYS = Object.freeze({
   shootHalo: 'o', kickCharge: 'k', invuln: 'v', tackle_cd: 'l', dribble_cd: 'r',
   power_cd: 'w', matchStats: 'M', badge: 'B', name: 'A', skinId: 'K', staffRole: 'R',
   owner: 'O', lastTouch: 'L', lastStrikeType: 'T', strikeTimer: 'I', red: '0', blue: '1',
-  shoot: 'j', sprint: 'P', dribble: 'd', tackle: 'C', power: 'W', mobileTackleAssist: 'U',
+  shoot: 'j', sprint: 'P', dribble: 'd', tackle: 'C', power: 'W', requestPass: 'G', passRequestTimer: 'J', mobileTackleAssist: 'U',
   sentAt: 'E', serverTime: 'V'
 });
 const EXPANDED_REALTIME_KEYS = Object.freeze(Object.fromEntries(

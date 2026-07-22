@@ -153,6 +153,7 @@ export class ServerPhysics {
       if (p.tackleFreeze > 0) p.tackleFreeze--;
       if (p.aiShootLock > 0) p.aiShootLock--;
       if (p.shootHalo > 0) p.shootHalo--;
+      if (p.passRequestTimer > 0) p.passRequestTimer--;
       // Being stunned cancels an unfinished tackle. It must not resolve later
       // from a stale dash frame after the player has already been stopped.
       p.tackleEval = 0;
@@ -225,6 +226,7 @@ export class ServerPhysics {
     if (p.tackleFreeze > 0) p.tackleFreeze--;
     if (p.aiShootLock > 0) p.aiShootLock--;
     if (p.shootHalo > 0) p.shootHalo--;
+    if (p.passRequestTimer > 0) p.passRequestTimer--;
     if (p.tackleEval > 0) {
       p.tackleEval--;
       // Collision is checked after movement in ServerMatch. Marking it here

@@ -77,8 +77,9 @@ function expandStats(values = []) {
  * retained to reproduce the match flow without storing the same play twice.
  */
 export class MatchRecordingSession {
-  constructor({ fieldWidth = 1024, fieldHeight = 640, players = [] } = {}) {
+  constructor({ fieldWidth = 1024, fieldHeight = 640, players = [], sampleIntervalMs = SAMPLE_INTERVAL_MS } = {}) {
     this.field = [Number(fieldWidth) || 1024, Number(fieldHeight) || 640];
+    this.sampleIntervalMs = Math.max(80, Number(sampleIntervalMs) || SAMPLE_INTERVAL_MS);
     this.frames = [];
     this.reports = [];
     this.markers = [];
@@ -157,7 +158,7 @@ export class MatchRecordingSession {
     this.captureImportantMarker(state);
     this.captureSoundMarkers(state.soundEffects);
     const statusChanged = this.lastStatus && this.lastStatus !== state.status;
-    if (!statusChanged && this.lastCapturedAt && now - this.lastCapturedAt < SAMPLE_INTERVAL_MS) return;
+    if (!statusChanged && this.lastCapturedAt && now - this.lastCapturedAt < this.sampleIntervalMs) return;
     let elapsedMs = this.frames.length
       ? Math.max(16, Math.min(1000, now - this.lastCapturedAt))
       : 0;
@@ -170,7 +171,7 @@ export class MatchRecordingSession {
         this.freezeRecordedMs = 0;
       }
       if (this.freezeRecordedMs >= GOAL_FREEZE_RECORDING_MS) return;
-      elapsedMs = Math.min(elapsedMs || SAMPLE_INTERVAL_MS, GOAL_FREEZE_RECORDING_MS - this.freezeRecordedMs);
+      elapsedMs = Math.min(elapsedMs || this.sampleIntervalMs, GOAL_FREEZE_RECORDING_MS - this.freezeRecordedMs);
       this.freezeRecordedMs += elapsedMs;
     } else {
       this.freezeKey = '';
@@ -186,7 +187,8 @@ export class MatchRecordingSession {
         [showActionEffects ? Number(player.shootHalo || 0) : 0,
           showActionEffects && player.tackle_cd > 0 ? 1 : 0,
           showActionEffects && player.dribble_cd > 0 ? 1 : 0,
-          showActionEffects ? Number(player.stun || 0) : 0]
+          showActionEffects ? Number(player.stun || 0) : 0,
+          Number(player.passRequestTimer || 0)]
       ];
     }).filter(player => player[0] >= 0);
     const paused = !!state.isHostPaused || !!state.isDisconnectPaused;
@@ -273,9 +275,9 @@ export class MatchRecordingSession {
     this.active = false;
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
-      v: 9,
+      v: 10,
       field: this.field,
-      sampleMs: SAMPLE_INTERVAL_MS,
+      sampleMs: this.sampleIntervalMs,
       durationMs: Math.max(0, this.virtualTimeMs),
       players: this.players,
       frames: this.frames,
@@ -294,7 +296,7 @@ export class MatchRecordingSession {
     while (payload.data.length > MAX_RECORDING_BASE64_LENGTH && base.frames.length > 2) {
       stride *= 2;
       base.frames = base.frames.filter((_, index) => index % 2 === 0 || index === base.frames.length - 1);
-      base.sampleMs = SAMPLE_INTERVAL_MS * stride;
+      base.sampleMs = this.sampleIntervalMs * stride;
       payload = await compressText(JSON.stringify(base));
     }
     if (payload.data.length > MAX_RECORDING_BASE64_LENGTH) {
@@ -308,8 +310,8 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 9,
-      competitive: true,
+      recordingVersion: 10,
+      competitive: !!result?.competitive,
       createdAt: new Date().toISOString()
     };
   }
@@ -352,7 +354,8 @@ export async function decodeMatchRecording(documentData) {
         shootHalo: Number(player[6]?.[0] || 0),
         tackling: player[6]?.[1] === 1,
         dribbling: player[6]?.[2] === 1,
-        stun: Number(player[6]?.[3] || 0)
+        stun: Number(player[6]?.[3] || 0),
+        passRequestTimer: Number(player[6]?.[4] || 0)
       }))
     })),
     reports: (compact.reports || []).map(report => ({

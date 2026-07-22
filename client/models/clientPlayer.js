@@ -37,6 +37,7 @@ export class ClientPlayer {
     this.dribble_cd = serverPlayer.dribble_cd || 0;
     this.power_cd = serverPlayer.power_cd || 0;
     this.matchStats = serverPlayer.matchStats || null;
+    this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
     this.renderTrail = true;
     
     // Aesthetic trails
@@ -67,6 +68,7 @@ export class ClientPlayer {
     this.tackle_cd = serverPlayer.tackle_cd || 0;
     this.dribble_cd = serverPlayer.dribble_cd || 0;
     this.power_cd = serverPlayer.power_cd || 0;
+    if (Object.hasOwn(serverPlayer, 'passRequestTimer')) this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
     if (Object.hasOwn(serverPlayer, 'matchStats')) this.matchStats = serverPlayer.matchStats || null;
 
     // Record trail for active sprint
@@ -178,7 +180,31 @@ export class ClientPlayer {
       ctx.setLineDash([]);
     }
 
-    // 7) Draw Ball Possession indicator triangle
+    // 7) Draw movement direction arrow. It is intentionally simple so mobile
+    // matches gain readability without adding expensive effects.
+    const speed = Math.hypot(this.vx || 0, this.vy || 0);
+    if (speed > 0.35) {
+      const angle = Math.atan2(this.vy, this.vx);
+      const baseX = this.x + Math.cos(angle) * (this.r + 9);
+      const baseY = this.y + Math.sin(angle) * (this.r + 9);
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.rotate(angle);
+      ctx.fillStyle = this.team === C.Team.RED ? 'rgba(252, 165, 165, .92)' : 'rgba(147, 197, 253, .92)';
+      ctx.strokeStyle = 'rgba(2, 6, 23, .75)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(-4, -6);
+      ctx.lineTo(-1, 0);
+      ctx.lineTo(-4, 6);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 8) Draw Ball Possession indicator triangle
     if (ballOwnerId === this.id) {
       ctx.fillStyle = 'rgba(255,255,255,.85)';
       ctx.beginPath();
@@ -189,7 +215,7 @@ export class ClientPlayer {
       ctx.fill();
     }
 
-    // 8) Draw Stunned indicator border
+    // 9) Draw Stunned indicator border
     if (this.stun > 0) {
       ctx.strokeStyle = '#ef4444';
       ctx.lineWidth = 2;
@@ -198,7 +224,7 @@ export class ClientPlayer {
       ctx.stroke();
     }
 
-    // 9) Draw Name label above player
+    // 10) Draw Name label above player
     if (this.name) {
       ctx.font = '700 12px system-ui';
       ctx.textAlign = 'center';
@@ -209,5 +235,24 @@ export class ClientPlayer {
       ctx.fillText(this.name, this.x, this.y - this.r - 14);
     }
     drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 31, this.staffRole);
+    if (this.passRequestTimer > 0) {
+      const pulse = 0.85 + Math.sin(performance.now() / 80) * 0.08;
+      ctx.save();
+      ctx.translate(this.x, this.y - this.r - 48);
+      ctx.scale(pulse, pulse);
+      ctx.fillStyle = 'rgba(14, 165, 233, 0.92)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(-34, -14, 68, 24, 12);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = '900 11px Outfit, system-ui';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('PASSE!', 0, -2);
+      ctx.restore();
+    }
   }
 }

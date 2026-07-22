@@ -45,6 +45,7 @@ export class ServerMatch {
     this.disconnectTeam = null;
     this.disconnectUid = null;
     this.disconnectedUids = new Set();
+    this.eliminatedUids = new Set();
     this.disconnectedNames = new Map();
     this.disconnectVoting = false;
     this.onGuestConnectionLost = options.onGuestConnectionLost || null;
@@ -74,7 +75,7 @@ export class ServerMatch {
     this.inputs = new Map();
     this.players.forEach(p => {
       if (!p.cpu) {
-        this.inputs.set(p.id, { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false });
+        this.inputs.set(p.id, { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false });
       }
     });
 
@@ -152,7 +153,7 @@ export class ServerMatch {
     this.inputs.clear();
     this.players.forEach(p => {
       if (!p.cpu) {
-        this.inputs.set(p.id, { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false });
+        this.inputs.set(p.id, { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false });
       }
     });
     this.hasBots = this.players.some(p => p.cpu);
@@ -217,6 +218,8 @@ export class ServerMatch {
       shootHalo: 0,
       aiShootLock: 0,
       aiFeintLock: 0,
+      passRequestTimer: 0,
+      lastPassRequestPressed: false,
       aiStyle: lobbyPlayer.cpu ? {
         lane: Math.random() < 0.5 ? -1 : 1,
         aggression: 0.82 + Math.random() * 0.28,
@@ -240,6 +243,7 @@ export class ServerMatch {
         dribble: !!inputData.dribble,
         tackle: !!inputData.tackle,
         power: !!inputData.power,
+        requestPass: !!inputData.requestPass,
         mobileTackleAssist: !!inputData.mobileTackleAssist
       });
     }
@@ -278,7 +282,14 @@ export class ServerMatch {
 
       const assignment = assignKickoffSlots(teamPlayers, this.kickoffSlots[teamKey]);
       this.kickoffSlots[teamKey] = assignment.slots;
-      assignment.ordered.forEach((p, index) => {
+      const boosted = assignment.ordered.filter(player => Number(player.frontSpawnBoost || 0) > 0);
+      const regular = assignment.ordered.filter(player => Number(player.frontSpawnBoost || 0) <= 0);
+      // Reconnected players receive the striker lane on the next kickoff,
+      // giving them a clean return instead of respawning buried in defense.
+      const ordered = boosted.length
+        ? [regular[0] || boosted[0], ...boosted, ...regular.slice(1)].filter((player, index, list) => list.indexOf(player) === index)
+        : assignment.ordered;
+      ordered.forEach((p, index) => {
         const layout = positions[index % positions.length];
         const jitterX = (Math.random() - 0.5) * 20;
         const jitterY = (Math.random() - 0.5) * 20;
@@ -303,6 +314,7 @@ export class ServerMatch {
         p.shootHalo = 0;
         p.aiShootLock = p.cpu ? 45 : 0;
         p.aiFeintLock = 0;
+        if (p.frontSpawnBoost > 0) p.frontSpawnBoost -= 1;
       });
     };
 
@@ -789,7 +801,12 @@ export class ServerMatch {
 
       // Update players physics
       for (const p of this.players) {
-        const input = this.inputs.get(p.id) || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+        const input = this.inputs.get(p.id) || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
+        if (input.requestPass && !p.lastPassRequestPressed) {
+          p.passRequestTimer = C.PASS_REQUEST_FRAMES;
+          this.soundEffects.push('requestPass');
+        }
+        p.lastPassRequestPressed = !!input.requestPass;
 
         // Handle skill activations
         if (p.stun <= 0) {
@@ -931,7 +948,8 @@ export class ServerMatch {
           invuln: p.invuln,
           tackle_cd: p.tackle_cd,
           dribble_cd: p.dribble_cd,
-          power_cd: p.power_cd
+          power_cd: p.power_cd,
+          passRequestTimer: p.passRequestTimer || 0
         };
         // Live statistics and identity do not change at rendering frequency.
         // Sending them at 1 Hz keeps the HUD current without periodic bandwidth
@@ -998,7 +1016,8 @@ export class ServerMatch {
         badge: player.badge,
         name: player.name,
         skinId: player.skinId || '',
-        staffRole: player.staffRole || ''
+        staffRole: player.staffRole || '',
+        passRequestTimer: player.passRequestTimer || 0
       })),
       score: this.score,
       matchTime: this.matchTime,
@@ -1146,6 +1165,7 @@ export class ServerMatch {
     player.skin = lobbyPlayer.skin || player.skin;
     player.skinId = lobbyPlayer.skinId || player.skinId;
     player.lastSeenAt = Date.now();
+    player.frontSpawnBoost = Math.max(Number(player.frontSpawnBoost || 0), 2);
     // ICE and the unordered channel can settle after the reliable bootstrap.
     // Do not interpret that short negotiation window as a second disconnect.
     player.rejoinGraceUntil = Date.now() + 30000;
@@ -1154,7 +1174,7 @@ export class ServerMatch {
     if (this.ball.noPickupFrom === previousId) this.ball.noPickupFrom = nextId;
     const input = this.inputs.get(previousId);
     this.inputs.delete(previousId);
-    this.inputs.set(nextId, input || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false });
+    this.inputs.set(nextId, input || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false });
     const stats = this.playerStats.get(previousId);
     this.playerStats.delete(previousId);
     if (stats) this.playerStats.set(nextId, stats);
@@ -1190,6 +1210,7 @@ export class ServerMatch {
     if (!removed.length) return false;
     this.players = this.players.filter(item => !missing.has(item.uid));
     removed.forEach(player => {
+      if (player.uid) this.eliminatedUids.add(player.uid);
       this.inputs.delete(player.id);
       if (this.ball.owner === player.id) this.ball.owner = null;
       if (this.ball.lastTouch === player.id) this.ball.lastTouch = null;
@@ -1214,7 +1235,8 @@ export class ServerMatch {
         stamina: p.stamina, staminaLock: p.staminaLock, stun: p.stun,
         shootHalo: p.shootHalo, kickCharge: p.kickCharge || 0, invuln: p.invuln,
         tackle_cd: p.tackle_cd, dribble_cd: p.dribble_cd, power_cd: p.power_cd,
-        badge: p.badge, name: p.name, skinId: p.skinId || '', staffRole: p.staffRole || ''
+        badge: p.badge, name: p.name, skinId: p.skinId || '', staffRole: p.staffRole || '',
+        passRequestTimer: p.passRequestTimer || 0
       })),
       score: this.score,
       matchTime: this.matchTime,
@@ -1302,6 +1324,7 @@ export class ServerMatch {
     const playerStats = Array.from(this.playerStats.entries()).map(([playerId, data]) => ({
       playerId,
       ...data,
+      leftMatch: this.disconnectedUids.has(data.uid) || this.eliminatedUids.has(data.uid),
       possessionPct: totalPossessionFrames > 0 ? Math.round(((data.possessionFrames || 0) / totalPossessionFrames) * 100) : 0
     }));
     const hasForfeitWinner = this.forfeitWinnerTeam === C.Team.RED || this.forfeitWinnerTeam === C.Team.BLUE;

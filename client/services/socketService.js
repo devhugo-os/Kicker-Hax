@@ -1922,7 +1922,7 @@ export class P2PSocketService {
       x: Math.round(Number(inputData.x || 0) * 100) / 100,
       y: Math.round(Number(inputData.y || 0) * 100) / 100
     };
-    const actionSignature = `${+!!normalized.shoot}|${+!!normalized.sprint}|${+!!normalized.dribble}|${+!!normalized.tackle}|${+!!normalized.power}|${+!!normalized.mobileTackleAssist}`;
+    const actionSignature = `${+!!normalized.shoot}|${+!!normalized.sprint}|${+!!normalized.dribble}|${+!!normalized.tackle}|${+!!normalized.power}|${+!!normalized.requestPass}|${+!!normalized.mobileTackleAssist}`;
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;

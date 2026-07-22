@@ -7,6 +7,7 @@ import { firebaseService } from '../services/firebaseService.js';
 export const DEFAULT_MOBILE_HUD = {
   showStats: true,
   largeButtons: false,
+  mobileTackleAssistEnabled: true,
   opacity: 60,
   stickX: 12,
   stickY: 25,
@@ -14,6 +15,10 @@ export const DEFAULT_MOBILE_HUD = {
   chatY: 84,
   chatSize: 44,
   chatOpacity: 60,
+  requestPassX: 64,
+  requestPassY: 84,
+  requestPassSize: 48,
+  requestPassOpacity: 60,
   statsX: 93,
   statsY: 84,
   statsSize: 44,
@@ -29,14 +34,16 @@ export const DEFAULT_MOBILE_HUD = {
     shoot: { x: 83, y: 34 },
     dribble: { x: 92, y: 33 },
     tackle: { x: 83, y: 15 },
-    power: { x: 92, y: 52 }
+    power: { x: 92, y: 52 },
+    requestPass: { x: 64, y: 84 }
   },
   actionStyles: {
     sprint: { size: 54, opacity: 60 },
     shoot: { size: 58, opacity: 60 },
     dribble: { size: 54, opacity: 60 },
     tackle: { size: 54, opacity: 60 },
-    power: { size: 56, opacity: 60 }
+    power: { size: 56, opacity: 60 },
+    requestPass: { size: 48, opacity: 60 }
   }
 };
 
@@ -58,7 +65,7 @@ export const settingsController = {
 
   defaultP1: {
     up: 'w', down: 's', left: 'a', right: 'd',
-    sprint: 'ShiftLeft', shoot: ' ', dribble: 'f', tackle: 'e', power: 'q'
+    sprint: 'ShiftLeft', shoot: ' ', dribble: 'f', tackle: 'e', power: 'q', requestPass: 'r'
   },
   defaultP2: {
     up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright',
@@ -80,7 +87,8 @@ export const settingsController = {
     { id: 'shoot', label: 'Chutar' },
     { id: 'dribble', label: 'Driblar' },
     { id: 'tackle', label: 'Desarme' },
-    { id: 'power', label: 'Power Shoot' }
+    { id: 'power', label: 'Power Shoot' },
+    { id: 'requestPass', label: 'Pedir Passe' }
   ],
 
   init() {
@@ -326,6 +334,7 @@ export const settingsController = {
     const showStats = document.getElementById('mobile-hud-show-stats');
     const largeButtons = document.getElementById('mobile-hud-large-buttons');
     const opacity = document.getElementById('mobile-hud-opacity');
+    const tackleAssist = document.getElementById('mobile-tackle-assist-enabled');
     const stickX = document.getElementById('mobile-stick-x');
     const stickY = document.getElementById('mobile-stick-y');
     const actionsX = document.getElementById('mobile-actions-x');
@@ -337,6 +346,7 @@ export const settingsController = {
         ...(this.pendingMobileHud || this.mobileHud),
         showStats: showStats ? !!showStats.checked : (this.mobileHud.showStats !== false),
         largeButtons: largeButtons ? !!largeButtons.checked : !!this.mobileHud.largeButtons,
+        mobileTackleAssistEnabled: tackleAssist ? !!tackleAssist.checked : this.mobileHud.mobileTackleAssistEnabled !== false,
         opacity: parseInt(opacity?.value || String(this.mobileHud.opacity || DEFAULT_MOBILE_HUD.opacity), 10),
         stickX: parseInt(stickX?.value || String(DEFAULT_MOBILE_HUD.stickX), 10),
         stickY: parseInt(stickY?.value || String(DEFAULT_MOBILE_HUD.stickY), 10),
@@ -356,8 +366,8 @@ export const settingsController = {
       }
       this.updateMobileHudPreview();
     };
-    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
-    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
+    [showStats, largeButtons, tackleAssist, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
+    [showStats, largeButtons, tackleAssist, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
     document.getElementById('mobile-hud-save-layout')?.addEventListener('click', () => save({ persist: true }));
     document.getElementById('mobile-hud-edit-match')?.addEventListener('click', () => {
       save({ persist: true });
@@ -374,12 +384,14 @@ export const settingsController = {
     const showStats = document.getElementById('mobile-hud-show-stats');
     const largeButtons = document.getElementById('mobile-hud-large-buttons');
     const opacity = document.getElementById('mobile-hud-opacity');
+    const tackleAssist = document.getElementById('mobile-tackle-assist-enabled');
     const stickX = document.getElementById('mobile-stick-x');
     const stickY = document.getElementById('mobile-stick-y');
     const actionsX = document.getElementById('mobile-actions-x');
     const actionsY = document.getElementById('mobile-actions-y');
     if (showStats) showStats.checked = this.mobileHud.showStats;
     if (largeButtons) largeButtons.checked = this.mobileHud.largeButtons;
+    if (tackleAssist) tackleAssist.checked = this.mobileHud.mobileTackleAssistEnabled !== false;
     if (opacity) opacity.value = this.mobileHud.opacity;
     if (stickX) stickX.value = this.mobileHud.stickX;
     if (stickY) stickY.value = this.mobileHud.stickY;

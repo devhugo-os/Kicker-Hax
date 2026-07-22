@@ -31,6 +31,7 @@ export const menuController = {
   profileDirty: false,
   recordingPlayer: null,
   selectedMatchDetails: null,
+  modalStackZ: 2500,
 
   async init(user) {
     this.currentUser = user;
@@ -437,6 +438,12 @@ export const menuController = {
     }
   },
 
+  bringModalToFront(modal) {
+    if (!modal) return;
+    this.modalStackZ = Math.max(2500, Number(this.modalStackZ || 2500)) + 10;
+    modal.style.zIndex = String(this.modalStackZ);
+  },
+
   async loadCreditsStaff() {
     const roles = [
       ['developer', 'Hugo'],
@@ -601,6 +608,7 @@ export const menuController = {
     const modal = document.getElementById('public-profile-modal');
     if (!modal) return;
     modal.classList.remove('hidden');
+    this.bringModalToFront(modal);
     document.getElementById('public-profile-title').textContent = 'Carregando...';
     this.publicProfileUid = uid;
     this.publicProfileData = null;
@@ -662,6 +670,7 @@ export const menuController = {
     const modal = document.getElementById('public-profile-inventory-modal');
     if (!profile || !inventory || !modal) return;
     modal.classList.remove('hidden');
+    this.bringModalToFront(modal);
     inventory.textContent = 'Carregando inventário...';
     try {
       const skins = (await Promise.all((profile.ownedSkins || ['rookie']).map(async id => {
@@ -700,6 +709,7 @@ export const menuController = {
     const list = document.getElementById('public-profile-history-list');
     if (!uid || !modal || !list) return;
     modal.classList.remove('hidden');
+    this.bringModalToFront(modal);
     list.textContent = 'Carregando histórico...';
     try {
       const history = await firebaseService.getRecentHistory(uid, 20);
@@ -782,11 +792,11 @@ export const menuController = {
     document.getElementById('match-details-score').textContent = `${match.scoreRed ?? match.score?.red ?? 0} : ${match.scoreBlue ?? match.score?.blue ?? 0}`;
     renderMatchReport(report, match);
     this.selectedMatchDetails = match;
-    const hasCompatibleRecording = !!(match.competitive || match.category === 'competitive')
-      && Number(match.recordingVersion || 0) >= 8
+    const hasCompatibleRecording = Number(match.recordingVersion || 0) >= 8
       && !!match.recordingId;
     document.getElementById('match-recording-open')?.classList.toggle('hidden', !hasCompatibleRecording);
     modal.classList.remove('hidden');
+    this.bringModalToFront(modal);
   },
 };
 export default menuController;

@@ -1980,6 +1980,33 @@ html.app-runtime #menu-btn-download-app {
   align-items: center;
   color: var(--text-primary);
 }
+.mobile-hud-option {
+  width: 100%;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid rgba(148, 163, 184, .18);
+  border-radius: 8px;
+  background: rgba(15, 23, 42, .55);
+}
+.mobile-hud-option span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.mobile-hud-option strong {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.mobile-hud-option small {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+.mobile-hud-option input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
 
 @media (pointer: coarse) and (orientation: landscape) {
   .screen-view {
@@ -3530,6 +3557,53 @@ html.app-runtime #menu-btn-download-app {
 .recording-icon-btn { width: 40px; min-width: 40px; padding-inline: 0; }
 .recording-report { margin-top: 6px; }
 .recording-final-title { margin: 4px 0 10px; color: #fff; text-align: center; font-size: 22px; }
+.recording-modal.recording-fullscreen-active {
+  background: #000;
+  padding: 0;
+}
+.recording-modal.recording-fullscreen-active .recording-card {
+  width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  display: grid;
+  grid-template: minmax(0, 1fr) auto auto / 1fr;
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+  background: #000;
+}
+.recording-modal.recording-fullscreen-active .recording-heading,
+.recording-modal.recording-fullscreen-active .recording-report {
+  display: none;
+}
+.recording-modal.recording-fullscreen-active .recording-stage {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+}
+.recording-modal.recording-fullscreen-active .recording-timeline-wrap,
+.recording-modal.recording-fullscreen-active .recording-controls {
+  width: min(1100px, calc(100vw - 16px));
+  justify-self: center;
+  background: rgba(2, 6, 23, .78);
+  border: 1px solid rgba(148, 163, 184, .22);
+  border-radius: 10px;
+  padding: 6px 8px;
+}
+.lobby-player-name.profile-trigger {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 2px 4px;
+}
+.lobby-player-name.profile-trigger:hover,
+.lobby-player-name.profile-trigger:focus-visible {
+  background: rgba(59, 130, 246, .14);
+  outline: 1px solid rgba(96, 165, 250, .45);
+}
 
 @media (max-width: 720px), (pointer: coarse) {
   .match-report { gap: 6px; }

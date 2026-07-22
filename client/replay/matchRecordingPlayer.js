@@ -9,6 +9,7 @@ import { soundFx } from '../utils/soundFx.js';
 import { findNextRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
+const HIGHLIGHT_PREROLL_MS = 2500;
 
 function formatTime(milliseconds) {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -32,6 +33,7 @@ export class MatchRecordingPlayer {
     this.nextHighlightButton = root?.querySelector('#recording-next-highlight');
     this.speedSelect = root?.querySelector('#recording-speed');
     this.volumeInput = root?.querySelector('#recording-volume');
+    this.fullscreenButton = root?.querySelector('#recording-fullscreen');
     this.timeLabel = root?.querySelector('#recording-time');
     this.report = root?.querySelector('#recording-live-report');
     this.markers = root?.querySelector('#recording-markers');
@@ -48,6 +50,7 @@ export class MatchRecordingPlayer {
   bind() {
     this.playButton?.addEventListener('click', () => this.toggle());
     this.nextHighlightButton?.addEventListener('click', () => this.seekToNextHighlight());
+    this.fullscreenButton?.addEventListener('click', () => this.toggleFullscreen());
     this.timeline?.addEventListener('input', () => {
       soundFx.stopCrowd();
       this.currentMs = Number(this.timeline.value || 0);
@@ -63,6 +66,11 @@ export class MatchRecordingPlayer {
       this.render();
     });
     this.root?.querySelector('#recording-close')?.addEventListener('click', () => this.close());
+    document.addEventListener('fullscreenchange', () => {
+      const fullscreen = document.fullscreenElement === this.root;
+      this.root?.classList.toggle('recording-fullscreen-active', fullscreen);
+      if (this.fullscreenButton) this.fullscreenButton.textContent = fullscreen ? '🡼' : '⛶';
+    });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden || !this.playing) return;
       this.playing = false;
@@ -266,7 +274,7 @@ export class MatchRecordingPlayer {
       button.style.left = `${Math.max(0, Math.min(100, marker.t / duration * 100))}%`;
       button.title = marker.label || 'Momento importante';
       button.addEventListener('click', () => {
-        this.currentMs = marker.t;
+        this.seekToMarker(marker);
         this.lastTick = performance.now();
         this.lastAudioMarkerMs = this.currentMs;
         this.render();
@@ -279,10 +287,24 @@ export class MatchRecordingPlayer {
     if (!this.recording) return;
     const marker = findNextRecordingHighlight(this.recording.markers, this.currentMs);
     if (!marker) return;
-    this.currentMs = Math.max(0, Number(marker.t || 0));
+    this.seekToMarker(marker);
     this.lastTick = performance.now();
     this.lastAudioMarkerMs = this.currentMs;
     this.render();
+  }
+
+  seekToMarker(marker) {
+    this.currentMs = Math.max(0, Number(marker?.t || 0) - HIGHLIGHT_PREROLL_MS);
+  }
+
+  async toggleFullscreen() {
+    if (!this.root || this.root.classList.contains('hidden')) return;
+    try {
+      if (document.fullscreenElement === this.root) await document.exitFullscreen?.();
+      else await this.root.requestFullscreen?.({ navigationUI: 'hide' });
+    } catch (error) {
+      console.warn('[Kicker Recording] Fullscreen indisponivel:', error);
+    }
   }
 
   playMarkerAudio(fromMs, toMs) {

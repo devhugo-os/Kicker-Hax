@@ -101,6 +101,22 @@ function drawPlayer(ctx, state, player, showActionEffects = true) {
     ctx.fillStyle = '#fff'; ctx.beginPath();
     ctx.moveTo(state.x, state.y - radius - 10); ctx.lineTo(state.x - 6, state.y - radius - 2); ctx.lineTo(state.x + 6, state.y - radius - 2); ctx.fill();
   }
+  if (Number(state.passRequestTimer || 0) > 0) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(14,165,233,.92)';
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(state.x - 34, state.y - radius - 58, 68, 24, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 11px Outfit, system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('PASSE!', state.x, state.y - radius - 46);
+    ctx.restore();
+  }
   if (showActionEffects && (state.tackling || state.dribbling || state.shootHalo > 0)) {
     ctx.strokeStyle = state.tackling ? '#f97316' : (state.dribbling ? '#a78bfa' : '#facc15');
     ctx.globalAlpha = .72;

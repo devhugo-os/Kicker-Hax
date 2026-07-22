@@ -182,7 +182,7 @@ export const gameController = {
   clearPressedKeys() {
     this.keys.clear();
     this.codes.clear();
-    this.virtualInput = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+    this.virtualInput = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
   },
 
   async exitCurrentMatch() {
@@ -252,6 +252,7 @@ export const gameController = {
    * the player away from the tackle target.
    */
   applyMobileTackleAssist(input, player, ball) {
+    if (settingsController.mobileHud?.mobileTackleAssistEnabled === false) return;
     if (!this.isMobilePhone() || !this.virtualInput?.tackle || !input.tackle || !player || !ball) return;
     const dx = ball.x - player.x;
     const dy = ball.y - player.y;
@@ -273,7 +274,7 @@ export const gameController = {
   },
 
   setupMobileControls() {
-    this.virtualInput = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+    this.virtualInput = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
     const controls = document.getElementById('mobile-controls');
     if (!controls) return;
 
@@ -1016,8 +1017,13 @@ export const gameController = {
     const dims = settingsController.dimensions;
     this.canvas.width = dims.w;
     this.canvas.height = dims.h;
-    this.matchRecording = this.mode === 'multiplayer' && !!this.activeRoom?.competitive
-      ? new MatchRecordingSession({ fieldWidth: dims.w, fieldHeight: dims.h, players: this.activeRoom?.players || [] })
+    this.matchRecording = this.mode === 'multiplayer'
+      ? new MatchRecordingSession({
+        fieldWidth: dims.w,
+        fieldHeight: dims.h,
+        players: this.activeRoom?.players || [],
+        sampleIntervalMs: this.isMobilePhone() ? 140 : 80
+      })
       : null;
     this.recordingFinalizePromise = null;
     document.getElementById('live-match-report-modal')?.classList.add('hidden');
@@ -1452,7 +1458,7 @@ export const gameController = {
         const leftNetBack = leftPostX - C.GOAL_DEPTH;
         const rightNetBack = rightPostX + C.GOAL_DEPTH;
         const cornerR = 10;
-        let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+        let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
         // A mobile frame can contain more than one physics step. Keep every
         // action sound generated in that frame instead of losing earlier ones.
         frameSfx = [];
@@ -1518,7 +1524,7 @@ export const gameController = {
             }
 
             // 1) Read P1 keyboard Inputs
-            inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+            inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
             if (!this.isTypingTarget()) {
               const keysCtrl = settingsController.CTRL_P1;
               if (this.keys.get(keysCtrl.up)) inputP1.y -= 1;
@@ -1535,6 +1541,7 @@ export const gameController = {
               inputP1.dribble = this.keys.get(keysCtrl.dribble);
               inputP1.tackle = this.keys.get(keysCtrl.tackle);
               inputP1.power = this.keys.get(keysCtrl.power);
+              inputP1.requestPass = this.keys.get(keysCtrl.requestPass);
             }
             if (this.isTouchDevice() && this.virtualInput) {
               inputP1.x += this.virtualInput.x || 0;
@@ -1544,11 +1551,12 @@ export const gameController = {
               inputP1.dribble = inputP1.dribble || !!this.virtualInput.dribble;
               inputP1.tackle = inputP1.tackle || !!this.virtualInput.tackle;
               inputP1.power = inputP1.power || !!this.virtualInput.power;
+              inputP1.requestPass = inputP1.requestPass || !!this.virtualInput.requestPass;
             }
             this.applyMobileTackleAssist(inputP1, bluePlayer, localBallSim);
 
             // 2) AI bot decision making
-            let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+            let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
             const tutorialEnemyActive = this.tutorialMode && !!this.tutorialSession?.enemyActive;
             if ((!this.practiceMode || tutorialEnemyActive) && redPlayer.stun <= 0) {
               if (redPlayer.aiDecisionTimer > 0) redPlayer.aiDecisionTimer--;
@@ -2280,7 +2288,7 @@ export const gameController = {
       winnerTeam: score.red === score.blue ? 'draw' : score.red > score.blue ? C.Team.RED : C.Team.BLUE,
       playerStats: localStats
     });
-    router.show('post-game-screen');
+    this.showPostGameAfterEndAnimation();
   },
 
   showOnlineMatchEnd(result) {
@@ -2339,7 +2347,7 @@ export const gameController = {
         forfeit: !!result?.forfeit,
         forfeitReason: result?.forfeitReason || null,
         recordingId,
-        recordingVersion: recordingId ? 8 : null
+        recordingVersion: recordingId ? 10 : null
       };
       const saveProgress = () => isCompetitive
         ? firebaseService.saveMatchResult(
@@ -2385,7 +2393,32 @@ export const gameController = {
       : (result?.hasBots ? '+0 XP (com bot)' : `+${xpGained} XP`);
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
     renderMatchReport(document.getElementById('post-match-report'), result);
-    router.show('post-game-screen');
+    this.showPostGameAfterEndAnimation();
+  },
+
+  showPostGameAfterEndAnimation() {
+    this.showMatchEndingAnimation();
+    window.setTimeout(() => router.show('post-game-screen'), 720);
+  },
+
+  showMatchEndingAnimation(message = 'Fim da partida') {
+    const root = document.getElementById('match-screen');
+    if (!root) return;
+    let overlay = document.getElementById('match-ending-animation');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'match-ending-animation';
+      overlay.className = 'match-ending-animation hidden';
+      root.appendChild(overlay);
+    }
+    overlay.innerHTML = `
+      <div class="match-ending-card">
+        <strong>${escapeHtml(message)}</strong>
+        <span>Preparando resultados...</span>
+      </div>
+    `;
+    overlay.classList.remove('hidden');
+    window.setTimeout(() => overlay.classList.add('hidden'), 680);
   },
 
   submitRoomChatMessage(text) {
@@ -2400,7 +2433,7 @@ export const gameController = {
   },
 
   finalizeMatchRecording(matchId, result, recordingId = null) {
-    if (!this.matchRecording || !this.currentUser?.uid || !result?.competitive) return Promise.resolve(null);
+    if (!this.matchRecording || !this.currentUser?.uid || !matchId) return Promise.resolve(null);
     const recordingOwnerUid = result?.recordingOwnerUid || this.currentUser.uid;
     // One canonical host-owned demo is shared by every participant history.
     // Disconnected, expelled or exhausted players can therefore watch it later.
@@ -2830,7 +2863,7 @@ export const gameController = {
 
       // Spectators render server state only. Sending 60 empty input packets
       // per second made the host data channel queue up and caused teleports.
-      let input = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false };
+      let input = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
       if (!spectator && !this.isTypingTarget() && !this.inReplay && !this.pauseMenuOpen) {
         const keysCtrl = settingsController.CTRL_P1;
         if (this.keys.get(keysCtrl.up)) input.y -= 1;
@@ -2847,6 +2880,7 @@ export const gameController = {
         input.dribble = this.keys.get(keysCtrl.dribble);
         input.tackle = this.keys.get(keysCtrl.tackle);
         input.power = this.keys.get(keysCtrl.power);
+        input.requestPass = this.keys.get(keysCtrl.requestPass);
       }
       if (!spectator && this.isTouchDevice() && this.virtualInput) {
         input.x += this.virtualInput.x || 0;
@@ -2856,6 +2890,7 @@ export const gameController = {
         input.dribble = input.dribble || !!this.virtualInput.dribble;
         input.tackle = input.tackle || !!this.virtualInput.tackle;
         input.power = input.power || !!this.virtualInput.power;
+        input.requestPass = input.requestPass || !!this.virtualInput.requestPass;
       }
       if (!spectator) {
         this.applyMobileTackleAssist(input, this.players.find(player => player.id === localId), this.ball);
@@ -4624,7 +4659,22 @@ export const gameController = {
           ${removeBotAction}
         </span>
       `;
-      appendStaffTag(row.querySelector('.lobby-player-name'), p.staffRole);
+      const playerName = row.querySelector('.lobby-player-name');
+      appendStaffTag(playerName, p.staffRole);
+      if (p.uid && playerName) {
+        playerName.classList.add('profile-trigger');
+        playerName.tabIndex = 0;
+        playerName.setAttribute('role', 'button');
+        playerName.setAttribute('aria-label', `Abrir perfil de ${p.username || 'jogador'}`);
+        const openProfile = () => menuController.openPublicProfile(p.uid);
+        playerName.addEventListener('click', openProfile);
+        playerName.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openProfile();
+          }
+        });
+      }
 
       if (p.team === 'red') redPlayersList?.appendChild(row);
       else if (p.team === 'blue') bluePlayersList?.appendChild(row);

@@ -20,11 +20,12 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
   // The result matters, but it must not erase a large individual performance
   // gap. Similar players are separated by the result; a standout loser can
   // only lead the report by also becoming the match MVP.
-  const resultImpact = won ? 0.6 + goalDifference * 0.07 : lost ? -0.65 - goalDifference * 0.09 : 0.1;
+  const resultImpact = won ? 0.78 + goalDifference * 0.08 : lost ? -0.9 - goalDifference * 0.12 : 0.05;
   const possessionImpact = (Math.max(0, Math.min(100, Number(stats.possessionPct || 0))) - 50) * 0.008;
   const shots = Math.max(0, Number(stats.shots || 0));
   const goals = Math.max(0, Number(stats.goals || 0));
   const missedShots = Math.max(0, shots - goals);
+  const leftPenalty = stats.leftMatch ? 1.35 : 0;
   const raw = 5.0
     + resultImpact
     + (goals * 1.2)
@@ -33,10 +34,11 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
     + (Math.min(12, Number(stats.dribbles || 0)) * 0.08)
     - (Math.min(10, missedShots) * 0.1)
     - (Number(stats.ownGoals || 0) * 1.2)
+    - leftPenalty
     + possessionImpact;
   // A great individual performance can soften a loss, but cannot receive a
   // perfect score while the team was defeated.
-  const upperBound = lost ? Math.max(7.2, 8.1 - goalDifference * 0.1) : 10;
+  const upperBound = lost ? Math.max(6.8, 7.6 - goalDifference * 0.12) : 10;
   return Math.round(Math.max(1, Math.min(upperBound, raw)) * 10) / 10;
 }
 
