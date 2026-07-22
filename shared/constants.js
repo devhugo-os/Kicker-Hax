@@ -20,6 +20,9 @@ export const ROOM_PASSWORD_MAX_LENGTH = 8;
 export const CHAT_MESSAGE_MAX_LENGTH = 255;
 export const SKIN_IMAGE_MAX_BYTES = 500 * 1024;
 export const PASS_REQUEST_FRAMES = 150;
+// A pass request stays visible for 2.5 seconds, but a new request is accepted
+// only after this cooldown. This prevents keyboard/touch spam in every mode.
+export const PASS_REQUEST_COOLDOWN_FRAMES = 210;
 
 export const FRICTION_FIELD = 0.955;
 export const FRICTION_PLAYER = 0.90;

@@ -253,6 +253,23 @@
   overscroll-behavior: contain;
 }
 
+/* Native Android and constrained phones favor consistent frame delivery over
+   expensive translucent compositing. Gameplay geometry remains unchanged. */
+html.mobile-low-effects #match-canvas,
+html.mobile-low-effects .mobile-controls button,
+html.mobile-low-effects .mobile-stick-base,
+html.mobile-low-effects .match-side,
+html.mobile-low-effects .replay-overlay {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.mobile-low-effects #match-screen * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+
 /* A tagged sender can consume most of the narrow match sidebar. Keep the
    identity on the first row and reserve the full second row for the message. */
 .game-chat-messages .chat-msg {

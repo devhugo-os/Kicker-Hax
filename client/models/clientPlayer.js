@@ -41,6 +41,7 @@ export class ClientPlayer {
     this.matchStats = serverPlayer.matchStats || null;
     this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
     this.renderTrail = true;
+    this.lowEffects = false;
     
     // Aesthetic trails
     this.trail = [];
@@ -148,7 +149,7 @@ export class ClientPlayer {
   draw(ctx, ballOwnerId) {
     // 1) Draw trail for dribbles
     ctx.save();
-    for (const t of this.trail) {
+    for (const t of this.lowEffects ? [] : this.trail) {
       ctx.fillStyle = this.team === C.Team.RED ? `rgba(239, 68, 68, ${t.alpha})` : `rgba(96, 165, 250, ${t.alpha})`;
       ctx.beginPath();
       ctx.arc(t.x, t.y, this.r - 2, 0, Math.PI * 2);
@@ -158,10 +159,12 @@ export class ClientPlayer {
     ctx.restore();
 
     // 2) Draw Player shadow
-    ctx.fillStyle = 'rgba(0,0,0,.25)';
-    ctx.beginPath();
-    ctx.ellipse(this.x + 4, this.y + 8, this.r * 1.1, this.r * 0.6, 0, 0, Math.PI * 2);
-    ctx.fill();
+    if (!this.lowEffects) {
+      ctx.fillStyle = 'rgba(0,0,0,.25)';
+      ctx.beginPath();
+      ctx.ellipse(this.x + 4, this.y + 8, this.r * 1.1, this.r * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
     // 3) Draw Outer Body
     ctx.beginPath();
@@ -241,7 +244,7 @@ export class ClientPlayer {
     }
     drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 31, this.staffRole);
     if (this.passRequestTimer > 0) {
-      const pulse = 0.85 + Math.sin(performance.now() / 80) * 0.08;
+      const pulse = this.lowEffects ? 0.9 : 0.85 + Math.sin(performance.now() / 80) * 0.08;
       ctx.save();
       ctx.translate(this.x, this.y - this.r - 48);
       ctx.scale(pulse, pulse);
@@ -249,14 +252,14 @@ export class ClientPlayer {
       ctx.strokeStyle = 'rgba(255,255,255,0.85)';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(-34, -14, 68, 24, 12);
+      ctx.roundRect(-38, -15, 76, 26, 13);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = '#fff';
-      ctx.font = '900 11px Outfit, system-ui';
+      ctx.font = '900 13px Outfit, system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('PASSE!', 0, -2);
+      ctx.fillText('🙋 PASSE!', 0, -2);
       ctx.restore();
     }
   }
@@ -269,8 +272,10 @@ export class ClientPlayer {
     ctx.save();
     ctx.translate(baseX, baseY);
     ctx.rotate(angle);
-    ctx.shadowColor = 'rgba(0,0,0,.75)';
-    ctx.shadowBlur = 4;
+    if (!this.lowEffects) {
+      ctx.shadowColor = 'rgba(0,0,0,.75)';
+      ctx.shadowBlur = 4;
+    }
     ctx.fillStyle = this.team === C.Team.RED ? '#fecaca' : '#bfdbfe';
     ctx.strokeStyle = 'rgba(2, 6, 23, .92)';
     ctx.lineWidth = 2.5;

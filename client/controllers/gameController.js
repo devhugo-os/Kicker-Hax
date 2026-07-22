@@ -16,7 +16,7 @@ import { drawSkinImage } from '../utils/skinRenderer.js';
 import { normalizeMatchTeam, resolvePlayerMatchOutcome } from '../utils/matchResult.js';
 import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
-import { isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
+import { getMatchPerformanceProfile, isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
 import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
 import { TutorialSession, tutorialNeedsAlly, tutorialNeedsBall, tutorialNeedsEnemy } from '../tutorial/tutorialSession.js';
 import { calculateOverallRating, getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
@@ -76,6 +76,9 @@ export const gameController = {
   phaseEndsAt: 0,
   fieldCacheCanvas: null,
   fieldCacheKey: '',
+  performanceProfile: null,
+  lastOnlineRenderAt: 0,
+  lastMatchHudRefreshAt: 0,
 
   // Local Stats Track
   goalsScored: 0,
@@ -86,7 +89,7 @@ export const gameController = {
     this.currentUser = user;
     this.canvas = document.getElementById('match-canvas');
     if (this.canvas) {
-      this.ctx = this.canvas.getContext('2d', { alpha: false });
+      this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
     }
 
     // Input listeners
@@ -243,6 +246,24 @@ export const gameController = {
 
   isMobilePhone() {
     return isMobilePhoneDevice(navigator);
+  },
+
+  configureMatchPerformance() {
+    this.performanceProfile = getMatchPerformanceProfile(navigator, {
+      cordova: !!window.cordova,
+      search: window.location.search,
+      coarsePointer: !!window.matchMedia?.('(pointer: coarse)').matches
+    });
+    this.lastOnlineRenderAt = 0;
+    this.lastMatchHudRefreshAt = 0;
+    document.documentElement.classList.toggle('mobile-low-effects', !!this.performanceProfile.lowEffects);
+  },
+
+  shouldRefreshMatchHud(now = performance.now()) {
+    const interval = this.performanceProfile?.hudIntervalMs || 50;
+    if (now - this.lastMatchHudRefreshAt < interval) return false;
+    this.lastMatchHudRefreshAt = now;
+    return true;
   },
 
   /**
@@ -1009,7 +1030,8 @@ export const gameController = {
     this.administrativeMatchAbort = false;
     if (!this.hudEditorMode) this.closeMobileHudEditorUI();
     this.canvas = document.getElementById('match-canvas');
-    this.ctx = this.canvas.getContext('2d', { alpha: false });
+    this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
+    this.configureMatchPerformance();
     // Match views are disposable. Do not carry a paused menu or host pause
     // marker into a new game after a player exits and comes back.
     this.isPaused = false;
@@ -1410,7 +1432,8 @@ export const gameController = {
       vx: 0, vy: 0, r: C.PLAYER_RADIUS, dir: 0, lastMoveDir: 0,
       stamina: 1.0, staminaLock: 0, stun: 0, slowTimer: 0, kickCharge: 0, cool: 0,
       tackle_cd: 0, dribble_cd: 0, dash_time: 0, invuln: 0, power_cd: 0,
-      tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, tackleImpactReady: false, shootHalo: 0
+      tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, tackleImpactReady: false, shootHalo: 0,
+      passRequestTimer: 0, passRequestCooldown: 0, lastPassRequestPressed: false
     };
 
     const allyPlayer = {
@@ -1419,7 +1442,8 @@ export const gameController = {
       vx: 0, vy: 0, r: C.PLAYER_RADIUS, dir: Math.PI, lastMoveDir: Math.PI,
       stamina: 1, staminaLock: 0, stun: 0, slowTimer: 0, kickCharge: 0, cool: 0,
       tackle_cd: 0, dribble_cd: 0, dash_time: 0, invuln: 0, power_cd: 0,
-      tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, tackleImpactReady: false, shootHalo: 0
+      tackleFreeze: 0, tackleSuccess: false, tackleEval: 0, tackleImpactReady: false, shootHalo: 0,
+      passRequestTimer: 0, passRequestCooldown: 0, lastPassRequestPressed: false
     };
 
     const localPlayers = this.tutorialMode
@@ -1566,6 +1590,21 @@ export const gameController = {
               inputP1.requestPass = inputP1.requestPass || !!this.virtualInput.requestPass;
             }
             this.applyMobileTackleAssist(inputP1, bluePlayer, localBallSim);
+
+            // Keep the request useful in every mode and edge-trigger it so a
+            // held key or touch cannot flood sounds and visual indicators.
+            if (inputP1.requestPass && !bluePlayer.lastPassRequestPressed && bluePlayer.passRequestCooldown <= 0) {
+              bluePlayer.passRequestTimer = C.PASS_REQUEST_FRAMES;
+              bluePlayer.passRequestCooldown = C.PASS_REQUEST_COOLDOWN_FRAMES;
+              frameSfx.push('requestPass');
+              this.tutorialSession?.record('requestPass');
+              if (this.tutorialMode && this.tutorialSession?.step?.id === 'requestPass' && localBallSim.owner === allyPlayer.id) {
+                const passAngle = Math.atan2(bluePlayer.y - allyPlayer.y, bluePlayer.x - allyPlayer.x);
+                allyPlayer.dir = passAngle;
+                ServerPhysics.kickBall(allyPlayer, localBallSim, passAngle, C.KICK_BASE + 3.4);
+              }
+            }
+            bluePlayer.lastPassRequestPressed = !!inputP1.requestPass;
 
             // 2) AI bot decision making
             let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
@@ -1929,6 +1968,8 @@ export const gameController = {
             p.stun = phys.stun;
             p.shootHalo = phys.shootHalo;
             p.invuln = phys.invuln;
+            p.passRequestTimer = phys.passRequestTimer || 0;
+            p.lowEffects = !!this.performanceProfile?.lowEffects;
             p.draw(this.ctx, localBallSim.owner);
           });
         }
@@ -1999,8 +2040,10 @@ export const gameController = {
         if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
         if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
         if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
-        this.refreshMobileStatsModal();
-        this.refreshLiveMatchReportIfOpen();
+        if (this.shouldRefreshMatchHud(timestamp)) {
+          this.refreshMobileStatsModal();
+          this.refreshLiveMatchReportIfOpen();
+        }
 
         // Render Countdown Banners
         if (MatchSim.status === 'countdown') {
@@ -2043,6 +2086,9 @@ export const gameController = {
         bluePlayer.cool = 0;
         bluePlayer.dash_time = 0;
         bluePlayer.invuln = 0;
+        bluePlayer.passRequestTimer = 0;
+        bluePlayer.passRequestCooldown = 0;
+        bluePlayer.lastPassRequestPressed = false;
 
         redPlayer.x = C.BORDER + localLayout.dx;
         redPlayer.y = this.canvas.height * localLayout.redY;
@@ -2067,6 +2113,9 @@ export const gameController = {
         allyPlayer.kickCharge = 0;
         allyPlayer.stamina = 1;
         allyPlayer.stun = 0;
+        allyPlayer.passRequestTimer = 0;
+        allyPlayer.passRequestCooldown = 0;
+        allyPlayer.lastPassRequestPressed = false;
 
         localBallSim.x = this.canvas.width / 2;
         localBallSim.y = this.canvas.height / 2;
@@ -2109,6 +2158,12 @@ export const gameController = {
           bluePlayer.x = this.canvas.width * 0.68;
           localBallSim.x = bluePlayer.x - 95;
           localBallSim.y = bluePlayer.y;
+        } else if (step.id === 'requestPass') {
+          bluePlayer.x = this.canvas.width * 0.63;
+          bluePlayer.y = this.canvas.height * 0.58;
+          allyPlayer.x = this.canvas.width * 0.47;
+          allyPlayer.y = this.canvas.height * 0.58;
+          setBallOwner(allyPlayer);
         } else if (step.id === 'pass') {
           bluePlayer.x = this.canvas.width * 0.72;
           bluePlayer.y = this.canvas.height * 0.58;
@@ -2729,6 +2784,7 @@ export const gameController = {
         }
         p.updateState(sp, snapshotReceivedAt, extrapolateMotion);
         p.renderTrail = !this.isTouchDevice();
+        p.lowEffects = !!this.performanceProfile?.lowEffects;
         if (!p.renderTrail) p.trail.length = 0;
       });
 
@@ -2867,7 +2923,7 @@ export const gameController = {
     socketService.getSocket().on('roomChatCleared', () => this.clearRoomChatViews());
 
     // High frequency client tick loop (60Hz animation loop)
-    const tickOnlineGame = () => {
+    const tickOnlineGame = (timestamp = performance.now()) => {
       if (router.currentScreenId !== 'match-screen') return;
 
       const localId = socketService.getSocket().id;
@@ -2921,6 +2977,16 @@ export const gameController = {
         ? Math.min(1, (Date.now() - this.onlineShootStartedAt) / 900)
         : 0;
 
+      // Input remains sampled every animation frame, while weak phones draw at
+      // a stable budget instead of oscillating between expensive 60 Hz frames.
+      const renderInterval = 1000 / Math.max(30, this.performanceProfile?.targetRenderFps || 60);
+      if (timestamp - this.lastOnlineRenderAt < renderInterval) {
+        this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
+        return;
+      }
+      this.lastOnlineRenderAt = timestamp;
+      const refreshHud = this.shouldRefreshMatchHud(timestamp);
+
       // 2) Render Frame
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
@@ -2941,7 +3007,7 @@ export const gameController = {
         const networkSmoothing = measuredPing > 180 ? 0.12
           : measuredPing > 100 ? 0.16
             : measuredPing > 60 ? 0.22 : 0.34;
-        this.ball.interpolate(networkSmoothing, performance.now(), networkDelayFrames);
+        this.ball.interpolate(networkSmoothing, timestamp, networkDelayFrames);
         this.drawShotPreview(this.ctx, me, this.ball, input, Math.max(localCharge, me?.kickCharge || 0));
         this.ball.draw(this.ctx);
 
@@ -2949,7 +3015,7 @@ export const gameController = {
           const localPrediction = p.id === localId && this.status === 'playing' && !this.matchHostPaused
             ? { input, pingMs: this.pingMs || 0 }
             : null;
-          p.interpolate(networkSmoothing, performance.now(), localPrediction, networkDelayFrames);
+          p.interpolate(networkSmoothing, timestamp, localPrediction, networkDelayFrames);
           p.draw(this.ctx, this.ball.owner);
         });
       }
@@ -3050,8 +3116,10 @@ export const gameController = {
         if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
         if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
         if (rightAssistsEl) rightAssistsEl.textContent = this.p1Assists || 0;
-        this.refreshMobileStatsModal();
-        this.refreshLiveMatchReportIfOpen();
+        if (refreshHud) {
+          this.refreshMobileStatsModal();
+          this.refreshLiveMatchReportIfOpen();
+        }
       }
 
       if (opp) {

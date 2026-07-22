@@ -219,6 +219,7 @@ export class ServerMatch {
       aiShootLock: 0,
       aiFeintLock: 0,
       passRequestTimer: 0,
+      passRequestCooldown: 0,
       lastPassRequestPressed: false,
       aiStyle: lobbyPlayer.cpu ? {
         lane: Math.random() < 0.5 ? -1 : 1,
@@ -806,8 +807,9 @@ export class ServerMatch {
       // Update players physics
       for (const p of this.players) {
         const input = this.inputs.get(p.id) || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
-        if (input.requestPass && !p.lastPassRequestPressed) {
+        if (input.requestPass && !p.lastPassRequestPressed && Number(p.passRequestCooldown || 0) <= 0) {
           p.passRequestTimer = C.PASS_REQUEST_FRAMES;
+          p.passRequestCooldown = C.PASS_REQUEST_COOLDOWN_FRAMES;
           this.soundEffects.push('requestPass');
         }
         p.lastPassRequestPressed = !!input.requestPass;

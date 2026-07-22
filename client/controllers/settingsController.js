@@ -366,8 +366,11 @@ export const settingsController = {
       }
       this.updateMobileHudPreview();
     };
-    [showStats, largeButtons, tackleAssist, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
-    [showStats, largeButtons, tackleAssist, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
+    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
+    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
+    // This is a gameplay preference, not merely an editor preview. Persist it
+    // immediately so leaving Controls cannot silently enable assistance again.
+    tackleAssist?.addEventListener('change', () => save({ persist: true }));
     document.getElementById('mobile-hud-save-layout')?.addEventListener('click', () => save({ persist: true }));
     document.getElementById('mobile-hud-edit-match')?.addEventListener('click', () => {
       save({ persist: true });

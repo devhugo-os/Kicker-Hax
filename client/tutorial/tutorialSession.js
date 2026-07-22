@@ -11,19 +11,20 @@ function buildControlChips(controls, mobile) {
   if (mobile) {
     return [
       ['🕹️', 'Mover'], ['⚡', 'Segure para correr'], ['🥾', 'Segure para chutar / passar'],
-      ['✨', 'Driblar'], ['🛡️', 'Desarmar'], ['🔥', 'Super chute']
+      ['✨', 'Driblar'], ['🛡️', 'Desarmar'], ['🔥', 'Super chute'], ['🙋', 'Pedir passe']
     ];
   }
   return [
     [`${keyLabel(controls.up)} ${keyLabel(controls.left)} ${keyLabel(controls.down)} ${keyLabel(controls.right)}`, 'Mover'],
     [keyLabel(controls.sprint), 'Correr'], [keyLabel(controls.shoot), 'Chutar / passar'],
     [keyLabel(controls.dribble), 'Driblar'], [keyLabel(controls.tackle), 'Desarmar'],
-    [keyLabel(controls.power), 'Super chute'], ['Enter', 'Chat online'], ['Esc', 'Pausa']
+    [keyLabel(controls.power), 'Super chute'], [keyLabel(controls.requestPass), 'Pedir passe'],
+    ['Enter', 'Chat online'], ['Esc', 'Pausa']
   ];
 }
 
 export function tutorialNeedsAlly(stepId) {
-  return stepId === 'pass';
+  return ['requestPass', 'pass'].includes(stepId);
 }
 
 export function tutorialNeedsEnemy(stepId) {
@@ -41,6 +42,7 @@ export const TUTORIAL_STEPS = [
   { id: 'move', speaker: 'Coach KH', title: 'Movimentação', text: 'Mude de direção e conheça o espaço ao seu redor.', objective: 'Percorra o campo até completar a barra.' },
   { id: 'sprint', speaker: 'Coach KH', title: 'Corrida e stamina', text: 'Correr aumenta sua velocidade, mas consome stamina. Solte o comando para recuperá-la.', mobileText: 'Segure o botão de correr enquanto usa o analógico. Solte o botão para recuperar stamina.', objective: 'Corra enquanto se movimenta.' },
   { id: 'control', speaker: 'Coach KH', title: 'Domínio da bola', text: 'Aproxime-se da bola para dominá-la. O círculo preso ao jogador indica a posse.', objective: 'Pegue a bola.' },
+  { id: 'requestPass', speaker: 'CPU Parceiro', title: 'Peça a bola', text: 'Quando estiver livre, sinalize para um companheiro. O pedido aparece sobre seu jogador e possui um pequeno tempo de recarga.', mobileText: 'Toque no botão 🙋 para pedir a bola. A CPU parceira vai responder ao sinal.', objective: 'Peça a bola e receba o passe da CPU amigável.' },
   { id: 'pass', target: 3, speaker: 'CPU Parceiro', title: 'Passe', text: 'Chute normal e super chute também podem virar passe. Mire no parceiro e entregue a bola.', objective: 'Complete 3 passes para a CPU amigável.' },
   { id: 'shoot', target: 3, speaker: 'Coach KH', title: 'Chute normal carregado', text: 'Use somente o chute normal: segure o comando e vença a CPU. Não use o super chute nesta missão. Defesa, desarme ou chute para fora reiniciam a tentativa.', mobileText: 'Segure somente o botão da chuteira e solte para finalizar. O botão de super chute não vale nesta missão. Só um gol confirmado conta.', objective: 'Marque 3 gols usando apenas o chute normal.' },
   { id: 'dribble', target: 3, speaker: 'Coach KH', title: 'Drible contínuo', text: 'Faça três dribles em sequência. Cada um só conta depois que todo o impulso termina com você ainda na posse.', objective: 'Complete 3 dribles seguidos com a posse da bola.' },
@@ -68,6 +70,7 @@ export class TutorialSession {
     this.pendingOutcome = null;
     this.dribblePending = false;
     this.tackleRecoveryArmed = false;
+    this.passRequestStarted = false;
   }
 
   get step() { return TUTORIAL_STEPS[this.index]; }
@@ -111,6 +114,7 @@ export class TutorialSession {
     this.pendingOutcome = null;
     this.dribblePending = false;
     this.tackleRecoveryArmed = false;
+    this.passRequestStarted = false;
   }
 
   complete() {
@@ -125,6 +129,11 @@ export class TutorialSession {
   record(eventName, payload = {}) {
     const id = this.step?.id;
     if (this.feedback || this.isManual || this.step?.celebration) return;
+    if (id === 'requestPass' && eventName === 'requestPass') {
+      this.passRequestStarted = true;
+      this.attemptActive = true;
+      this.attemptFrames = 0;
+    }
     if (id === 'pass' && ['kick', 'power'].includes(eventName)) {
       this.passStarted = true;
       this.attemptActive = true;
@@ -239,6 +248,7 @@ export class TutorialSession {
       this.pendingOutcome = null;
       this.dribblePending = false;
       this.tackleRecoveryArmed = false;
+      this.passRequestStarted = false;
       this.onFeedbackChange?.(false, this);
       this.render();
       this.onAttemptReset?.(this.step, this);
@@ -274,6 +284,8 @@ export class TutorialSession {
     } else if (id === 'sprint' && input?.sprint && Math.abs(input.x) + Math.abs(input.y) > 0.2) {
       this.progress += 1 / 85;
     } else if (id === 'control' && ball.owner === 'p1') this.progress = 1;
+    else if (id === 'requestPass' && this.passRequestStarted && ball.owner === 'p1') this.complete();
+    else if (id === 'requestPass' && this.passRequestStarted && ++this.attemptFrames > 240) this.fail('Missão falhou: aproxime-se e peça a bola novamente.');
     else if (id === 'pass' && this.passStarted && ball.owner === 'tutorial-ally') this.registerSuccess('Passe completo!');
     else if (id === 'pass' && this.attemptActive && ++this.attemptFrames > 240) this.fail('Missão falhou: o passe não chegou ao parceiro.');
     else if (id === 'dribble' && this.dribblePending && Number(player.dash_time || 0) <= 0) {
