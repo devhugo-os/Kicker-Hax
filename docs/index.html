@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
@@ -10,10 +10,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-Bd0wtZOS.js"></script>
+  <script type="module" crossorigin src="./assets/index-CeCGUQ1m.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-DfzM4LdL.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-Ct5M9BV4.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-Bkjep8nm.css">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-PkJqZNyG.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-DEKlYouA.css">
 </head>
 <body>
 
@@ -959,6 +959,7 @@
           <button id="recording-play-toggle" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Reproduzir">&#9654;</button>
           <button id="recording-next-highlight" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Avan&ccedil;ar para o pr&oacute;ximo lance importante" title="Pr&oacute;ximo gol ou lance perigoso">&#9197;</button>
           <button id="recording-fullscreen" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Tela cheia da grava&ccedil;&atilde;o" title="Tela cheia">⛶</button>
+          <button id="recording-toggle-timeline" class="btn btn-secondary recording-icon-btn" type="button" aria-label="Ocultar barra de reprodu&ccedil;&atilde;o" title="Ocultar barra">▾</button>
           <span id="recording-time">0:00 / 0:00</span>
           <label>Velocidade <select id="recording-speed"></select></label>
           <label>Volume <input id="recording-volume" type="range" min="0" max="100" value="70"></label>
@@ -1049,7 +1050,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v62.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v63.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1093,6 +1094,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v63.0 - REPLAY SEM BORDA</h4>
+            <p>O fullscreen das grava&ccedil;&otilde;es removeu a faixa preta no topo do campo, ganhou bot&atilde;o para ocultar a barra de reprodu&ccedil;&atilde;o e mant&eacute;m timeline/controles transparentes sem sobrepor a partida. O reprodutor no PC voltou a ter um tamanho mais natural, sem comprimir ou esticar demais a imagem. A seta de movimento foi corrigida para apontar para o lado certo. Rein&iacute;cios online agora aleatorizam posi&ccedil;&otilde;es somente nos times com mais de um jogador; lados com um jogador ficam na faixa reta e mais pr&oacute;xima da bola.</p>
+          </section>
           <section>
             <h4>v62.0 - GRAVA&Ccedil;&Atilde;O COMPACTA</h4>
             <p>O replay local grava o ID dos jogadores e termina pelo tempo real do playback, eliminando a mistura que fazia o bot teleportar. A seta de dire&ccedil;&atilde;o ficou menor, segue o deslocamento visual real e s&oacute; aparece quando o jogador est&aacute; sem a bola. O reprodutor de grava&ccedil;&otilde;es no PC agora usa layout compacto sem scroll, e no fullscreen reserva espa&ccedil;o para a barra transparente, que some ap&oacute;s 5 segundos sem movimento. Ao abrir uma grava&ccedil;&atilde;o pelo perfil p&uacute;blico, o hist&oacute;rico fica atr&aacute;s para voltar ao fechar. O Treino Livre ganhou confirma&ccedil;&atilde;o antes de entrar em campo.</p>
