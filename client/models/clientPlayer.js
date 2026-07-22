@@ -252,7 +252,7 @@ export class ClientPlayer {
     const baseY = this.y + Math.sin(angle) * distance;
     ctx.save();
     ctx.translate(baseX, baseY);
-    ctx.rotate(angle);
+    ctx.rotate(angle + Math.PI);
     ctx.shadowColor = 'rgba(0,0,0,.75)';
     ctx.shadowBlur = 4;
     ctx.fillStyle = this.team === C.Team.RED ? '#fecaca' : '#bfdbfe';

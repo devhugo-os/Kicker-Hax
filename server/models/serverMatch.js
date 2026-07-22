@@ -280,7 +280,9 @@ export class ServerMatch {
         { dx: 180, dy: 0.7 }   // Player 4: Midfielder 2
       ];
 
-      const assignment = assignKickoffSlots(teamPlayers, this.kickoffSlots[teamKey]);
+      const assignment = teamPlayers.length > 1
+        ? assignKickoffSlots(teamPlayers, this.kickoffSlots[teamKey])
+        : { ordered: [...teamPlayers], slots: new Map(teamPlayers.map(player => [player.id, 1])) };
       this.kickoffSlots[teamKey] = assignment.slots;
       const boosted = assignment.ordered.filter(player => Number(player.frontSpawnBoost || 0) > 0);
       const regular = assignment.ordered.filter(player => Number(player.frontSpawnBoost || 0) <= 0);
@@ -290,7 +292,10 @@ export class ServerMatch {
         ? [regular[0] || boosted[0], ...boosted, ...regular.slice(1)].filter((player, index, list) => list.indexOf(player) === index)
         : assignment.ordered;
       ordered.forEach((p, index) => {
-        const layout = positions[index % positions.length];
+        // A solo player on a side always receives the straight striker lane,
+        // the closest kickoff spot to the ball. Multi-player sides rotate
+        // independently so only teams with depth are randomized.
+        const layout = teamPlayers.length > 1 ? positions[index % positions.length] : positions[1];
         const jitterX = (Math.random() - 0.5) * 20;
         const jitterY = (Math.random() - 0.5) * 20;
 

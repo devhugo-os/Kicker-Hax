@@ -5238,7 +5238,7 @@ function drawPlayerDirectionArrow(cx, x, y, angle, team) {
   const baseY = y + Math.sin(angle) * distance;
   cx.save();
   cx.translate(baseX, baseY);
-  cx.rotate(angle);
+  cx.rotate(angle + Math.PI);
   cx.shadowColor = 'rgba(0,0,0,.7)';
   cx.shadowBlur = 4;
   cx.fillStyle = team === C.Team.RED ? '#fecaca' : '#bfdbfe';

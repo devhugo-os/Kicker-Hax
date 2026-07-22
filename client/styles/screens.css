@@ -3538,19 +3538,20 @@ html.app-runtime #menu-btn-download-app {
 
 .recording-modal { z-index: 2200; }
 .recording-card {
-  width: min(1040px, calc(100vw - 20px));
-  height: min(690px, calc(100dvh - 20px));
+  width: min(1280px, calc(100vw - 28px));
+  min-height: min(680px, calc(100dvh - 28px));
+  height: auto;
   max-height: calc(100dvh - 20px);
   overflow: hidden;
-  padding: 10px;
+  padding: 14px;
   display: grid;
-  grid-template: auto minmax(0, 1fr) auto auto / minmax(420px, 1.35fr) minmax(260px, .85fr);
-  gap: 6px 10px;
+  grid-template: auto auto auto auto / minmax(620px, 1.45fr) minmax(360px, .85fr);
+  gap: 10px 14px;
 }
 .recording-heading { grid-column: 1 / -1; position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; background: inherit; }
 .recording-heading h2, .recording-heading p { margin: 0 44px 4px 0; }
-.recording-stage { grid-column: 1; grid-row: 2; width: 100%; height: 100%; min-height: 0; aspect-ratio: var(--recording-aspect, 16 / 10); overflow: hidden; border: 1px solid rgba(148, 163, 184, .2); border-radius: 8px; background: #020617; display: grid; place-items: center; }
-#recording-canvas { display: block; width: 100%; height: 100%; aspect-ratio: var(--recording-aspect, 16 / 10); background: #020617; }
+.recording-stage { grid-column: 1; grid-row: 2; width: 100%; min-height: 0; aspect-ratio: var(--recording-aspect, 16 / 10); overflow: hidden; border: 1px solid rgba(148, 163, 184, .2); border-radius: 8px; background: #020617; display: grid; place-items: center; }
+#recording-canvas { display: block; width: 100%; height: auto; aspect-ratio: var(--recording-aspect, 16 / 10); background: #020617; }
 .recording-timeline-wrap { grid-column: 1; grid-row: 3; position: relative; margin-top: 0; }
 #recording-timeline { width: 100%; margin: 0; }
 .recording-markers { position: absolute; inset: -2px 8px auto; height: 12px; pointer-events: none; }
@@ -3562,6 +3563,8 @@ html.app-runtime #menu-btn-download-app {
 .recording-report { grid-column: 2; grid-row: 2 / 5; margin-top: 0; min-height: 0; overflow: auto; align-content: start; }
 .recording-report .match-report-teams { grid-template-columns: 1fr; }
 .recording-report .match-report-table { min-width: 640px; }
+.recording-modal.recording-timeline-hidden .recording-timeline-wrap { display: none; }
+.recording-modal.recording-timeline-hidden .recording-controls { grid-row: 3; }
 .recording-final-title { margin: 4px 0 10px; color: #fff; text-align: center; font-size: 22px; }
 .recording-modal.recording-fullscreen-active {
   background: #000;
@@ -3574,9 +3577,9 @@ html.app-runtime #menu-btn-download-app {
   border: 0;
   border-radius: 0;
   display: grid;
-  grid-template: minmax(0, 1fr) 22px 30px / 1fr;
-  gap: 4px;
-  padding: 4px;
+  grid-template: minmax(0, 1fr) 18px 28px / 1fr;
+  gap: 0;
+  padding: 0;
   overflow: hidden;
   background: #000;
 }
@@ -3589,15 +3592,16 @@ html.app-runtime #menu-btn-download-app {
   grid-row: 1;
   width: 100%;
   height: 100%;
+  aspect-ratio: auto;
   min-height: 0;
   border: 0;
   border-radius: 0;
 }
 .recording-modal.recording-fullscreen-active .recording-timeline-wrap,
 .recording-modal.recording-fullscreen-active .recording-controls {
-  width: min(640px, calc(100vw - 16px));
+  width: min(620px, calc(100vw - 10px));
   justify-self: center;
-  background: rgba(2, 6, 23, .32);
+  background: rgba(2, 6, 23, .28);
   border: 1px solid rgba(148, 163, 184, .12);
   border-radius: 8px;
   padding: 2px 6px;
@@ -3607,11 +3611,21 @@ html.app-runtime #menu-btn-download-app {
   grid-column: 1;
   grid-row: 2;
 }
+.recording-modal.recording-fullscreen-active #recording-canvas {
+  width: 100%;
+  height: 100%;
+}
 .recording-modal.recording-fullscreen-active .recording-controls {
   grid-column: 1;
   grid-row: 3;
   min-height: 28px;
   justify-content: center;
+}
+.recording-modal.recording-fullscreen-active.recording-timeline-hidden .recording-card {
+  grid-template: minmax(0, 1fr) 28px / 1fr;
+}
+.recording-modal.recording-fullscreen-active.recording-timeline-hidden .recording-controls {
+  grid-row: 2;
 }
 .recording-modal.recording-fullscreen-active.recording-controls-hidden .recording-timeline-wrap,
 .recording-modal.recording-fullscreen-active.recording-controls-hidden .recording-controls {
@@ -3648,14 +3662,7 @@ html.app-runtime #menu-btn-download-app {
   .match-details-heading h2 { font-size: 15px; }
   .match-details-heading p { font-size: 8px; }
   .match-details-score { font-size: 21px; }
-  .recording-card {
-    width: calc(100vw - 8px);
-    height: calc(100dvh - 8px);
-    max-height: calc(100dvh - 8px);
-    padding: 7px;
-    grid-template: auto minmax(0, 1fr) auto auto minmax(110px, .52fr) / 1fr;
-    overflow: hidden;
-  }
+  .recording-card { width: calc(100vw - 8px); height: calc(100dvh - 8px); max-height: calc(100dvh - 8px); padding: 7px; grid-template: auto minmax(0, 1fr) auto auto minmax(110px, .52fr) / 1fr; overflow: hidden; }
   .recording-heading h2 { font-size: 15px; }
   .recording-heading p { font-size: 8px; }
   .recording-stage { grid-column: 1; grid-row: 2; }

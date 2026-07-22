@@ -34,6 +34,7 @@ export class MatchRecordingPlayer {
     this.speedSelect = root?.querySelector('#recording-speed');
     this.volumeInput = root?.querySelector('#recording-volume');
     this.fullscreenButton = root?.querySelector('#recording-fullscreen');
+    this.timelineToggleButton = root?.querySelector('#recording-toggle-timeline');
     this.timeLabel = root?.querySelector('#recording-time');
     this.report = root?.querySelector('#recording-live-report');
     this.markers = root?.querySelector('#recording-markers');
@@ -52,6 +53,7 @@ export class MatchRecordingPlayer {
     this.playButton?.addEventListener('click', () => this.toggle());
     this.nextHighlightButton?.addEventListener('click', () => this.seekToNextHighlight());
     this.fullscreenButton?.addEventListener('click', () => this.toggleFullscreen());
+    this.timelineToggleButton?.addEventListener('click', () => this.toggleTimeline());
     this.timeline?.addEventListener('input', () => {
       soundFx.stopCrowd();
       this.currentMs = Number(this.timeline.value || 0);
@@ -113,6 +115,12 @@ export class MatchRecordingPlayer {
     this.playbackRate = 1;
     const [fieldWidth, fieldHeight] = this.recording.field || [1024, 640];
     this.root.style.setProperty('--recording-aspect', `${fieldWidth} / ${fieldHeight}`);
+    this.root.classList.remove('recording-timeline-hidden');
+    if (this.timelineToggleButton) {
+      this.timelineToggleButton.textContent = '▾';
+      this.timelineToggleButton.title = 'Ocultar barra';
+      this.timelineToggleButton.setAttribute('aria-label', 'Ocultar barra de reprodução');
+    }
     this.renderMarkers();
     this.root.classList.remove('hidden');
     this.showFullscreenControls();
@@ -158,6 +166,7 @@ export class MatchRecordingPlayer {
     if (this.playButton) this.playButton.textContent = '▶';
     clearTimeout(this.hideControlsTimer);
     this.root?.classList.remove('recording-controls-hidden');
+    this.root?.classList.remove('recording-timeline-hidden');
     this.root?.classList.add('hidden');
   }
 
@@ -315,6 +324,17 @@ export class MatchRecordingPlayer {
     } catch (error) {
       console.warn('[Kicker Recording] Fullscreen indisponivel:', error);
     }
+  }
+
+  toggleTimeline() {
+    if (!this.root) return;
+    const hidden = this.root.classList.toggle('recording-timeline-hidden');
+    if (this.timelineToggleButton) {
+      this.timelineToggleButton.textContent = hidden ? '▴' : '▾';
+      this.timelineToggleButton.title = hidden ? 'Mostrar barra' : 'Ocultar barra';
+      this.timelineToggleButton.setAttribute('aria-label', hidden ? 'Mostrar barra de reprodução' : 'Ocultar barra de reprodução');
+    }
+    this.showFullscreenControls();
   }
 
   showFullscreenControls() {
