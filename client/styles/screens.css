@@ -3539,18 +3539,17 @@ html.app-runtime #menu-btn-download-app {
 .recording-modal { z-index: 2200; }
 .recording-card {
   width: min(1280px, calc(100vw - 28px));
-  min-height: min(680px, calc(100dvh - 28px));
   height: auto;
   max-height: calc(100dvh - 20px);
   overflow: hidden;
   padding: 14px;
   display: grid;
-  grid-template: auto auto auto auto / minmax(620px, 1.45fr) minmax(360px, .85fr);
+  grid-template: auto minmax(0, auto) auto auto / minmax(620px, 1.45fr) minmax(360px, .85fr);
   gap: 10px 14px;
 }
 .recording-heading { grid-column: 1 / -1; position: relative; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; background: inherit; }
 .recording-heading h2, .recording-heading p { margin: 0 44px 4px 0; }
-.recording-stage { grid-column: 1; grid-row: 2; width: 100%; min-height: 0; aspect-ratio: var(--recording-aspect, 16 / 10); overflow: hidden; border: 1px solid rgba(148, 163, 184, .2); border-radius: 8px; background: #020617; display: grid; place-items: center; }
+.recording-stage { grid-column: 1; grid-row: 2; width: 100%; min-height: 0; aspect-ratio: var(--recording-aspect, 16 / 10); overflow: hidden; border: 1px solid rgba(148, 163, 184, .2); border-radius: 8px; background: #020617; display: grid; place-items: center; align-self: start; }
 #recording-canvas { display: block; width: 100%; height: auto; aspect-ratio: var(--recording-aspect, 16 / 10); background: #020617; }
 .recording-timeline-wrap { grid-column: 1; grid-row: 3; position: relative; margin-top: 0; }
 #recording-timeline { width: 100%; margin: 0; }
@@ -3577,7 +3576,7 @@ html.app-runtime #menu-btn-download-app {
   border: 0;
   border-radius: 0;
   display: grid;
-  grid-template: minmax(0, 1fr) 18px 28px / 1fr;
+  grid-template: minmax(0, 1fr) 18px 38px / 1fr;
   gap: 0;
   padding: 0;
   overflow: hidden;
@@ -3599,10 +3598,10 @@ html.app-runtime #menu-btn-download-app {
 }
 .recording-modal.recording-fullscreen-active .recording-timeline-wrap,
 .recording-modal.recording-fullscreen-active .recording-controls {
-  width: min(620px, calc(100vw - 10px));
+  width: min(760px, calc(100vw - 10px));
   justify-self: center;
-  background: rgba(2, 6, 23, .28);
-  border: 1px solid rgba(148, 163, 184, .12);
+  background: rgba(2, 6, 23, .14);
+  border: 1px solid rgba(148, 163, 184, .08);
   border-radius: 8px;
   padding: 2px 6px;
   transition: opacity .2s ease, transform .2s ease;
@@ -3614,15 +3613,40 @@ html.app-runtime #menu-btn-download-app {
 .recording-modal.recording-fullscreen-active #recording-canvas {
   width: 100%;
   height: 100%;
+  object-fit: fill;
 }
 .recording-modal.recording-fullscreen-active .recording-controls {
   grid-column: 1;
   grid-row: 3;
-  min-height: 28px;
+  min-height: 38px;
   justify-content: center;
+  flex-wrap: nowrap;
+  overflow: visible;
+  font-size: 11px;
+}
+.recording-modal.recording-fullscreen-active .recording-controls .recording-icon-btn {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+}
+.recording-modal.recording-fullscreen-active .recording-controls label {
+  white-space: nowrap;
+  font-size: 10px;
+}
+.recording-modal.recording-fullscreen-active .recording-controls select {
+  width: 76px;
+  min-height: 28px;
+  height: 28px;
+  padding: 2px 22px 2px 7px;
+  font-size: 11px;
+}
+.recording-modal.recording-fullscreen-active .recording-controls input[type="range"] {
+  width: 92px;
 }
 .recording-modal.recording-fullscreen-active.recording-timeline-hidden .recording-card {
-  grid-template: minmax(0, 1fr) 28px / 1fr;
+  grid-template: minmax(0, 1fr) 38px / 1fr;
 }
 .recording-modal.recording-fullscreen-active.recording-timeline-hidden .recording-controls {
   grid-row: 2;
@@ -3681,8 +3705,8 @@ html.app-runtime #menu-btn-download-app {
     height: calc(100dvh - 8px);
   }
   .recording-heading { grid-column: 1 / -1; }
-  .recording-stage { grid-column: 1; grid-row: 2; min-height: 0; }
-  #recording-canvas { width: 100%; height: 100%; aspect-ratio: var(--recording-aspect, 16 / 10); }
+  .recording-stage { grid-column: 1; grid-row: 2; min-height: 0; height: auto; align-self: center; }
+  #recording-canvas { width: 100%; height: auto; aspect-ratio: var(--recording-aspect, 16 / 10); }
   .recording-timeline-wrap { grid-column: 1; grid-row: 3; margin-top: 0; }
   .recording-controls { grid-column: 1; grid-row: 4; padding: 0; }
   .recording-report {

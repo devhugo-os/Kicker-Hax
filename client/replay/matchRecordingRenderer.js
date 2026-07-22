@@ -141,6 +141,32 @@ function drawHud(ctx, frame, width) {
   ctx.fillStyle = '#fff'; ctx.fillText(score, center - 45, 27); ctx.fillText(clock, center + 45, 27);
 }
 
+function drawStatusNotice(ctx, width, height, title, subtitle = '') {
+  const cardWidth = Math.min(width * 0.5, 500);
+  const cardHeight = subtitle ? Math.min(height * 0.17, 112) : Math.min(height * 0.13, 82);
+  const x = (width - cardWidth) / 2;
+  const y = (height - cardHeight) / 2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(2, 6, 23, .64)';
+  ctx.strokeStyle = 'rgba(148, 163, 184, .28)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, cardWidth, cardHeight, Math.min(18, cardHeight * .2));
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.max(22, Math.min(32, width / 30))}px Outfit, system-ui`;
+  ctx.fillText(title, width / 2, subtitle ? y + cardHeight * .4 : y + cardHeight * .5);
+  if (subtitle) {
+    ctx.fillStyle = '#60a5fa';
+    ctx.font = `800 ${Math.max(14, Math.min(19, width / 48))}px Outfit, system-ui`;
+    ctx.fillText(subtitle, width / 2, y + cardHeight * .7);
+  }
+  ctx.restore();
+}
+
 export function renderMatchRecordingFrame(canvas, recording, frame, options = {}) {
   if (!canvas || !recording || !frame) return;
   const [fieldWidth, fieldHeight] = recording.field || [1024, 640];
@@ -164,42 +190,22 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   ctx.restore();
   drawHud(ctx, frame, fieldWidth);
   if (frame.status === 'loading') {
-    ctx.fillStyle = 'rgba(2,6,23,.72)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '900 32px Outfit, system-ui'; ctx.fillText('Aguardando jogadores...', fieldWidth / 2, fieldHeight * .47);
-    ctx.fillStyle = '#60a5fa'; ctx.font = '800 18px Outfit, system-ui';
-    ctx.fillText('A partida inicia quando todos abrirem o campo', fieldWidth / 2, fieldHeight * .56);
+    drawStatusNotice(ctx, fieldWidth, fieldHeight, 'Aguardando jogadores...', 'A partida inicia quando todos abrirem o campo');
   } else if (frame.status === 'countdown' && Number(frame.countdown || 0) > 0) {
-    ctx.fillStyle = 'rgba(2,6,23,.72)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '900 34px Outfit, system-ui'; ctx.fillText(`Começa em ${Math.ceil(frame.countdown)}...`, fieldWidth / 2, fieldHeight / 2);
+    drawStatusNotice(ctx, fieldWidth, fieldHeight, `Começa em ${Math.ceil(frame.countdown)}...`);
   } else if (frame.status === 'freeze') {
     const goal = frame.goalInfo || { scorerName: 'Jogador', ownGoal: false };
     const title = goal.ownGoal ? `GOL CONTRA de ${goal.scorerName}` : `GOL DE ${goal.scorerName}!`;
     const subtitle = goal.assistName ? `Assistência de ${goal.assistName}` : 'Gol confirmado';
-    ctx.fillStyle = 'rgba(2,6,23,.72)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '900 34px Outfit, system-ui'; ctx.fillText(title, fieldWidth / 2, fieldHeight * .47);
-    ctx.fillStyle = '#60a5fa'; ctx.font = '800 20px Outfit, system-ui';
-    ctx.fillText(subtitle, fieldWidth / 2, fieldHeight * .56);
+    drawStatusNotice(ctx, fieldWidth, fieldHeight, title, subtitle);
   } else if (frame.status === 'paused') {
     const remaining = Number(frame.disconnectPauseRemaining || 0);
-    const title = frame.isDisconnectVoting ? 'Votacao em andamento' : (frame.pauseMessage || 'Partida pausada');
-    ctx.fillStyle = 'rgba(2,6,23,.74)'; ctx.fillRect(0, fieldHeight * .38, fieldWidth, fieldHeight * .24);
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '900 30px Outfit, system-ui'; ctx.fillText(title, fieldWidth / 2, fieldHeight * .47);
-    if (remaining > 0) {
-      ctx.fillStyle = '#60a5fa'; ctx.font = '800 20px Outfit, system-ui';
-      ctx.fillText(`${remaining}s restantes`, fieldWidth / 2, fieldHeight * .56);
-    }
-    if (frame.isDisconnectVoting && Number(frame.continueVotesRequired || 0) > 0) {
-      ctx.fillStyle = '#f8fafc'; ctx.font = '700 16px Outfit, system-ui';
-      ctx.fillText(
-        `Votos para continuar: ${frame.continueVotes || 0}/${frame.continueVotesRequired}`,
-        fieldWidth / 2,
-        fieldHeight * .62
-      );
-    }
+    const title = frame.isDisconnectVoting ? 'Votação em andamento' : (frame.pauseMessage || 'Partida pausada');
+    const votes = frame.isDisconnectVoting && Number(frame.continueVotesRequired || 0) > 0
+      ? `Votos: ${frame.continueVotes || 0}/${frame.continueVotesRequired}`
+      : '';
+    const subtitle = [remaining > 0 ? `${remaining}s restantes` : '', votes].filter(Boolean).join(' · ');
+    drawStatusNotice(ctx, fieldWidth, fieldHeight, title, subtitle);
   }
   if (options.ended) {
     ctx.fillStyle = 'rgba(2,6,23,.84)';

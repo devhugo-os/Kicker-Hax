@@ -23,6 +23,7 @@ export class ClientPlayer {
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
     this.lastMoveAngle = this.dir;
+    this.lastMoveSpeed = Math.hypot(this.vx, this.vy);
     this.staffRole = serverPlayer.staffRole || '';
     this.extrapolateMotion = true;
     this.stateReceivedAt = performance.now();
@@ -120,7 +121,15 @@ export class ClientPlayer {
     this.y += (expectedY - this.y) * correction;
     const renderDx = this.x - previousX;
     const renderDy = this.y - previousY;
-    if (Math.hypot(renderDx, renderDy) > 0.12) this.lastMoveAngle = Math.atan2(renderDy, renderDx);
+    const renderedSpeed = Math.hypot(renderDx, renderDy) / elapsedFrames;
+    if (renderedSpeed > 0.03) {
+      // Network snapshots can briefly report zero velocity while the rendered
+      // player is moving, so the visible displacement drives the guide arrow.
+      this.lastMoveAngle = Math.atan2(renderDy, renderDx);
+      this.lastMoveSpeed = renderedSpeed;
+    } else {
+      this.lastMoveSpeed *= 0.78;
+    }
     
     // Interpolate direction angles smoothly
     let diff = this.targetDir - this.dir;
@@ -190,7 +199,7 @@ export class ClientPlayer {
 
     // 7) Draw movement direction arrow only while the player does not have
     // the ball. This keeps possession readable and avoids a giant marker.
-    const speed = Math.hypot(this.vx || 0, this.vy || 0);
+    const speed = Math.max(this.lastMoveSpeed || 0, Math.hypot(this.vx || 0, this.vy || 0));
     if (ballOwnerId !== this.id && speed > 0.25) this.drawDirectionArrow(ctx);
 
     // 8) Draw Ball Possession indicator triangle
@@ -252,7 +261,7 @@ export class ClientPlayer {
     const baseY = this.y + Math.sin(angle) * distance;
     ctx.save();
     ctx.translate(baseX, baseY);
-    ctx.rotate(angle + Math.PI);
+    ctx.rotate(angle);
     ctx.shadowColor = 'rgba(0,0,0,.75)';
     ctx.shadowBlur = 4;
     ctx.fillStyle = this.team === C.Team.RED ? '#fecaca' : '#bfdbfe';

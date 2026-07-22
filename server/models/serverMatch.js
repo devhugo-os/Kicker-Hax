@@ -296,8 +296,10 @@ export class ServerMatch {
         // the closest kickoff spot to the ball. Multi-player sides rotate
         // independently so only teams with depth are randomized.
         const layout = teamPlayers.length > 1 ? positions[index % positions.length] : positions[1];
-        const jitterX = (Math.random() - 0.5) * 20;
-        const jitterY = (Math.random() - 0.5) * 20;
+        // A solo side stays exactly in the straight striker lane. Random
+        // variation belongs only to sides with multiple players.
+        const jitterX = teamPlayers.length > 1 ? (Math.random() - 0.5) * 20 : 0;
+        const jitterY = teamPlayers.length > 1 ? (Math.random() - 0.5) * 20 : 0;
 
         p.x = isRed ? (C.BORDER + layout.dx + jitterX) : (this.w - C.BORDER - layout.dx + jitterX);
         p.y = this.h * layout.dy + jitterY;

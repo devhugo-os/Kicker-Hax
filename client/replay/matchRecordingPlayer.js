@@ -6,7 +6,7 @@ import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
 import firebaseService from '../services/firebaseService.js';
 import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { soundFx } from '../utils/soundFx.js';
-import { findNextRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
+import { findNextRecordingHighlight, findPreviousRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 const HIGHLIGHT_PREROLL_MS = 2500;
@@ -30,6 +30,7 @@ export class MatchRecordingPlayer {
     this.canvas = root?.querySelector('#recording-canvas');
     this.timeline = root?.querySelector('#recording-timeline');
     this.playButton = root?.querySelector('#recording-play-toggle');
+    this.previousHighlightButton = root?.querySelector('#recording-previous-highlight');
     this.nextHighlightButton = root?.querySelector('#recording-next-highlight');
     this.speedSelect = root?.querySelector('#recording-speed');
     this.volumeInput = root?.querySelector('#recording-volume');
@@ -51,6 +52,7 @@ export class MatchRecordingPlayer {
 
   bind() {
     this.playButton?.addEventListener('click', () => this.toggle());
+    this.previousHighlightButton?.addEventListener('click', () => this.seekToPreviousHighlight());
     this.nextHighlightButton?.addEventListener('click', () => this.seekToNextHighlight());
     this.fullscreenButton?.addEventListener('click', () => this.toggleFullscreen());
     this.timelineToggleButton?.addEventListener('click', () => this.toggleTimeline());
@@ -280,6 +282,12 @@ export class MatchRecordingPlayer {
     const duration = Math.max(1, Number(this.recording.durationMs || 1));
     const visibleMarkers = (this.recording.markers || []).filter(marker => marker.type !== 'sound');
     const hasHighlights = hasRecordingHighlights(visibleMarkers);
+    if (this.previousHighlightButton) {
+      this.previousHighlightButton.disabled = !hasHighlights;
+      this.previousHighlightButton.title = hasHighlights
+        ? 'Gol ou lance perigoso anterior'
+        : 'Nenhum lance importante nesta gravação';
+    }
     if (this.nextHighlightButton) {
       this.nextHighlightButton.disabled = !hasHighlights;
       this.nextHighlightButton.title = hasHighlights
@@ -300,6 +308,16 @@ export class MatchRecordingPlayer {
       });
       this.markers.appendChild(button);
     });
+  }
+
+  seekToPreviousHighlight() {
+    if (!this.recording) return;
+    const marker = findPreviousRecordingHighlight(this.recording.markers, this.currentMs);
+    if (!marker) return;
+    this.seekToMarker(marker);
+    this.lastTick = performance.now();
+    this.lastAudioMarkerMs = this.currentMs;
+    this.render();
   }
 
   seekToNextHighlight() {
