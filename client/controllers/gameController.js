@@ -1090,6 +1090,7 @@ export const gameController = {
     this.matchHostPaused = false;
     this.onlineShootStartedAt = null;
     this.lastRenderedShootMeter = -1;
+    this.shotPreviewState = null;
     document.getElementById('pause-modal')?.classList.add('hidden');
     document.getElementById('focus-lost-badge')?.classList.add('hidden');
 
@@ -1269,6 +1270,9 @@ export const gameController = {
 
     const aspect = this.canvas.width / this.canvas.height;
     const isMobile = this.isTouchDevice();
+    const visualViewport = window.visualViewport;
+    const viewportWidth = Math.max(1, Math.round(visualViewport?.width || document.documentElement.clientWidth || window.innerWidth));
+    const viewportHeight = Math.max(1, Math.round(visualViewport?.height || document.documentElement.clientHeight || window.innerHeight));
     const browserFullscreen = window.screen?.availHeight
       ? window.innerHeight >= window.screen.availHeight - 12
       : false;
@@ -1286,18 +1290,22 @@ export const gameController = {
     const hudH = isMobile ? 0 : (document.querySelector('.match-hud')?.offsetHeight || 62);
     const outerPadW = isMobile ? 0 : (isFullscreen ? 20 : 80);
     const outerPadH = isMobile ? 0 : (isFullscreen ? 20 : 110);
-    const availW = Math.max(320, window.innerWidth - outerPadW - reservedW);
-    const availH = Math.max(240, window.innerHeight - outerPadH - hudH);
+    const layoutWidth = isMobile ? viewportWidth : window.innerWidth;
+    const layoutHeight = isMobile ? viewportHeight : window.innerHeight;
+    const availW = Math.max(320, layoutWidth - outerPadW - reservedW);
+    const availH = Math.max(240, layoutHeight - outerPadH - hudH);
 
     let canvasH = availH;
     let canvasW = canvasH * aspect;
 
     if (isMobile) {
-      // Fill the width of a landscape phone, but never crop the top or bottom
-      // of the field. A small responsive vertical squeeze is preferable to
-      // hiding goals and controls on displays that are shorter than 16:10.
-      canvasW = availW;
-      canvasH = availH;
+      // The WebView can be much wider than the logical arena. Stretching the
+      // element to both dimensions makes the cached pitch and canvas overlay
+      // use different mappings (visually duplicating a goal). Fit one uniform
+      // scale inside the real visual viewport so drawings and physics coincide.
+      const scale = Math.min(viewportWidth / this.canvas.width, viewportHeight / this.canvas.height);
+      canvasW = this.canvas.width * scale;
+      canvasH = this.canvas.height * scale;
     } else if (canvasW > availW) {
       const scale = availW / canvasW;
       canvasW *= scale;
@@ -1317,8 +1325,6 @@ export const gameController = {
       // Cordova WebView when its visual viewport changes.
       wrap.style.position = 'fixed';
       wrap.style.inset = '0';
-      const viewportWidth = Math.round(window.visualViewport?.width || window.innerWidth);
-      const viewportHeight = Math.round(window.visualViewport?.height || window.innerHeight);
       wrap.style.width = `${viewportWidth}px`;
       wrap.style.height = `${viewportHeight}px`;
       stage.style.position = 'absolute';
@@ -1329,11 +1335,10 @@ export const gameController = {
       stage.style.gap = '0px';
       stage.style.overflow = 'hidden';
       // Cordova's layout viewport can differ from its visible WebView bounds.
-      this.canvas.style.setProperty('width', `${viewportWidth}px`, 'important');
-      this.canvas.style.setProperty('height', `${viewportHeight}px`, 'important');
-      this.canvas.style.aspectRatio = 'auto';
-      // Fill the exact WebView bounds. An extra horizontal scale used to crop
-      // posts and made a rejoined match look like a different arena.
+      // Apply one computed size to the element and its cached background.
+      this.canvas.style.setProperty('width', `${canvasW}px`, 'important');
+      this.canvas.style.setProperty('height', `${canvasH}px`, 'important');
+      this.canvas.style.aspectRatio = `${this.canvas.width} / ${this.canvas.height}`;
       this.canvas.classList.add('mobile-field-fill');
       this.canvas.style.setProperty('transform', 'none', 'important');
       this.canvas.style.transformOrigin = 'center center';
@@ -4132,6 +4137,8 @@ export const gameController = {
     this.fieldCacheKey = '';
     this.netOverlayCacheCanvas = null;
     this.netOverlayCacheKey = '';
+    this.cssFieldCacheKey = '';
+    this.canvas.style.backgroundImage = '';
     if (this.matchRecording) this.matchRecording.field = [this.canvas.width, this.canvas.height];
     this.resizeCanvasContainer();
   },
@@ -4369,10 +4376,26 @@ export const gameController = {
   },
 
   drawShotPreview(cx, player, ball, input, charge = 0) {
-    if (!player || !ball || !input?.shoot) return;
-    if (ball.owner !== player.id) return;
+    if (!player || !ball || !input?.shoot) {
+      this.shotPreviewState = null;
+      return;
+    }
+    const now = performance.now();
     const inputLength = Math.hypot(input.x || 0, input.y || 0);
-    const angle = inputLength > 0.01 ? Math.atan2(input.y, input.x) : player.dir;
+    const liveAngle = inputLength > 0.01 ? Math.atan2(input.y, input.x) : player.dir;
+    if (ball.owner === player.id) {
+      // Remote ownership can briefly disappear between otherwise valid
+      // snapshots. Keep the locally confirmed aim for a few frames so the
+      // distance guide remains steady while the shoot button is held.
+      this.shotPreviewState = {
+        playerId: player.id,
+        angle: liveAngle,
+        expiresAt: now + 180
+      };
+    }
+    const preview = this.shotPreviewState;
+    if (!preview || preview.playerId !== player.id || preview.expiresAt < now) return;
+    const angle = inputLength > 0.01 ? liveAngle : preview.angle;
     const normalizedCharge = Math.max(0, Math.min(1, Number(charge) || 0));
     const power = C.KICK_BASE + C.KICK_CHARGE * normalizedCharge;
     const travel = power * C.FRICTION_FIELD / Math.max(0.01, 1 - C.FRICTION_FIELD);

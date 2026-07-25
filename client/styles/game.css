@@ -597,8 +597,8 @@ html.mobile-low-effects #match-screen * {
 
 .mobile-chat-unread {
   position: absolute;
-  top: -5px;
-  right: -5px;
+  top: -3px;
+  right: -3px;
   min-width: 18px;
   height: 18px;
   display: grid;
@@ -610,6 +610,13 @@ html.mobile-low-effects #match-screen * {
   color: #fff;
   font: 900 10px/1 system-ui;
   opacity: 1;
+}
+
+/* The unread counter intentionally extends past the circular button. Paint
+   containment clipped half of it on Android WebView and narrow browsers. */
+.mobile-chat-toggle {
+  contain: layout;
+  overflow: visible !important;
 }
 
 .mobile-chat-toggle.mobile-chat-alert {
@@ -1320,11 +1327,16 @@ html.browser-immersive #match-canvas {
   }
 
   .mobile-controls button,
-  .mobile-chat-toggle,
   .mobile-stats-toggle,
   .mobile-pause-toggle {
     box-shadow: none;
     contain: layout paint;
+  }
+
+  .mobile-chat-toggle {
+    box-shadow: none;
+    contain: layout;
+    overflow: visible !important;
   }
 
   .game-chat-overlay {
