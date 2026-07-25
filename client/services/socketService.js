@@ -27,10 +27,12 @@ const PEER_OPTIONS = {
   config: {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' }
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
     ],
     iceCandidatePoolSize: 4,
-    bundlePolicy: 'max-bundle'
+    bundlePolicy: 'max-bundle',
+    rtcpMuxPolicy: 'require'
   }
 };
 
@@ -165,6 +167,7 @@ export class P2PSocketService {
     const teammates = this.serverRoom.players.filter(item => !item.cpu && !item.disconnected
       && item.team === player.team && item.id !== player.id);
 
+    match.markParticipantStatus(player.id, 'abandoned');
     this.blockRoomRejoin(player.uid);
     const accepted = { roomCode: this.roomCode, matchId: match.matchId };
     if (conn?.open) conn.send({ event: 'abandonAccepted', data: accepted });
@@ -1572,7 +1575,7 @@ export class P2PSocketService {
         this.serverRoom.bannedUids.add(target.uid);
         update(ref(rtdb, `multiplayerRooms/${this.roomCode}/bannedUids`), { [target.uid]: true }).catch(() => {});
       }
-      this.kickPlayer(target.id);
+      this.kickPlayer(target.id, 'banned');
       this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${target.username} foi banido desta sala.` });
     }
 
@@ -1602,6 +1605,7 @@ export class P2PSocketService {
     if (!physicalPlayer || !this.serverRoom?.match || this.serverRoom.status !== 'playing') return;
     const rosterPlayer = this.serverRoom.players.find(player => player.id === physicalPlayer.id);
     if (!rosterPlayer || rosterPlayer.disconnected || rosterPlayer.team === 'spectator') return;
+    this.serverRoom.match.markParticipantStatus(rosterPlayer.id, 'disconnected');
     if ((rosterPlayer.rejoinCount || 0) >= 2) {
       // A disconnected roster record cannot cast the final continuation vote.
       const teammates = this.serverRoom.players.filter(player => !player.cpu && !player.disconnected && player.team === rosterPlayer.team && player.id !== rosterPlayer.id);
@@ -1716,7 +1720,7 @@ export class P2PSocketService {
     update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { playersCount: this.serverRoom.players.length, updatedAt: Date.now() });
   }
 
-  kickPlayer(targetSocketId) {
+  kickPlayer(targetSocketId, reason = 'kicked') {
     if (!this.isHost || !this.serverRoom) return;
     if (targetSocketId === this.serverRoom.hostId) return;
 
@@ -1724,6 +1728,7 @@ export class P2PSocketService {
     const targetPlayer = this.serverRoom.players.find(p => p.id === targetSocketId);
 
     if (targetPlayer) {
+      this.serverRoom.match?.markParticipantStatus(targetPlayer.id, reason);
       if (this.serverRoom.match && targetPlayer.disconnected) {
         // A host may deny a reserved reconnect. The affected side receives
         // its final continuation vote instead of leaving the match paused.
@@ -1926,10 +1931,10 @@ export class P2PSocketService {
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;
-    // Direction changes stay capped at 30 Hz and button edges bypass the cap.
+    // Direction changes stay capped at 50 Hz and button edges bypass the cap.
     // An unchanged held direction only needs a 10 Hz heartbeat because the
     // authoritative simulation keeps the last input, cutting guest uplink load.
-    const minimumInterval = movementChanged ? 33 : 100;
+    const minimumInterval = movementChanged ? 20 : 100;
     if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;

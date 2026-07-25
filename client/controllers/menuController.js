@@ -173,11 +173,14 @@ export const menuController = {
       this.recordingPlayer.prepareOpen();
       this.bringModalToFront(document.getElementById('match-recording-modal'));
       try {
-        const recording = await firebaseService.getMatchRecording(match.recordingId);
+        const recording = match._recordingDocument
+          || await firebaseService.getMatchRecording(match.recordingId);
         if (!recording) throw new Error('Gravação não encontrada.');
         await this.recordingPlayer.open(recording, match);
       } catch (error) {
         this.recordingPlayer.close();
+        button.classList.add('hidden');
+        match.recordingId = null;
         showToast(error?.message || 'Não foi possível abrir a gravação.', 'error');
       } finally {
         button.disabled = false;
@@ -324,6 +327,7 @@ export const menuController = {
 
       document.getElementById('stats-played').textContent = stats.matchesPlayed || 0;
       document.getElementById('stats-wins').textContent = stats.wins || 0;
+      document.getElementById('stats-draws-summary').textContent = stats.draws || 0;
       document.getElementById('stats-losses').textContent = stats.losses || 0;
       document.getElementById('stats-winrate').textContent = `${winrate}%`;
       document.getElementById('stats-goals').textContent = stats.goals || 0;
@@ -775,7 +779,7 @@ export const menuController = {
     element.classList.toggle('online', !!online);
   },
 
-  openMatchDetails(match, viewerUid) {
+  async openMatchDetails(match, viewerUid) {
     const modal = document.getElementById('match-details-modal');
     const report = document.getElementById('match-details-report');
     if (!modal || !report || !match) return;
@@ -793,9 +797,24 @@ export const menuController = {
     this.selectedMatchDetails = match;
     const hasCompatibleRecording = Number(match.recordingVersion || 0) >= 8
       && !!match.recordingId;
-    document.getElementById('match-recording-open')?.classList.toggle('hidden', !hasCompatibleRecording);
+    const recordingButton = document.getElementById('match-recording-open');
+    recordingButton?.classList.toggle('hidden', !hasCompatibleRecording);
     modal.classList.remove('hidden');
     this.bringModalToFront(modal);
+    if (hasCompatibleRecording) {
+      const validationToken = `${match.recordingId}:${Date.now()}`;
+      this.recordingValidationToken = validationToken;
+      const recording = await firebaseService.getMatchRecording(match.recordingId).catch(() => null);
+      if (this.recordingValidationToken !== validationToken || this.selectedMatchDetails !== match) return;
+      const recordingLooksValid = !!recording?.data
+        && ['gzip-base64', 'base64-json'].includes(recording.encoding);
+      if (!recordingLooksValid) {
+        recordingButton?.classList.add('hidden');
+        match.recordingId = null;
+        return;
+      }
+      match._recordingDocument = recording;
+    }
   },
 };
 export default menuController;

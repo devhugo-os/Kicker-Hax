@@ -21,11 +21,26 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
   // gap. Similar players are separated by the result; a standout loser can
   // only lead the report by also becoming the match MVP.
   const resultImpact = won ? 0.78 + goalDifference * 0.08 : lost ? -0.9 - goalDifference * 0.12 : 0.05;
-  const possessionImpact = (Math.max(0, Math.min(100, Number(stats.possessionPct || 0))) - 50) * 0.008;
+  const possessionPct = Math.max(0, Math.min(100, Number(stats.possessionPct || 0)));
+  const expectedPossession = Math.max(10, Math.min(50, Number(stats.expectedPossessionPct || 50)));
+  // Possession is both a reward and a penalty: disappearing from the match
+  // must lower the rating instead of every statistic only accumulating points.
+  const possessionImpact = Math.max(-1.05, Math.min(.75, (possessionPct - expectedPossession) * 0.025));
   const shots = Math.max(0, Number(stats.shots || 0));
   const goals = Math.max(0, Number(stats.goals || 0));
   const missedShots = Math.max(0, shots - goals);
-  const leftPenalty = stats.leftMatch ? 1.35 : 0;
+  const statusPenalty = {
+    spectator: .45,
+    switched: .25,
+    disconnected: 1.2,
+    kicked: 1.8,
+    banned: 2,
+    abandoned: 2.1
+  }[stats.participationStatus] || 0;
+  const leftPenalty = Math.max(stats.leftMatch ? 1.1 : 0, statusPenalty);
+  const involvement = goals + Number(stats.assists || 0) + Number(stats.tackles || 0)
+    + Number(stats.dribbles || 0) + shots;
+  const inactivityPenalty = involvement === 0 && possessionPct < expectedPossession * .55 ? .65 : 0;
   const raw = 5.0
     + resultImpact
     + (goals * 1.2)
@@ -35,6 +50,7 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
     - (Math.min(10, missedShots) * 0.1)
     - (Number(stats.ownGoals || 0) * 1.2)
     - leftPenalty
+    - inactivityPenalty
     + possessionImpact;
   // A great individual performance can soften a loss, but cannot receive a
   // perfect score while the team was defeated.
@@ -79,10 +95,13 @@ export function buildMatchReport(result = {}) {
       ? 'draw'
       : Number(score.red || 0) > Number(score.blue || 0) ? Team.RED : Team.BLUE
   );
-  const playerStats = (result.playerStats || []).map(player => ({
+  const sourcePlayers = result.playerStats || [];
+  const expectedPossessionPct = sourcePlayers.length > 0 ? 100 / sourcePlayers.length : 50;
+  const playerStats = sourcePlayers.map(player => ({
     ...player,
     team: normalizeReportTeam(player.team),
-    rating: Number(player.rating || calculateMatchRating(player, winnerTeam, score))
+    expectedPossessionPct,
+    rating: Number(player.rating || calculateMatchRating({ ...player, expectedPossessionPct }, winnerTeam, score))
   }));
   const teamStats = result.teamStats || buildTeamStats(playerStats, score);
   return { score, winnerTeam: winnerTeam === 'draw' ? 'draw' : normalizeReportTeam(winnerTeam), playerStats, teamStats };

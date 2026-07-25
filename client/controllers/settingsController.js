@@ -5,6 +5,7 @@ import { showToast } from '../utils/toast.js';
 import { firebaseService } from '../services/firebaseService.js';
 
 export const DEFAULT_MOBILE_HUD = {
+  layoutVersion: 67,
   showStats: true,
   largeButtons: false,
   mobileTackleAssistEnabled: true,
@@ -15,7 +16,7 @@ export const DEFAULT_MOBILE_HUD = {
   chatY: 84,
   chatSize: 44,
   chatOpacity: 60,
-  requestPassX: 64,
+  requestPassX: 69,
   requestPassY: 84,
   requestPassSize: 48,
   requestPassOpacity: 60,
@@ -35,7 +36,7 @@ export const DEFAULT_MOBILE_HUD = {
     dribble: { x: 92, y: 33 },
     tackle: { x: 83, y: 15 },
     power: { x: 92, y: 52 },
-    requestPass: { x: 64, y: 84 }
+    requestPass: { x: 69, y: 84 }
   },
   actionStyles: {
     sprint: { size: 54, opacity: 60 },
@@ -222,7 +223,7 @@ export const settingsController = {
   },
 
   normalizeMobileHud(hud) {
-    return {
+    const normalized = {
       ...structuredClone(DEFAULT_MOBILE_HUD),
       ...(hud || {}),
       actionPositions: {
@@ -234,6 +235,16 @@ export const settingsController = {
         ...(hud?.actionStyles || {})
       }
     };
+    // Version 66 introduced the pass button at x=64. Move only that untouched
+    // default to the more usable position; custom layouts remain intact.
+    const oldPassPosition = hud?.actionPositions?.requestPass;
+    if (Number(hud?.layoutVersion || 0) < 67
+      && (!oldPassPosition || Number(oldPassPosition.x) === 64)) {
+      normalized.requestPassX = DEFAULT_MOBILE_HUD.requestPassX;
+      normalized.actionPositions.requestPass = { ...DEFAULT_MOBILE_HUD.actionPositions.requestPass };
+    }
+    normalized.layoutVersion = DEFAULT_MOBILE_HUD.layoutVersion;
+    return normalized;
   },
 
   async loadMobileHudForUser(user) {
@@ -258,8 +269,13 @@ export const settingsController = {
       console.warn('[Kicker HUD] Usando cache local do HUD:', error);
     }
 
+    const needsLayoutMigration = Number(savedHud?.layoutVersion || 0) < DEFAULT_MOBILE_HUD.layoutVersion;
     this.mobileHud = this.normalizeMobileHud(savedHud);
     localStorage.setItem(storageKey, JSON.stringify(this.mobileHud));
+    if (needsLayoutMigration) {
+      firebaseService.updateUserProfile(this.mobileHudUserId, { mobileHud: this.mobileHud })
+        .catch(error => console.warn('[Kicker HUD] Falha ao migrar HUD para a versão atual:', error));
+    }
     window.dispatchEvent(new CustomEvent('kicker:mobileHudUpdated'));
   },
 

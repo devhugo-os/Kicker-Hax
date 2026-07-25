@@ -7,6 +7,7 @@ import firebaseService from '../services/firebaseService.js';
 import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { soundFx } from '../utils/soundFx.js';
 import { findNextRecordingHighlight, findPreviousRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
+import { getMatchPerformanceProfile } from '../utils/deviceCapabilities.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 const HIGHLIGHT_PREROLL_MS = 2500;
@@ -18,6 +19,7 @@ function formatTime(milliseconds) {
 
 export function renderRecordingFrame(canvas, recording, frame) {
   renderMatchRecordingFrame(canvas, recording, frame, {
+    lowEffects: getMatchPerformanceProfile().lowEffects,
     shake: frame.status === 'playing'
       && frame.ball?.lastStrikeType === 'power'
       && Number(frame.ball?.strikeTimer || 0) > 0
@@ -47,6 +49,7 @@ export class MatchRecordingPlayer {
     this.lastAudioMarkerMs = 0;
     this.playbackRate = 1;
     this.hideControlsTimer = 0;
+    this.lastHighlightTime = null;
     this.bind();
   }
 
@@ -59,11 +62,13 @@ export class MatchRecordingPlayer {
     this.timeline?.addEventListener('input', () => {
       soundFx.stopCrowd();
       this.currentMs = Number(this.timeline.value || 0);
+      this.lastHighlightTime = null;
       // Seeking must not reuse the elapsed time from before the pointer move.
       // Otherwise 0.5x appears to jump at normal speed on the next frame.
       this.lastTick = performance.now();
       this.lastAudioMarkerMs = this.currentMs;
       this.render();
+      if (this.playing) soundFx.startCrowd();
     });
     this.speedSelect?.addEventListener('change', () => {
       this.playbackRate = Math.max(.1, Math.min(8, Number(this.speedSelect.value) || 1));
@@ -104,6 +109,7 @@ export class MatchRecordingPlayer {
     await this.hydratePlayerSkins();
     this.match = match;
     this.currentMs = 0;
+    this.lastHighlightTime = null;
     this.lastAudioMarkerMs = 0;
     this.playing = false;
     this.timeline.max = String(this.recording.durationMs || 0);
@@ -173,7 +179,8 @@ export class MatchRecordingPlayer {
     if (!this.recording) return;
     if (this.currentMs >= this.recording.durationMs) this.currentMs = 0;
     this.playing = !this.playing;
-    if (!this.playing) soundFx.stopCrowd();
+    if (this.playing) soundFx.startCrowd();
+    else soundFx.stopCrowd();
     this.playButton.textContent = this.playing ? '⏸' : '▶';
     this.lastTick = performance.now();
     if (this.playing) this.raf = requestAnimationFrame(time => this.tick(time));
@@ -249,7 +256,8 @@ export class MatchRecordingPlayer {
         && Number(frame.ball?.strikeTimer || 0) > 0,
       ended,
       endReason: this.recording.endReason || (this.match?.forfeit ? 'wo' : 'normal'),
-      winnerTeam: this.recording.winnerTeam ?? this.match?.winnerTeam ?? this.match?.winner
+      winnerTeam: this.recording.winnerTeam ?? this.match?.winnerTeam ?? this.match?.winner,
+      lowEffects: getMatchPerformanceProfile().lowEffects
     });
     this.timeline.value = String(Math.min(this.currentMs, this.recording.durationMs || 0));
     this.timeLabel.textContent = `${formatTime(this.currentMs)} / ${formatTime(this.recording.durationMs)}`;
@@ -309,7 +317,8 @@ export class MatchRecordingPlayer {
 
   seekToPreviousHighlight() {
     if (!this.recording) return;
-    const marker = findPreviousRecordingHighlight(this.recording.markers, this.currentMs);
+    const referenceMs = this.lastHighlightTime ?? this.currentMs;
+    const marker = findPreviousRecordingHighlight(this.recording.markers, referenceMs);
     if (!marker) return;
     this.seekToMarker(marker);
     this.lastTick = performance.now();
@@ -319,7 +328,8 @@ export class MatchRecordingPlayer {
 
   seekToNextHighlight() {
     if (!this.recording) return;
-    const marker = findNextRecordingHighlight(this.recording.markers, this.currentMs);
+    const referenceMs = this.lastHighlightTime ?? this.currentMs;
+    const marker = findNextRecordingHighlight(this.recording.markers, referenceMs);
     if (!marker) return;
     this.seekToMarker(marker);
     this.lastTick = performance.now();
@@ -328,6 +338,7 @@ export class MatchRecordingPlayer {
   }
 
   seekToMarker(marker) {
+    this.lastHighlightTime = Number(marker?.t || 0);
     this.currentMs = Math.max(0, Number(marker?.t || 0) - HIGHLIGHT_PREROLL_MS);
   }
 

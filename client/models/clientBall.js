@@ -19,6 +19,7 @@ export class ClientBall {
     this.extrapolateMotion = true;
     this.stateReceivedAt = performance.now();
     this.lastRenderAt = this.stateReceivedAt;
+    this.lowEffects = false;
   }
 
   updateState(serverBall, receivedAt = performance.now(), extrapolateMotion = true) {
@@ -52,7 +53,17 @@ export class ClientBall {
   }
 
   draw(ctx) {
-    drawPowerKickBallEffect(ctx, this);
+    if (!this.lowEffects) drawPowerKickBallEffect(ctx, this);
+    if (this.lowEffects) {
+      ctx.fillStyle = '#eef2f7';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
     // Draw ball shadow
     ctx.fillStyle = 'rgba(0,0,0,.25)';
     ctx.beginPath();

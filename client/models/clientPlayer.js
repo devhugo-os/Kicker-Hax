@@ -40,6 +40,7 @@ export class ClientPlayer {
     this.power_cd = serverPlayer.power_cd || 0;
     this.matchStats = serverPlayer.matchStats || null;
     this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
+    this.passRequestCooldown = Number(serverPlayer.passRequestCooldown || 0);
     this.renderTrail = true;
     this.lowEffects = false;
     
@@ -73,6 +74,7 @@ export class ClientPlayer {
     this.dribble_cd = serverPlayer.dribble_cd || 0;
     this.power_cd = serverPlayer.power_cd || 0;
     if (Object.hasOwn(serverPlayer, 'passRequestTimer')) this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
+    if (Object.hasOwn(serverPlayer, 'passRequestCooldown')) this.passRequestCooldown = Number(serverPlayer.passRequestCooldown || 0);
     if (Object.hasOwn(serverPlayer, 'matchStats')) this.matchStats = serverPlayer.matchStats || null;
 
     // Record trail for active sprint

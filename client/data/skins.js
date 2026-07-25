@@ -51,7 +51,16 @@ export const SKINS = [
   { id: 'celestial', name: 'Celestial', rarity: 'legendary', image: svgSkin('Sky', ['#15166b', '#a9e7ff', '#050527'], 'C', 'wings') },
   { id: 'dragon', name: 'Dragão KX', rarity: 'legendary', image: svgSkin('Dragon', ['#541018', '#ff5d45', '#1d0407'], 'D', 'flame') },
   { id: 'chrono', name: 'Cronos', rarity: 'legendary', image: svgSkin('Chrono', ['#143b50', '#67ffe0', '#061820'], 'C', 'target') },
-  { id: 'titan', name: 'Titã Obsidiano', rarity: 'legendary', image: svgSkin('Titan', ['#090b16', '#8b9cff', '#000105'], 'T', 'crystal') }
+  { id: 'titan', name: 'Titã Obsidiano', rarity: 'legendary', image: svgSkin('Titan', ['#090b16', '#8b9cff', '#000105'], 'T', 'crystal') },
+  { id: 'mint', name: 'Menta FC', rarity: 'common', image: svgSkin('Mint', ['#10483f', '#6ee7b7', '#041b17'], 'M', 'waves') },
+  { id: 'copper', name: 'Chute de Cobre', rarity: 'common', image: svgSkin('Copper', ['#663018', '#f2a26b', '#241006'], 'C', 'target') },
+  { id: 'sonic', name: 'Onda Sônica', rarity: 'rare', image: svgSkin('Sonic', ['#123565', '#67e8f9', '#06142a'], 'S', 'waves') },
+  { id: 'ninja', name: 'Ninja da Área', rarity: 'rare', image: svgSkin('Ninja', ['#201536', '#d8b4fe', '#08050f'], 'N', 'shards') },
+  { id: 'quantum', name: 'Atacante Quântico', rarity: 'epic', image: svgSkin('Quantum', ['#16206b', '#67f8ff', '#050824'], 'Q', 'circuit') },
+  { id: 'kraken', name: 'Kraken Azul', rarity: 'epic', image: svgSkin('Kraken', ['#063953', '#34d9d1', '#02151f'], 'K', 'waves') },
+  { id: 'supernova', name: 'Supernova KH', rarity: 'legendary', image: svgSkin('Nova', ['#34105e', '#ffd166', '#0e031b'], 'N', 'galaxy') },
+  { id: 'blue_king', name: 'Rei do Campo', rarity: 'legendary', image: svgSkin('King', ['#071d53', '#60a5fa', '#020817'], 'K', 'crown') },
+  { id: 'six_seven', name: 'SIX-SEVEN 67', rarity: 'mythic', image: svgSkin('67', ['#020617', '#38bdf8', '#000000'], '67', 'bolt') }
 ];
 
 export const CHESTS = {
@@ -65,11 +74,11 @@ export const CHESTS = {
   },
   obsidian: {
     id: 'obsidian', name: 'Baú de Obsidiana', price: 700, accent: '#a78bfa', guaranteed: true,
-    odds: { common: 15, rare: 45, epic: 35, legendary: 5 }
+    odds: { common: 15, rare: 45, epic: 35, legendary: 4.9, mythic: 0.1 }
   }
 };
 
-export const SKIN_VALUES = { common: 120, rare: 320, epic: 700, legendary: 1200, custom: 1800 };
+export const SKIN_VALUES = { common: 120, rare: 320, epic: 700, legendary: 1200, mythic: 6700, custom: 1800 };
 export const NO_SKIN = { id: 'none', name: 'Sem skin', rarity: 'none', image: '', value: 0 };
 export const NO_PRIZE = { id: 'no_prize', name: 'Sem prêmio', rarity: 'none', image: svgSkin('Vazio', ['#222938', '#7b879b', '#070a10'], '—', 'eclipse'), noPrize: true };
 

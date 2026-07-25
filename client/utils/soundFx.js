@@ -112,6 +112,7 @@ export const soundFx = {
 
   startCrowd() {
     try {
+      if (crowdNode) return;
       const n = this.envNoise(0.06);
       if (!n) return;
       crowdGain = n.g;

@@ -22,7 +22,7 @@ export const SKIN_IMAGE_MAX_BYTES = 500 * 1024;
 export const PASS_REQUEST_FRAMES = 150;
 // A pass request stays visible for 2.5 seconds, but a new request is accepted
 // only after this cooldown. This prevents keyboard/touch spam in every mode.
-export const PASS_REQUEST_COOLDOWN_FRAMES = 210;
+export const PASS_REQUEST_COOLDOWN_FRAMES = 300;
 
 export const FRICTION_FIELD = 0.955;
 export const FRICTION_PLAYER = 0.90;
@@ -60,6 +60,9 @@ export const POWER_KICK_CD = 60;
 
 export const GOAL_FREEZE_FRAMES = 180;
 export const END_FREEZE_FRAMES = 180;
+// Results should follow the final replay without an unexplained three-second
+// stall. This short settle still gives the last network snapshot time to land.
+export const MATCH_END_SETTLE_FRAMES = 24;
 // Keep only the final three seconds before the goal. The scored frame is held
 // separately for two seconds after playback, so replays stay short and clear.
 export const REPLAY_CAPTURE_FRAMES = 180;

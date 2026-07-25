@@ -120,7 +120,11 @@ export class ServerMatch {
           shots: 0,
           dribbles: 0,
           tackles: 0,
-          possessionFrames: 0
+          possessionFrames: 0,
+          participatedFrames: 0,
+          originalTeam: p.team,
+          participationStatus: 'active',
+          teamChanges: 0
         });
       }
     });
@@ -169,13 +173,34 @@ export class ServerMatch {
         stats.dribbles = previous.dribbles || 0;
         stats.tackles = previous.tackles || 0;
         stats.possessionFrames = previous.possessionFrames || 0;
+        stats.participatedFrames = previous.participatedFrames || 0;
+        stats.originalTeam = previous.originalTeam ?? previous.team;
+        stats.participationStatus = previous.participationStatus || 'active';
+        stats.teamChanges = previous.teamChanges || 0;
+        if (previous.team !== stats.team) {
+          stats.teamChanges += 1;
+          stats.participationStatus = 'switched';
+        }
       }
     });
     // Keep the report entry of anyone who actually participated even if that
     // player disconnected and the remaining team voted to continue.
     previousStats.forEach((stats, id) => {
-      if (!this.playerStats.has(id)) this.playerStats.set(id, { ...stats });
+      if (!this.playerStats.has(id)) {
+        const lobbyPlayer = lobbyPlayers.find(player => player.id === id);
+        const participationStatus = lobbyPlayer?.team === 'spectator'
+          ? 'spectator'
+          : (stats.participationStatus || 'disconnected');
+        this.playerStats.set(id, { ...stats, participationStatus });
+      }
     });
+  }
+
+  /** Preserves why a participant left so reports and ratings stay fair. */
+  markParticipantStatus(playerId, participationStatus) {
+    const stats = this.playerStats.get(playerId);
+    if (!stats || Number(stats.participatedFrames || 0) <= 0) return;
+    stats.participationStatus = participationStatus || 'disconnected';
   }
 
   createPhysicalPlayer(lobbyPlayer) {
@@ -775,7 +800,7 @@ export class ServerMatch {
         const goalTotal = this.score.red >= this.goalLimit || this.score.blue >= this.goalLimit;
         if (goalTotal && this.goalLimit > 0) {
           this.status = 'end-freeze';
-          this.endFreezeTimer = C.END_FREEZE_FRAMES;
+          this.endFreezeTimer = C.MATCH_END_SETTLE_FRAMES;
         } else {
           this.setTimedPhase('countdown', C.RESTART_COUNTDOWN_FRAMES);
           this.kickoff();
@@ -794,7 +819,7 @@ export class ServerMatch {
       if (this.matchTime <= 0) {
         this.matchTime = 0;
         this.status = 'end-freeze';
-        this.endFreezeTimer = C.END_FREEZE_FRAMES;
+        this.endFreezeTimer = C.MATCH_END_SETTLE_FRAMES;
       }
 
       // Pre-compute bot inputs
@@ -806,6 +831,8 @@ export class ServerMatch {
 
       // Update players physics
       for (const p of this.players) {
+        const participation = this.playerStats.get(p.id);
+        if (participation && !p.cpu) participation.participatedFrames += 1;
         const input = this.inputs.get(p.id) || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
         if (input.requestPass && !p.lastPassRequestPressed && Number(p.passRequestCooldown || 0) <= 0) {
           p.passRequestTimer = C.PASS_REQUEST_FRAMES;
@@ -955,7 +982,8 @@ export class ServerMatch {
           tackle_cd: p.tackle_cd,
           dribble_cd: p.dribble_cd,
           power_cd: p.power_cd,
-          passRequestTimer: p.passRequestTimer || 0
+          passRequestTimer: p.passRequestTimer || 0,
+          passRequestCooldown: p.passRequestCooldown || 0
         };
         // Live statistics and identity do not change at rendering frequency.
         // Sending them at 1 Hz keeps the HUD current without periodic bandwidth
@@ -1023,7 +1051,8 @@ export class ServerMatch {
         name: player.name,
         skinId: player.skinId || '',
         staffRole: player.staffRole || '',
-        passRequestTimer: player.passRequestTimer || 0
+        passRequestTimer: player.passRequestTimer || 0,
+        passRequestCooldown: player.passRequestCooldown || 0
       })),
       score: this.score,
       matchTime: this.matchTime,
@@ -1074,10 +1103,10 @@ export class ServerMatch {
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
       // Physics remains at 60 Hz. Velocity-aware rendering fills the gap
-      // between 30 Hz snapshots while the lower cadence leaves headroom for
+      // between 40 Hz snapshots while the lower cadence leaves headroom for
       // remote/mobile WebRTC links and rooms with several spectators.
       const finalFrame = frame === frames - 1;
-      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 33;
+      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 25;
       this.tick();
       if (!this.skipBroadcast) this.lastBroadcastAt = now;
       if (this.status === 'ended') break;
@@ -1242,7 +1271,8 @@ export class ServerMatch {
         shootHalo: p.shootHalo, kickCharge: p.kickCharge || 0, invuln: p.invuln,
         tackle_cd: p.tackle_cd, dribble_cd: p.dribble_cd, power_cd: p.power_cd,
         badge: p.badge, name: p.name, skinId: p.skinId || '', staffRole: p.staffRole || '',
-        passRequestTimer: p.passRequestTimer || 0
+        passRequestTimer: p.passRequestTimer || 0,
+        passRequestCooldown: p.passRequestCooldown || 0
       })),
       score: this.score,
       matchTime: this.matchTime,
@@ -1327,12 +1357,16 @@ export class ServerMatch {
   buildMatchResult() {
     const totalPossessionFrames = Array.from(this.playerStats.values())
       .reduce((sum, data) => sum + (data.possessionFrames || 0), 0);
-    const playerStats = Array.from(this.playerStats.entries()).map(([playerId, data]) => ({
-      playerId,
-      ...data,
-      leftMatch: this.disconnectedUids.has(data.uid) || this.eliminatedUids.has(data.uid),
-      possessionPct: totalPossessionFrames > 0 ? Math.round(((data.possessionFrames || 0) / totalPossessionFrames) * 100) : 0
-    }));
+    const playerStats = Array.from(this.playerStats.entries())
+      .filter(([, data]) => Number(data.participatedFrames || 0) > 0)
+      .map(([playerId, data]) => ({
+        playerId,
+        ...data,
+        leftMatch: data.participationStatus !== 'active'
+          || this.disconnectedUids.has(data.uid)
+          || this.eliminatedUids.has(data.uid),
+        possessionPct: totalPossessionFrames > 0 ? Math.round(((data.possessionFrames || 0) / totalPossessionFrames) * 100) : 0
+      }));
     const hasForfeitWinner = this.forfeitWinnerTeam === C.Team.RED || this.forfeitWinnerTeam === C.Team.BLUE;
     const winnerTeam = hasForfeitWinner ? this.forfeitWinnerTeam : (
       this.score.red === this.score.blue

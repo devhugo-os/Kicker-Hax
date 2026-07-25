@@ -10,9 +10,13 @@ export function hasEmbeddedSkin(profile) {
 /** Keeps WebRTC control packets small; custom images are resolved by Firebase UID. */
 export function sanitizeMultiplayerProfile(profile) {
   if (!profile) return null;
+  const skinId = String(profile.skinId || profile.equippedSkinId || '');
+  const customSkin = !skinId || skinId.startsWith('community_') || skinId === 'custom';
   return {
     ...profile,
-    skin: hasEmbeddedSkin(profile) ? 'custom' : profile.skin,
+    // Built-in skins are reconstructed from skinId by every client. Only a
+    // community image needs the Firebase hydration marker.
+    skin: hasEmbeddedSkin(profile) ? (customSkin ? 'custom' : '') : profile.skin,
     badge: String(profile.badge || '').slice(0, MAX_INLINE_BADGE_LENGTH)
   };
 }

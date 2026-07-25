@@ -11,7 +11,7 @@ import { ClientBall } from '../models/clientBall.js';
 import { ClientPlayer } from '../models/clientPlayer.js';
 import * as C from '../../shared/constants.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
-import { getEquippedSkin } from '../data/skins.js';
+import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { drawSkinImage } from '../utils/skinRenderer.js';
 import { normalizeMatchTeam, resolvePlayerMatchOutcome } from '../utils/matchResult.js';
 import { escapeHtml } from '../utils/safeHtml.js';
@@ -256,7 +256,27 @@ export const gameController = {
     });
     this.lastOnlineRenderAt = 0;
     this.lastMatchHudRefreshAt = 0;
+    this.currentRenderFps = this.performanceProfile.targetRenderFps;
+    this.renderCostAverage = 0;
+    this.lastPerformanceAdjustmentAt = 0;
     document.documentElement.classList.toggle('mobile-low-effects', !!this.performanceProfile.lowEffects);
+    if (this.ball) this.ball.lowEffects = !!this.performanceProfile.lowEffects;
+  },
+
+  adaptMobileRenderBudget(renderCostMs, now = performance.now()) {
+    if (!this.performanceProfile?.mobileHud) return;
+    this.renderCostAverage = this.renderCostAverage
+      ? (this.renderCostAverage * 0.88) + (renderCostMs * 0.12)
+      : renderCostMs;
+    if (now - this.lastPerformanceAdjustmentAt < 900) return;
+    this.lastPerformanceAdjustmentAt = now;
+    const target = this.currentRenderFps || this.performanceProfile.targetRenderFps;
+    const budget = 1000 / target;
+    if (this.renderCostAverage > budget * 0.82) {
+      this.currentRenderFps = Math.max(this.performanceProfile.minRenderFps, target - 4);
+    } else if (this.renderCostAverage < budget * 0.48) {
+      this.currentRenderFps = Math.min(this.performanceProfile.maxRenderFps, target + 3);
+    }
   },
 
   shouldRefreshMatchHud(now = performance.now()) {
@@ -442,7 +462,14 @@ export const gameController = {
 
     const cardTutorial = document.getElementById('mode-card-tutorial');
     if (cardTutorial) {
-      cardTutorial.onclick = () => {
+      cardTutorial.onclick = async () => {
+        const confirmed = await confirmDialog({
+          title: 'Começar o tutorial?',
+          message: 'O Coach KH vai orientar cada controle e repetir os exercícios até você concluir os objetivos.',
+          confirmLabel: 'Começar tutorial',
+          cancelLabel: 'Cancelar'
+        });
+        if (!confirmed) return;
         this.mode = 'solo';
         this.practiceMode = true;
         this.tutorialMode = true;
@@ -587,7 +614,7 @@ export const gameController = {
     });
 
     router.register('ranking-screen', {
-      onEnter: () => this.loadRanking('general')
+      onEnter: () => this.loadRanking('overall')
     });
   },
 
@@ -899,7 +926,6 @@ export const gameController = {
     const btnRankOverall = document.getElementById('rank-filter-overall');
     const btnRankWinrate = document.getElementById('rank-filter-winrate');
     const btnRankLevel = document.getElementById('rank-filter-level');
-    const btnRankGeneral = document.getElementById('rank-filter-general');
     const btnRankLosses = document.getElementById('rank-filter-losses');
     const btnRankDraws = document.getElementById('rank-filter-draws');
     const btnRankOwnGoals = document.getElementById('rank-filter-own-goals');
@@ -909,7 +935,6 @@ export const gameController = {
     const btnRankCoins = document.getElementById('rank-filter-coins');
     const btnRankSkins = document.getElementById('rank-filter-skins');
 
-    if (btnRankGeneral) btnRankGeneral.onclick = () => this.loadRanking('general');
     if (btnRankWins) btnRankWins.onclick = () => this.loadRanking('wins');
     if (btnRankLosses) btnRankLosses.onclick = () => this.loadRanking('losses');
     if (btnRankDraws) btnRankDraws.onclick = () => this.loadRanking('draws');
@@ -1994,7 +2019,11 @@ export const gameController = {
 
         if (rightStam) rightStam.style.height = `${bluePlayer.stamina * 100}%`;
         if (rightPow) rightPow.style.height = `${bluePlayer.kickCharge * 100}%`;
-        this.updateMobileActionMeters(bluePlayer.stamina, bluePlayer.kickCharge || 0);
+        this.updateMobileActionMeters(
+          bluePlayer.stamina,
+          bluePlayer.kickCharge || 0,
+          bluePlayer.passRequestCooldown || 0
+        );
         if (leftStam) leftStam.style.height = `${redPlayer.stamina * 100}%`;
         if (leftPow) leftPow.style.height = `${redPlayer.kickCharge * 100}%`;
 
@@ -2776,6 +2805,10 @@ export const gameController = {
         if (!sp.skinId && roomPlayer?.skinId) sp.skinId = roomPlayer.skinId;
         if (!sp.skin || sp.skin === 'custom') {
           sp.skin = roomPlayer?.skin || '';
+          const builtIn = getSkinById(sp.skinId || roomPlayer?.skinId || '');
+          if (!sp.skin && builtIn?.id !== 'rookie' && builtIn?.id !== 'none') {
+            sp.skin = builtIn.image || '';
+          }
         }
         let p = this.players.find(x => x.id === sp.id);
         if (!p) {
@@ -2979,12 +3012,16 @@ export const gameController = {
 
       // Input remains sampled every animation frame, while weak phones draw at
       // a stable budget instead of oscillating between expensive 60 Hz frames.
-      const renderInterval = 1000 / Math.max(30, this.performanceProfile?.targetRenderFps || 60);
+      const renderInterval = 1000 / Math.max(
+        this.performanceProfile?.minRenderFps || 30,
+        this.currentRenderFps || this.performanceProfile?.targetRenderFps || 60
+      );
       if (timestamp - this.lastOnlineRenderAt < renderInterval) {
         this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
         return;
       }
       this.lastOnlineRenderAt = timestamp;
+      const renderStartedAt = performance.now();
       const refreshHud = this.shouldRefreshMatchHud(timestamp);
 
       // 2) Render Frame
@@ -3047,7 +3084,11 @@ export const gameController = {
         if (myStam) myStam.style.height = `${me.stamina * 100}%`;
 
         if (myPow) myPow.style.height = `${localCharge * 100}%`;
-        this.updateMobileActionMeters(me.stamina, Math.max(localCharge, me.kickCharge || 0));
+        this.updateMobileActionMeters(
+          me.stamina,
+          Math.max(localCharge, me.kickCharge || 0),
+          me.passRequestCooldown || 0
+        );
 
         const canTrackLiveStats = this.status === 'playing' && !this.matchHostPaused && !this.inReplay;
         const serverStatsAvailable = !!me.matchStats;
@@ -3161,6 +3202,8 @@ export const gameController = {
           showToast('Retorno aceito. A sincronização está demorando; mantendo a conexão...', 'info');
         }, 12000);
       }
+
+      this.adaptMobileRenderBudget(performance.now() - renderStartedAt, timestamp);
     }
   },
 
@@ -3650,13 +3693,22 @@ export const gameController = {
     modal.querySelector('#mobile-hud-config-opacity')?.addEventListener('input', apply);
   },
 
-  updateMobileActionMeters(stamina = 1, kickCharge = 0) {
+  updateMobileActionMeters(stamina = 1, kickCharge = 0, passCooldownFrames = 0) {
     const controls = document.getElementById('mobile-controls');
     if (!controls || controls.classList.contains('hidden')) return;
     const sprintBtn = controls.querySelector('[data-mobile-action="sprint"]');
     const shootBtn = controls.querySelector('[data-mobile-action="shoot"]');
+    const requestPassBtn = controls.querySelector('[data-mobile-action="requestPass"]');
     if (sprintBtn) sprintBtn.style.setProperty('--meter', `${Math.round(Math.max(0, Math.min(1, stamina)) * 360)}deg`);
     if (shootBtn) shootBtn.style.setProperty('--meter', `${Math.round(Math.max(0, Math.min(1, kickCharge)) * 360)}deg`);
+    if (requestPassBtn) {
+      const readyRatio = 1 - Math.max(0, Math.min(1, Number(passCooldownFrames || 0) / C.PASS_REQUEST_COOLDOWN_FRAMES));
+      requestPassBtn.style.setProperty('--meter', `${Math.round(readyRatio * 360)}deg`);
+      requestPassBtn.classList.toggle('action-cooldown', readyRatio < 1);
+      requestPassBtn.setAttribute('aria-label', readyRatio < 1
+        ? `Pedir passe, recarga ${Math.ceil(passCooldownFrames / 60)} segundos`
+        : 'Pedir passe');
+    }
   },
 
   toggleMobileStatsModal() {
@@ -4898,7 +4950,7 @@ export const gameController = {
   // ==========================================================================
   // RANKINGS LOADER
   // ==========================================================================
-  async loadRanking(filter = 'general') {
+  async loadRanking(filter = 'overall') {
     const tbody = document.getElementById('leaderboard-body');
     if (!tbody) return;
 
@@ -4931,9 +4983,7 @@ export const gameController = {
       }],
       ['winrateScore', 'Índice', r => `${Math.round(getWinRateConfidenceScore(r) * 100)}%`]
     ];
-    const visibleColumns = filter === 'general'
-      ? allColumns
-      : filter === 'winrate'
+    const visibleColumns = filter === 'winrate'
         ? ['winrate', 'winrateScore', 'matches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
         : filter === 'possession'
           ? ['possession', 'possessionScore', 'possessionMatches'].map(key => allColumns.find(([columnKey]) => columnKey === key))
@@ -4963,7 +5013,6 @@ export const gameController = {
     const btnOverall = document.getElementById('rank-filter-overall');
     const btnWinrate = document.getElementById('rank-filter-winrate');
     const btnLevel = document.getElementById('rank-filter-level');
-    const btnGeneral = document.getElementById('rank-filter-general');
     const btnLosses = document.getElementById('rank-filter-losses');
     const btnDraws = document.getElementById('rank-filter-draws');
     const btnOwnGoals = document.getElementById('rank-filter-own-goals');
@@ -4973,8 +5022,7 @@ export const gameController = {
     const btnCoins = document.getElementById('rank-filter-coins');
     const btnSkins = document.getElementById('rank-filter-skins');
 
-    [btnWins, btnGoals, btnShots, btnDribbles, btnAssists, btnMatches, btnMvps, btnOverall, btnWinrate, btnLevel, btnGeneral, btnLosses, btnDraws, btnOwnGoals, btnTackles, btnPossession, btnRating, btnCoins, btnSkins].forEach(b => b?.classList.remove('active'));
-    if (filter === 'general') btnGeneral?.classList.add('active');
+    [btnWins, btnGoals, btnShots, btnDribbles, btnAssists, btnMatches, btnMvps, btnOverall, btnWinrate, btnLevel, btnLosses, btnDraws, btnOwnGoals, btnTackles, btnPossession, btnRating, btnCoins, btnSkins].forEach(b => b?.classList.remove('active'));
     if (filter === 'wins') btnWins?.classList.add('active');
     if (filter === 'losses') btnLosses?.classList.add('active');
     if (filter === 'draws') btnDraws?.classList.add('active');
@@ -4995,7 +5043,7 @@ export const gameController = {
     if (filter === 'skins') btnSkins?.classList.add('active');
 
     try {
-      const records = await firebaseService.getGlobalRanking(filter === 'general' ? 'overall' : filter, 10);
+      const records = await firebaseService.getGlobalRanking(filter, 10);
       if (records.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center">Nenhum jogador registrado no ranking.</td></tr>`;
         return;

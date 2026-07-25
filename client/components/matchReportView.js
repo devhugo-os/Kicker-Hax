@@ -68,9 +68,19 @@ function renderPlayers(report, mvp) {
     })
     .forEach(player => {
       const row = document.createElement('div');
-      row.className = `match-report-row team-${player.team === Team.RED ? 'red' : 'blue'}`;
+      const participationStatus = player.participationStatus || (player.leftMatch ? 'disconnected' : 'active');
+      const statusLabels = {
+        spectator: 'virou espectador',
+        switched: 'substituído de time',
+        disconnected: 'desconectou',
+        kicked: 'expulso',
+        banned: 'banido',
+        abandoned: 'desistiu'
+      };
+      row.className = `match-report-row team-${player.team === Team.RED ? 'red' : 'blue'} status-${participationStatus}`;
       const isMvp = mvp && (mvp.uid === player.uid || mvp.playerId === player.playerId);
-      const playerLabel = `${isMvp ? 'MVP · ' : ''}${player.username || 'Jogador'}`;
+      const statusLabel = statusLabels[participationStatus];
+      const playerLabel = `${isMvp ? 'MVP · ' : ''}${player.username || 'Jogador'}${statusLabel ? ` · ${statusLabel}` : ''}`;
       const playerReference = player.uid && openProfileHandler
         ? document.createElement('button')
         : cell(playerLabel, 'match-report-player');

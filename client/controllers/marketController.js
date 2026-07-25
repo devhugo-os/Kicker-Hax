@@ -20,7 +20,7 @@ const FEATURED = {
   weekly: { label: 'Skin da semana', price: 180, reset: 'Troca toda semana' },
   monthly: { label: 'Skin do mês', price: 360, reset: 'Troca a cada 4 semanas' }
 };
-const rarityLabel = { none: 'Sem skin', common: 'Comum', rare: 'Rara', epic: 'Épica', legendary: 'Lendária', custom: 'Skin do dia' };
+const rarityLabel = { none: 'Sem skin', common: 'Comum', rare: 'Rara', epic: 'Épica', legendary: 'Lendária', mythic: 'Mítica 67', custom: 'Skin do dia' };
 const chestRarityLabel = { ...rarityLabel, none: 'Sem prêmio' };
 const chestOddsMarkup = chestId => getChestRarityChances(chestId)
   .map(chance => `<span class="rarity-chance rarity-${escapeHtml(chance.rarity)}"><b>${escapeHtml(chestRarityLabel[chance.rarity])}</b> ${chance.percentage}%</span>`)
@@ -345,7 +345,7 @@ export const marketController = {
   renderInventory() {
     const grid = document.getElementById('inventory-grid');
     if (!grid) return;
-    const rarityOrder = { legendary: 5, custom: 4, epic: 3, rare: 2, common: 1 };
+    const rarityOrder = { mythic: 6, legendary: 5, custom: 4, epic: 3, rare: 2, common: 1 };
     const sort = document.getElementById('inventory-sort')?.value || 'rarity';
     const items = (this.inventoryItems || [])
       .filter(skin => this.inventoryRarity === 'all' || skin.rarity === this.inventoryRarity)

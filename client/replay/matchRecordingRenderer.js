@@ -74,21 +74,30 @@ function drawNetOverlay(ctx, width, height) {
   ctx.restore();
 }
 
-function drawBall(ctx, ball) {
-  drawPowerKickBallEffect(ctx, { ...ball, r: C.BALL_RADIUS });
-  ctx.fillStyle = 'rgba(0,0,0,.25)';
-  ctx.beginPath(); ctx.ellipse(ball.x + 3, ball.y + 6, 11, 6, 0, 0, Math.PI * 2); ctx.fill();
+function drawBall(ctx, ball, lowEffects = false) {
+  if (!lowEffects) {
+    drawPowerKickBallEffect(ctx, { ...ball, r: C.BALL_RADIUS });
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(ball.x + 3, ball.y + 6, 11, 6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  if (lowEffects) {
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, C.BALL_RADIUS, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
   const gradient = ctx.createRadialGradient(ball.x - 4, ball.y - 4, 2, ball.x, ball.y, C.BALL_RADIUS);
   gradient.addColorStop(0, '#fff'); gradient.addColorStop(1, '#bfc8d6');
   ctx.fillStyle = gradient;
   ctx.beginPath(); ctx.arc(ball.x, ball.y, C.BALL_RADIUS, 0, Math.PI * 2); ctx.fill();
 }
 
-function drawPlayer(ctx, state, player, showActionEffects = true) {
+function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = false) {
   const radius = C.PLAYER_RADIUS;
   const color = state.team === C.Team.RED ? '#ef4444' : '#3b82f6';
-  ctx.fillStyle = 'rgba(0,0,0,.25)';
-  ctx.beginPath(); ctx.ellipse(state.x + 4, state.y + 8, radius * 1.1, radius * .6, 0, 0, Math.PI * 2); ctx.fill();
+  if (!lowEffects) {
+    ctx.fillStyle = 'rgba(0,0,0,.25)';
+    ctx.beginPath(); ctx.ellipse(state.x + 4, state.y + 8, radius * 1.1, radius * .6, 0, 0, Math.PI * 2); ctx.fill();
+  }
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.arc(state.x, state.y, radius, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 2; ctx.stroke();
@@ -141,12 +150,38 @@ function drawHud(ctx, frame, width) {
   ctx.fillStyle = '#fff'; ctx.fillText(score, center - 45, 27); ctx.fillText(clock, center + 45, 27);
 }
 
+function wrapCenteredText(ctx, text, centerX, startY, maxWidth, lineHeight) {
+  const words = String(text || '').split(/\s+/);
+  const lines = [];
+  let line = '';
+  words.forEach(word => {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && ctx.measureText(candidate).width > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  });
+  if (line) lines.push(line);
+  lines.forEach((value, index) => ctx.fillText(value, centerX, startY + index * lineHeight));
+  return lines.length;
+}
+
 function drawStatusNotice(ctx, width, height, title, subtitle = '') {
-  const cardWidth = Math.min(width * 0.5, 500);
-  const cardHeight = subtitle ? Math.min(height * 0.17, 112) : Math.min(height * 0.13, 82);
+  const cardWidth = Math.min(width * 0.78, 680);
+  const titleSize = Math.max(20, Math.min(32, width / 30));
+  const subtitleSize = Math.max(13, Math.min(19, width / 48));
+  ctx.save();
+  ctx.font = `900 ${titleSize}px Outfit, system-ui`;
+  const titleMaxWidth = cardWidth - 36;
+  const estimatedTitleLines = Math.max(1, Math.ceil(ctx.measureText(title).width / titleMaxWidth));
+  const cardHeight = Math.min(
+    height * .38,
+    Math.max(subtitle ? 108 : 76, 44 + estimatedTitleLines * (titleSize + 5) + (subtitle ? subtitleSize + 20 : 0))
+  );
   const x = (width - cardWidth) / 2;
   const y = (height - cardHeight) / 2;
-  ctx.save();
   ctx.fillStyle = 'rgba(2, 6, 23, .64)';
   ctx.strokeStyle = 'rgba(148, 163, 184, .28)';
   ctx.lineWidth = 2;
@@ -157,12 +192,14 @@ function drawStatusNotice(ctx, width, height, title, subtitle = '') {
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = `900 ${Math.max(22, Math.min(32, width / 30))}px Outfit, system-ui`;
-  ctx.fillText(title, width / 2, subtitle ? y + cardHeight * .4 : y + cardHeight * .5);
+  ctx.font = `900 ${titleSize}px Outfit, system-ui`;
+  const lineHeight = titleSize + 5;
+  const titleStartY = y + (subtitle ? 34 : (cardHeight - estimatedTitleLines * lineHeight) / 2 + lineHeight / 2);
+  const titleLines = wrapCenteredText(ctx, title, width / 2, titleStartY, titleMaxWidth, lineHeight);
   if (subtitle) {
     ctx.fillStyle = '#60a5fa';
-    ctx.font = `800 ${Math.max(14, Math.min(19, width / 48))}px Outfit, system-ui`;
-    ctx.fillText(subtitle, width / 2, y + cardHeight * .7);
+    ctx.font = `800 ${subtitleSize}px Outfit, system-ui`;
+    wrapCenteredText(ctx, subtitle, width / 2, titleStartY + titleLines * lineHeight + 8, titleMaxWidth, subtitleSize + 4);
   }
   ctx.restore();
 }
@@ -180,9 +217,9 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   const ball = actionEffectsActive
     ? frame.ball
     : { ...frame.ball, lastStrikeType: null, strikeTimer: 0 };
-  drawBall(ctx, ball);
+  drawBall(ctx, ball, !!options.lowEffects);
   frame.players.forEach(state => drawPlayer(
-    ctx, state, recording.players?.[state.index] || {}, actionEffectsActive
+    ctx, state, recording.players?.[state.index] || {}, actionEffectsActive, !!options.lowEffects
   ));
   // Nets are drawn last, exactly like the live match, so a scored ball is
   // visibly inside the mesh instead of floating over it.

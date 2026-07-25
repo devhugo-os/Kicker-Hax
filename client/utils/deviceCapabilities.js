@@ -28,10 +28,13 @@ export function getMatchPerformanceProfile(navigatorLike = globalThis.navigator,
   const cores = Number(navigatorLike?.hardwareConcurrency || 0);
   const constrained = mobileHud && ((memory > 0 && memory <= 4) || (cores > 0 && cores <= 4));
   const lowEffects = mobileHud && (nativeApp || constrained);
+  const targetRenderFps = constrained ? 36 : 60;
   return {
     mobileHud,
     lowEffects,
-    targetRenderFps: constrained ? 36 : mobileHud ? 45 : 60,
-    hudIntervalMs: lowEffects ? 125 : 50
+    targetRenderFps,
+    minRenderFps: mobileHud ? 30 : 60,
+    maxRenderFps: constrained ? 45 : 60,
+    hudIntervalMs: lowEffects ? 150 : 50
   };
 }
