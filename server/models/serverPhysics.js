@@ -211,7 +211,7 @@ export class ServerPhysics {
 
     // Kick Charge
     if (input.shoot) {
-      p.kickCharge = Math.min(1, p.kickCharge + 0.065);
+      p.kickCharge = Math.min(1, p.kickCharge + C.KICK_CHARGE_PER_FRAME);
     } else {
       p.kickCharge *= 0.95;
     }

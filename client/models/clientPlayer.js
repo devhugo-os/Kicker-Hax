@@ -43,6 +43,8 @@ export class ClientPlayer {
     this.passRequestCooldown = Number(serverPlayer.passRequestCooldown || 0);
     this.renderTrail = false;
     this.lowEffects = false;
+    this.identityCacheCanvas = null;
+    this.identityCacheKey = '';
     
     // Aesthetic trails
     this.trail = [];
@@ -176,14 +178,9 @@ export class ClientPlayer {
       ctx.fill();
     }
 
-    // 3) Draw Outer Body
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
-    ctx.fillStyle = this.team === C.Team.RED ? '#ef4444' : '#3b82f6';
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(0,0,0,.45)';
-    ctx.stroke();
+    // 3) Name, role, body and skin are static between snapshots. Drawing the
+    // cached sprite avoids clipping images and stroking text every frame.
+    this.drawIdentityLayer(ctx);
 
     // 4) Shoot Halo Ring (black glow when kicking)
     if (this.shootHalo > 0) {
@@ -192,19 +189,6 @@ export class ClientPlayer {
       ctx.beginPath();
       ctx.arc(this.x, this.y, this.r + 2, 0, Math.PI * 2);
       ctx.stroke();
-    }
-
-    // 5) Render equipped image skin, with the badge as a loading fallback.
-    // Leave only a one-pixel team-colored ring around the cosmetic.
-    const skinDrawn = drawSkinImage(ctx, this.skin, this.x, this.y, this.r - 1);
-    if (!skinDrawn && this.badge) {
-      ctx.fillStyle = '#0b1020';
-      const graphemes = segmentGraphemes(this.badge);
-      const fontSize = (graphemes.length >= 2 && !isEmojiCluster(graphemes[0])) ? 14 : 16;
-      ctx.font = `700 ${fontSize}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(this.badge, this.x, this.y);
     }
 
     // 6) Draw Dribble Invulnerability Rings (green)
@@ -242,17 +226,6 @@ export class ClientPlayer {
       ctx.stroke();
     }
 
-    // 10) Draw Name label above player
-    if (this.name) {
-      ctx.font = '700 12px system-ui';
-      ctx.textAlign = 'center';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(4, 9, 24, 0.9)';
-      ctx.strokeText(this.name, this.x, this.y - this.r - 14);
-      ctx.fillStyle = C.TEAM_NAME_COLORS[this.team] || '#e2e8f0';
-      ctx.fillText(this.name, this.x, this.y - this.r - 14);
-    }
-    drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 31, this.staffRole);
     if (this.passRequestTimer > 0) {
       const pulse = this.lowEffects ? 0.9 : 0.85 + Math.sin(performance.now() / 80) * 0.08;
       ctx.save();
@@ -272,6 +245,71 @@ export class ClientPlayer {
       ctx.fillText('🙋 PASSE!', 0, -2);
       ctx.restore();
     }
+  }
+
+  getIdentityCacheKey() {
+    return [this.name, this.badge, this.skin, this.team, this.staffRole].join('|');
+  }
+
+  paintIdentity(ctx, x, y) {
+    ctx.beginPath();
+    ctx.arc(x, y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = this.team === C.Team.RED ? '#ef4444' : '#3b82f6';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(0,0,0,.45)';
+    ctx.stroke();
+
+    const skinDrawn = drawSkinImage(ctx, this.skin, x, y, this.r - 1);
+    if (!skinDrawn && this.badge) {
+      ctx.fillStyle = '#0b1020';
+      const graphemes = segmentGraphemes(this.badge);
+      const fontSize = (graphemes.length >= 2 && !isEmojiCluster(graphemes[0])) ? 14 : 16;
+      ctx.font = `700 ${fontSize}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(this.badge, x, y);
+    }
+
+    if (this.name) {
+      ctx.font = '700 12px system-ui';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(4, 9, 24, 0.9)';
+      ctx.strokeText(this.name, x, y - this.r - 14);
+      ctx.fillStyle = C.TEAM_NAME_COLORS[this.team] || '#e2e8f0';
+      ctx.fillText(this.name, x, y - this.r - 14);
+    }
+    drawStaffTagOnCanvas(ctx, x, y - this.r - 31, this.staffRole);
+    return !this.skin || skinDrawn;
+  }
+
+  drawIdentityLayer(ctx) {
+    const key = this.getIdentityCacheKey();
+    const width = 260;
+    const height = 112;
+    const centerX = width / 2;
+    const centerY = 70;
+    if (this.identityCacheCanvas && this.identityCacheKey === key) {
+      ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY);
+      return;
+    }
+
+    const sprite = document.createElement('canvas');
+    sprite.width = width;
+    sprite.height = height;
+    const spriteCtx = sprite.getContext('2d');
+    const cacheReady = spriteCtx && this.paintIdentity(spriteCtx, centerX, centerY);
+    if (cacheReady) {
+      this.identityCacheCanvas = sprite;
+      this.identityCacheKey = key;
+      ctx.drawImage(sprite, this.x - centerX, this.y - centerY);
+      return;
+    }
+
+    // The skin image is still decoding; render the badge fallback this frame
+    // and create the cache as soon as the image becomes available.
+    this.paintIdentity(ctx, this.x, this.y);
   }
 
   drawDirectionArrow(ctx) {

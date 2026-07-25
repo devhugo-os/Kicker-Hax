@@ -528,6 +528,30 @@ html.mobile-low-effects #match-screen * {
   opacity: var(--button-opacity, 0.8);
 }
 
+/* The kick meter uses one composited scale instead of repainting a conic
+   gradient for every charge step. This stays fluid on Android WebViews. */
+.mobile-actions button[data-mobile-action="shoot"] {
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at center, rgba(15, 23, 42, 0.94) 56%, transparent 57%),
+    linear-gradient(180deg, rgba(59, 130, 246, var(--button-opacity, 0.8)), rgba(15, 23, 42, var(--button-opacity, 0.8)));
+}
+
+.mobile-actions button[data-mobile-action="shoot"]::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  z-index: 0;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.72);
+  transform: scaleY(var(--charge-progress, 0));
+  transform-origin: center bottom;
+  transition: transform 55ms linear;
+  pointer-events: none;
+  will-change: transform;
+}
+
 .mobile-stats-toggle {
   position: fixed;
   left: var(--mobile-stats-x, 6%);

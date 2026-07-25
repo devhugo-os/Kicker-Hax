@@ -355,7 +355,7 @@ export class P2PSocketService {
     if (this.isHost) {
       // Direct local execution for host's own emissions
       this.handleHostReceivedData(this.clientId, event, data);
-    } else if (['gameInput', 'ping'].includes(event) && this.realtimeHostConn?.open) {
+    } else if (event === 'gameInput' && this.realtimeHostConn?.open) {
       const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
       if (!shouldDropRealtimeState(event, bufferedAmount)) {
         this.realtimeHostConn.send(encodeRealtimePacket(event, data));
@@ -574,7 +574,7 @@ export class P2PSocketService {
         });
         conn.on('data', (payload) => {
           const packet = decodeRealtimePacket(payload);
-          if (['gameInput', 'ping'].includes(packet?.event)) {
+          if (packet?.event === 'gameInput') {
             this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
           }
         });
@@ -1924,17 +1924,19 @@ export class P2PSocketService {
     const now = Date.now();
     const normalized = {
       ...inputData,
-      x: Math.round(Number(inputData.x || 0) * 100) / 100,
-      y: Math.round(Number(inputData.y || 0) * 100) / 100
+      // Five-percent direction steps are visually indistinguishable on an
+      // analog stick and prevent pointer noise from flooding the DataChannel.
+      x: Math.round(Number(inputData.x || 0) * 20) / 20,
+      y: Math.round(Number(inputData.y || 0) * 20) / 20
     };
     const actionSignature = `${+!!normalized.shoot}|${+!!normalized.sprint}|${+!!normalized.dribble}|${+!!normalized.tackle}|${+!!normalized.power}|${+!!normalized.requestPass}|${+!!normalized.mobileTackleAssist}`;
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;
-    // Direction changes stay capped at 50 Hz and button edges bypass the cap.
+    // Direction changes stay capped near 30 Hz and button edges bypass the cap.
     // An unchanged held direction only needs a 10 Hz heartbeat because the
     // authoritative simulation keeps the last input, cutting guest uplink load.
-    const minimumInterval = movementChanged ? 20 : 100;
+    const minimumInterval = movementChanged ? 32 : 100;
     if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;

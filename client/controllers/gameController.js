@@ -93,7 +93,7 @@ export const gameController = {
     this.currentUser = user;
     this.canvas = document.getElementById('match-canvas');
     if (this.canvas) {
-      this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
+      this.ctx = this.canvas.getContext('2d', { alpha: true, desynchronized: true });
     }
 
     // Input listeners
@@ -1077,7 +1077,7 @@ export const gameController = {
     this.administrativeMatchAbort = false;
     if (!this.hudEditorMode) this.closeMobileHudEditorUI();
     this.canvas = document.getElementById('match-canvas');
-    this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
+    this.ctx = this.canvas.getContext('2d', { alpha: true, desynchronized: true });
     this.configureMatchPerformance();
     this.fpsFrameCount = 0;
     this.fpsWindowStartedAt = performance.now();
@@ -1089,6 +1089,7 @@ export const gameController = {
     this.pauseMenuOpen = false;
     this.matchHostPaused = false;
     this.onlineShootStartedAt = null;
+    this.lastRenderedShootMeter = -1;
     document.getElementById('pause-modal')?.classList.add('hidden');
     document.getElementById('focus-lost-badge')?.classList.add('hidden');
 
@@ -2039,6 +2040,7 @@ export const gameController = {
 
         this.drawNetOverlay(this.ctx);
         if (cameraShaking) this.ctx.restore();
+        this.updateMobileShootMeter(bluePlayer.kickCharge || 0);
 
         // Physics/input stay at 60 Hz, while DOM writes are batched. Updating
         // bars and text every frame made layout compete with canvas rendering
@@ -3048,19 +3050,12 @@ export const gameController = {
       if (input.shoot && !this.onlineShootStartedAt) this.onlineShootStartedAt = Date.now();
       if (!input.shoot) this.onlineShootStartedAt = null;
       const localCharge = input.shoot && this.onlineShootStartedAt
-        ? Math.min(1, (Date.now() - this.onlineShootStartedAt) / 900)
+        ? Math.min(1, (Date.now() - this.onlineShootStartedAt) / 700)
         : 0;
 
-      // Input remains sampled every animation frame, while weak phones draw at
-      // a stable budget instead of oscillating between expensive 60 Hz frames.
-      const renderInterval = 1000 / Math.max(
-        this.performanceProfile?.minRenderFps || 30,
-        this.currentRenderFps || this.performanceProfile?.targetRenderFps || 60
-      );
-      if (timestamp - this.lastOnlineRenderAt < renderInterval) {
-        this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
-        return;
-      }
+      // requestAnimationFrame already follows the physical display. A second
+      // 16.67 ms gate occasionally discarded valid 60 Hz frames because of
+      // sub-millisecond timestamp jitter, making desktop settle near 55 FPS.
       this.lastOnlineRenderAt = timestamp;
       this.trackRenderedFrame(timestamp);
       const renderStartedAt = performance.now();
@@ -3123,6 +3118,7 @@ export const gameController = {
       const opp = this.players.find(p => p.id !== myId && p.team !== 'spectator');
 
       if (me) {
+        this.updateMobileShootMeter(Math.max(localCharge, me.kickCharge || 0));
         const myStam = document.getElementById('right-stam-fill');
         const myPow = document.getElementById('right-pow-fill');
         if (refreshHud) {
@@ -3746,7 +3742,7 @@ export const gameController = {
     const shootBtn = controls.querySelector('[data-mobile-action="shoot"]');
     const requestPassBtn = controls.querySelector('[data-mobile-action="requestPass"]');
     if (sprintBtn) sprintBtn.style.setProperty('--meter', `${Math.round(Math.max(0, Math.min(1, stamina)) * 360)}deg`);
-    if (shootBtn) shootBtn.style.setProperty('--meter', `${Math.round(Math.max(0, Math.min(1, kickCharge)) * 360)}deg`);
+    if (shootBtn) this.updateMobileShootMeter(kickCharge, shootBtn);
     if (requestPassBtn) {
       const readyRatio = 1 - Math.max(0, Math.min(1, Number(passCooldownFrames || 0) / C.PASS_REQUEST_COOLDOWN_FRAMES));
       requestPassBtn.style.setProperty('--meter', `${Math.round(readyRatio * 360)}deg`);
@@ -3755,6 +3751,21 @@ export const gameController = {
         ? `Pedir passe, recarga ${Math.ceil(passCooldownFrames / 60)} segundos`
         : 'Pedir passe');
     }
+  },
+
+  /**
+   * Updates only one compositor-friendly transform while the kick is held.
+   * The rest of the HUD remains throttled, avoiding layout work at 60 Hz.
+   */
+  updateMobileShootMeter(kickCharge = 0, shootButton = null) {
+    const progress = Math.max(0, Math.min(1, Number(kickCharge) || 0));
+    if (Math.abs(progress - Number(this.lastRenderedShootMeter || 0)) < 0.006 && progress !== 0 && progress !== 1) return;
+    const button = shootButton
+      || document.querySelector('#mobile-controls [data-mobile-action="shoot"]');
+    if (!button || button.closest('#mobile-controls')?.classList.contains('hidden')) return;
+    button.style.setProperty('--charge-progress', progress.toFixed(3));
+    button.classList.toggle('is-charging', progress > 0 && progress < 1);
+    this.lastRenderedShootMeter = progress;
   },
 
   toggleMobileStatsModal() {
@@ -4119,6 +4130,8 @@ export const gameController = {
     }
     this.fieldCacheCanvas = null;
     this.fieldCacheKey = '';
+    this.netOverlayCacheCanvas = null;
+    this.netOverlayCacheKey = '';
     if (this.matchRecording) this.matchRecording.field = [this.canvas.width, this.canvas.height];
     this.resizeCanvasContainer();
   },
@@ -4137,6 +4150,20 @@ export const gameController = {
       if (cacheCtx) this.drawFieldGridStatic(cacheCtx);
     }
 
+    if (this.performanceProfile?.lowEffects) {
+      if (this.cssFieldCacheKey !== cacheKey) {
+        this.canvas.style.backgroundImage = `url("${this.fieldCacheCanvas.toDataURL('image/png')}")`;
+        this.canvas.style.backgroundRepeat = 'no-repeat';
+        this.canvas.style.backgroundPosition = 'center';
+        this.canvas.style.backgroundSize = '100% 100%';
+        this.cssFieldCacheKey = cacheKey;
+      }
+      return;
+    }
+    if (this.cssFieldCacheKey) {
+      this.canvas.style.backgroundImage = '';
+      this.cssFieldCacheKey = '';
+    }
     cx.drawImage(this.fieldCacheCanvas, 0, 0);
   },
 
@@ -4295,6 +4322,21 @@ export const gameController = {
   drawNetOverlay(cx) {
     const w = this.canvas.width;
     const h = this.canvas.height;
+    const cacheKey = `${w}x${h}:${C.BORDER}:${C.GOAL_W_INIT}:${C.GOAL_DEPTH}`;
+    if (!this.netOverlayCacheCanvas || this.netOverlayCacheKey !== cacheKey) {
+      this.netOverlayCacheCanvas = document.createElement('canvas');
+      this.netOverlayCacheCanvas.width = w;
+      this.netOverlayCacheCanvas.height = h;
+      this.netOverlayCacheKey = cacheKey;
+      const cacheCtx = this.netOverlayCacheCanvas.getContext('2d');
+      if (cacheCtx) this.drawNetOverlayStatic(cacheCtx);
+    }
+    cx.drawImage(this.netOverlayCacheCanvas, 0, 0);
+  },
+
+  drawNetOverlayStatic(cx) {
+    const w = this.canvas.width;
+    const h = this.canvas.height;
     const gTop = (h - C.GOAL_W_INIT) / 2;
     const gBot = (h + C.GOAL_W_INIT) / 2;
 
@@ -4361,6 +4403,9 @@ export const gameController = {
   },
 
   beginPowerKickCamera(cx, ball) {
+    // Moving a CSS-backed static field would require a full-screen repaint.
+    // Mobile keeps the ball effect while avoiding that expensive camera pass.
+    if (this.performanceProfile?.lowEffects) return false;
     const offset = getPowerKickShakeOffset(ball, performance.now());
     if (!offset.x && !offset.y) return false;
     cx.save();

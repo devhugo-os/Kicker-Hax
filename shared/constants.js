@@ -31,6 +31,9 @@ export const MAX_SPEED = 2.3;
 // Kick / Skills constants
 export const KICK_BASE = 3.2;
 export const KICK_CHARGE = 6.0;
+// A full normal kick takes roughly 0.7 seconds to charge at 60 Hz. The old
+// 0.26-second ramp was difficult to control and made the mobile meter jump.
+export const KICK_CHARGE_PER_FRAME = 0.024;
 
 export const STAMINA_LOCK_FRAMES = 90;
 export const REGEN_IDLE = 0.0035;
