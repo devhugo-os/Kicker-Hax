@@ -362,15 +362,14 @@ export const gameController = {
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
       const max = Math.max(24, rect.width * 0.36);
-      const sensitivity = Math.max(0.5, Math.min(1.5, Number(settingsController.mobileHud?.stickSensitivity || 100) / 100));
       const dx = e.clientX - cx;
       const dy = e.clientY - cy;
       const len = Math.hypot(dx, dy) || 1;
       const limited = Math.min(max, len);
       const nx = (dx / len) * limited;
       const ny = (dy / len) * limited;
-      this.virtualInput.x = Math.max(-1, Math.min(1, (dx / max) * sensitivity));
-      this.virtualInput.y = Math.max(-1, Math.min(1, (dy / max) * sensitivity));
+      this.virtualInput.x = Math.max(-1, Math.min(1, dx / max));
+      this.virtualInput.y = Math.max(-1, Math.min(1, dy / max));
       knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
       this.flushMobileOnlineInput();
     };
@@ -1390,9 +1389,18 @@ export const gameController = {
     this.p2TackleLock = false; this.p2DribbleLock = false;
 
     // Spawn local players
-    const username = menuController.profileData.username;
-    const badge = menuController.profileData.badge || '🇧🇷';
-    const equippedSkin = getEquippedSkin(menuController.profileData).image;
+    // A slow mobile connection can finish opening the field a few milliseconds
+    // before the profile hydration callback. Use a harmless visual fallback
+    // instead of aborting the entire local render loop.
+    const localProfile = menuController.profileData || {
+      username: this.currentUser?.displayName || 'Jogador',
+      badge: '🇧🇷',
+      equippedSkinId: 'rookie',
+      ownedSkins: ['rookie']
+    };
+    const username = localProfile.username;
+    const badge = localProfile.badge || '🇧🇷';
+    const equippedSkin = getEquippedSkin(localProfile).image;
 
     // Retrieve selected field size and replay settings
     const sizeSelect = document.getElementById('solo-field-size');
@@ -2032,30 +2040,32 @@ export const gameController = {
         this.drawNetOverlay(this.ctx);
         if (cameraShaking) this.ctx.restore();
 
-        // Top scoreboard and HUD
-        const m = Math.floor(MatchSim.matchTime / 60);
-        const s = Math.floor(MatchSim.matchTime % 60);
-        const clockEl = document.getElementById('match-clock');
-        const scoreEl = document.getElementById('match-score');
+        // Physics/input stay at 60 Hz, while DOM writes are batched. Updating
+        // bars and text every frame made layout compete with canvas rendering
+        // on Android WebViews such as the Redmi 12.
+        const refreshHud = this.shouldRefreshMatchHud(timestamp);
+        if (refreshHud) {
+          const m = Math.floor(MatchSim.matchTime / 60);
+          const s = Math.floor(MatchSim.matchTime % 60);
+          const clockEl = document.getElementById('match-clock');
+          const scoreEl = document.getElementById('match-score');
+          const rightStam = document.getElementById('right-stam-fill');
+          const rightPow = document.getElementById('right-pow-fill');
+          const leftStam = document.getElementById('left-stam-fill');
+          const leftPow = document.getElementById('left-pow-fill');
 
-        if (clockEl) clockEl.textContent = this.practiceMode ?'∞' : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-        if (scoreEl) scoreEl.textContent = `${MatchSim.score.red} : ${MatchSim.score.blue}`;
-
-        // Sidebars update
-        const rightStam = document.getElementById('right-stam-fill');
-        const rightPow = document.getElementById('right-pow-fill');
-        const leftStam = document.getElementById('left-stam-fill');
-        const leftPow = document.getElementById('left-pow-fill');
-
-        if (rightStam) rightStam.style.height = `${bluePlayer.stamina * 100}%`;
-        if (rightPow) rightPow.style.height = `${bluePlayer.kickCharge * 100}%`;
-        this.updateMobileActionMeters(
-          bluePlayer.stamina,
-          bluePlayer.kickCharge || 0,
-          bluePlayer.passRequestCooldown || 0
-        );
-        if (leftStam) leftStam.style.height = `${redPlayer.stamina * 100}%`;
-        if (leftPow) leftPow.style.height = `${redPlayer.kickCharge * 100}%`;
+          if (clockEl) clockEl.textContent = this.practiceMode ? '∞' : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+          if (scoreEl) scoreEl.textContent = `${MatchSim.score.red} : ${MatchSim.score.blue}`;
+          if (rightStam) rightStam.style.height = `${bluePlayer.stamina * 100}%`;
+          if (rightPow) rightPow.style.height = `${bluePlayer.kickCharge * 100}%`;
+          if (leftStam) leftStam.style.height = `${redPlayer.stamina * 100}%`;
+          if (leftPow) leftPow.style.height = `${redPlayer.kickCharge * 100}%`;
+          this.updateMobileActionMeters(
+            bluePlayer.stamina,
+            bluePlayer.kickCharge || 0,
+            bluePlayer.passRequestCooldown || 0
+          );
+        }
 
         const canTrackLocalStats = MatchSim.status === 'playing' && !this.isPaused && !this.inReplay;
         // Track possession only while the local simulation is actually running.
@@ -2089,17 +2099,16 @@ export const gameController = {
           this.p1DribbleLock = false;
         }
 
-        // Render counts on HUD (Você / P1 only)
-        const rightPossEl = document.getElementById('right-stat-possession');
-        const rightShotsEl = document.getElementById('right-stat-shots');
-        const rightTacklesEl = document.getElementById('right-stat-tackles');
-        const rightDribblesEl = document.getElementById('right-stat-dribbles');
-
-        if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
-        if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
-        if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
-        if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
-        if (this.shouldRefreshMatchHud(timestamp)) {
+        // Render local counters in the same batched HUD pass.
+        if (refreshHud) {
+          const rightPossEl = document.getElementById('right-stat-possession');
+          const rightShotsEl = document.getElementById('right-stat-shots');
+          const rightTacklesEl = document.getElementById('right-stat-tackles');
+          const rightDribblesEl = document.getElementById('right-stat-dribbles');
+          if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
+          if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
+          if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
+          if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
           this.refreshMobileStatsModal();
           this.refreshLiveMatchReportIfOpen();
         }

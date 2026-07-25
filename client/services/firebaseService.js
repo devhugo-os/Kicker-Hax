@@ -106,7 +106,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '68.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '69.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -881,6 +881,68 @@ export const firebaseService = {
       });
     });
     return recipient;
+  },
+
+  /** Returns a donated skin only to the account that originally sent it. */
+  async returnDonatedSkin(holderUid, skinId) {
+    const holderRef = doc(db, 'users', holderUid);
+    const giftRef = doc(collection(db, 'skinGifts'));
+    return runTransaction(db, async transaction => {
+      const holderSnap = await transaction.get(holderRef);
+      if (!holderSnap.exists()) throw new Error('Seu perfil não está disponível.');
+      const holder = holderSnap.data();
+      const origin = holder.skinGiftOrigins?.[skinId];
+      if (!origin?.senderUid) throw new Error('Esta skin não possui um remetente válido.');
+      if ((holder.equippedSkinId || 'rookie') === skinId) {
+        throw new Error('Equipe outra skin antes de devolvê-la.');
+      }
+      const originalOwnerRef = doc(db, 'users', origin.senderUid);
+      const originalOwnerSnap = await transaction.get(originalOwnerRef);
+      if (!originalOwnerSnap.exists()) throw new Error('A conta que doou esta skin não existe mais.');
+      const originalOwner = originalOwnerSnap.data();
+      const holderOwned = Array.isArray(holder.ownedSkins) ? [...holder.ownedSkins] : ['rookie'];
+      if (!holderOwned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
+      const originalOwned = Array.isArray(originalOwner.ownedSkins) ? [...originalOwner.ownedSkins] : ['rookie'];
+      if (originalOwned.includes(skinId)) throw new Error('O remetente já possui esta skin.');
+
+      const holderValues = { ...(holder.skinPurchaseValues || {}) };
+      const holderOrigins = { ...(holder.skinGiftOrigins || {}) };
+      const restoredValue = Math.max(0, Number(holderValues[skinId] || 0));
+      delete holderValues[skinId];
+      delete holderOrigins[skinId];
+
+      const originalValues = { ...(originalOwner.skinPurchaseValues || {}), [skinId]: restoredValue };
+      const originalOrigins = { ...(originalOwner.skinGiftOrigins || {}) };
+      delete originalOrigins[skinId];
+      originalOwned.push(skinId);
+      const returnedAt = Date.now();
+
+      transaction.update(holderRef, {
+        ownedSkins: holderOwned.filter(id => id !== skinId),
+        skinPurchaseValues: holderValues,
+        skinGiftOrigins: holderOrigins
+      });
+      transaction.update(originalOwnerRef, {
+        ownedSkins: originalOwned,
+        skinPurchaseValues: originalValues,
+        skinGiftOrigins: originalOrigins,
+        lastReceivedGiftId: giftRef.id
+      });
+      transaction.set(giftRef, {
+        kind: 'return',
+        senderUid: holderUid,
+        senderUsername: holder.username || '',
+        recipientUid: origin.senderUid,
+        recipientUsername: originalOwner.username || origin.senderUsername || '',
+        originalSenderUid: origin.senderUid,
+        skinId,
+        skinValue: restoredValue,
+        status: 'returned',
+        createdAt: returnedAt,
+        claimedAt: returnedAt
+      });
+      return { username: originalOwner.username || origin.senderUsername || 'remetente' };
+    });
   },
 
   /** Completes gifts created by older releases that waited for recipient login. */

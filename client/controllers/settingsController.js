@@ -5,11 +5,10 @@ import { showToast } from '../utils/toast.js';
 import { firebaseService } from '../services/firebaseService.js';
 
 export const DEFAULT_MOBILE_HUD = {
-  layoutVersion: 68,
+  layoutVersion: 69,
   showStats: true,
   largeButtons: false,
   mobileTackleAssistEnabled: true,
-  stickSensitivity: 100,
   opacity: 60,
   stickX: 12,
   stickY: 25,
@@ -17,8 +16,8 @@ export const DEFAULT_MOBILE_HUD = {
   chatY: 84,
   chatSize: 44,
   chatOpacity: 60,
-  requestPassX: 69,
-  requestPassY: 84,
+  requestPassX: 83,
+  requestPassY: 52,
   requestPassSize: 48,
   requestPassOpacity: 60,
   statsX: 93,
@@ -37,7 +36,7 @@ export const DEFAULT_MOBILE_HUD = {
     dribble: { x: 92, y: 33 },
     tackle: { x: 83, y: 15 },
     power: { x: 92, y: 52 },
-    requestPass: { x: 69, y: 84 }
+    requestPass: { x: 83, y: 52 }
   },
   actionStyles: {
     sprint: { size: 54, opacity: 60 },
@@ -251,14 +250,15 @@ export const settingsController = {
         ...(hud?.actionStyles || {})
       }
     };
-    // Update 68 establishes one usable pass-button baseline for every account.
+    // Update 69 adopts xc_hugo's tested pass-button position for every account.
     // Once migrated, later user drag edits remain untouched.
-    if (Number(hud?.layoutVersion || 0) < 68) {
+    if (Number(hud?.layoutVersion || 0) < 69) {
       normalized.requestPassX = DEFAULT_MOBILE_HUD.requestPassX;
       normalized.requestPassY = DEFAULT_MOBILE_HUD.requestPassY;
       normalized.actionPositions.requestPass = { ...DEFAULT_MOBILE_HUD.actionPositions.requestPass };
       normalized.actionStyles.requestPass = { ...DEFAULT_MOBILE_HUD.actionStyles.requestPass };
     }
+    delete normalized.stickSensitivity;
     normalized.layoutVersion = DEFAULT_MOBILE_HUD.layoutVersion;
     return normalized;
   },
@@ -367,7 +367,6 @@ export const settingsController = {
     const largeButtons = document.getElementById('mobile-hud-large-buttons');
     const opacity = document.getElementById('mobile-hud-opacity');
     const tackleAssist = document.getElementById('mobile-tackle-assist-enabled');
-    const stickSensitivity = document.getElementById('mobile-stick-sensitivity');
     const stickX = document.getElementById('mobile-stick-x');
     const stickY = document.getElementById('mobile-stick-y');
     const actionsX = document.getElementById('mobile-actions-x');
@@ -380,7 +379,6 @@ export const settingsController = {
         showStats: showStats ? !!showStats.checked : (this.mobileHud.showStats !== false),
         largeButtons: largeButtons ? !!largeButtons.checked : !!this.mobileHud.largeButtons,
         mobileTackleAssistEnabled: tackleAssist ? !!tackleAssist.checked : this.mobileHud.mobileTackleAssistEnabled !== false,
-        stickSensitivity: parseInt(stickSensitivity?.value || String(this.mobileHud.stickSensitivity || 100), 10),
         opacity: parseInt(opacity?.value || String(this.mobileHud.opacity || DEFAULT_MOBILE_HUD.opacity), 10),
         stickX: parseInt(stickX?.value || String(DEFAULT_MOBILE_HUD.stickX), 10),
         stickY: parseInt(stickY?.value || String(DEFAULT_MOBILE_HUD.stickY), 10),
@@ -400,8 +398,8 @@ export const settingsController = {
       }
       this.updateMobileHudPreview();
     };
-    [showStats, largeButtons, opacity, stickSensitivity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
-    [showStats, largeButtons, opacity, stickSensitivity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
+    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
+    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
     // This is a gameplay preference, not merely an editor preview. Persist it
     // immediately so leaving Controls cannot silently enable assistance again.
     tackleAssist?.addEventListener('change', () => save({ persist: true }));
@@ -422,7 +420,6 @@ export const settingsController = {
     const largeButtons = document.getElementById('mobile-hud-large-buttons');
     const opacity = document.getElementById('mobile-hud-opacity');
     const tackleAssist = document.getElementById('mobile-tackle-assist-enabled');
-    const stickSensitivity = document.getElementById('mobile-stick-sensitivity');
     const stickX = document.getElementById('mobile-stick-x');
     const stickY = document.getElementById('mobile-stick-y');
     const actionsX = document.getElementById('mobile-actions-x');
@@ -430,7 +427,6 @@ export const settingsController = {
     if (showStats) showStats.checked = this.mobileHud.showStats;
     if (largeButtons) largeButtons.checked = this.mobileHud.largeButtons;
     if (tackleAssist) tackleAssist.checked = this.mobileHud.mobileTackleAssistEnabled !== false;
-    if (stickSensitivity) stickSensitivity.value = this.mobileHud.stickSensitivity || 100;
     if (opacity) opacity.value = this.mobileHud.opacity;
     if (stickX) stickX.value = this.mobileHud.stickX;
     if (stickY) stickY.value = this.mobileHud.stickY;

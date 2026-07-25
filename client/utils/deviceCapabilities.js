@@ -23,11 +23,10 @@ export function shouldUseMobileHud(navigatorLike = globalThis.navigator, runtime
  */
 export function getMatchPerformanceProfile(navigatorLike = globalThis.navigator, runtime = {}) {
   const mobileHud = shouldUseMobileHud(navigatorLike, runtime);
-  const nativeApp = !!runtime.cordova || new URLSearchParams(String(runtime.search || '')).get('app') === '1';
-  const memory = Number(navigatorLike?.deviceMemory || 0);
-  const cores = Number(navigatorLike?.hardwareConcurrency || 0);
-  const constrained = mobileHud && ((memory > 0 && memory <= 4) || (cores > 0 && cores <= 4));
-  const lowEffects = mobileHud && (nativeApp || constrained);
+  // Mobile GPUs are often the limiting factor even when Android reports eight
+  // CPU cores and plenty of RAM. Use the cached/light compositor path for every
+  // real touch HUD instead of misclassifying mid-range phones as desktop GPUs.
+  const lowEffects = mobileHud;
   // Keep animation at the display cadence. Lowering weak phones to 36 FPS
   // made input and interpolation visibly stutter; cosmetic work is throttled
   // separately instead of dropping gameplay frames.
@@ -36,7 +35,7 @@ export function getMatchPerformanceProfile(navigatorLike = globalThis.navigator,
     mobileHud,
     lowEffects,
     targetRenderFps,
-    minRenderFps: mobileHud ? 50 : 60,
+    minRenderFps: 60,
     maxRenderFps: 60,
     hudIntervalMs: lowEffects ? 200 : 75
   };

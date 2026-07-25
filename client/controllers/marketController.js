@@ -372,10 +372,16 @@ export const marketController = {
       const valueLabel = skin.id === 'rookie' ? 'Sem valor' : `${skin.value} KX Coins`;
       const equippedLabel = skinPending ? 'Selecionada, salve o perfil' : 'Em uso';
       const canTransfer = skin.id !== 'rookie' && !equipped;
+      const wasGifted = !!skin.giftOrigin?.senderUid;
       const giftLabel = skin.giftOrigin?.senderUsername
         ? `<p class="skin-gift-origin">Doada por <b>${escapeHtml(skin.giftOrigin.senderUsername)}</b></p>`
         : '';
-      card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong>${giftLabel}<div class="inventory-skin-actions"><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" data-action="equip" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button>${canTransfer ? '<button class="btn btn-secondary" data-action="donate" type="button">Doar</button><button class="btn btn-danger" data-action="discard" type="button">Descartar +30</button>' : ''}</div></div>`;
+      const transferActions = !canTransfer
+        ? ''
+        : wasGifted
+          ? '<button class="btn btn-secondary" data-action="return" type="button">Devolver</button>'
+          : '<button class="btn btn-secondary" data-action="donate" type="button">Doar</button><button class="btn btn-danger" data-action="discard" type="button">Descartar +30</button>';
+      card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong>${giftLabel}<div class="inventory-skin-actions"><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" data-action="equip" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button>${transferActions}</div></div>`;
       card.querySelector('[data-action="equip"]')?.addEventListener('click', () => {
         menuController.selectProfileSkinDraft(skin);
         this.renderInventory();
@@ -402,6 +408,26 @@ export const marketController = {
           await this.loadInventory();
         } catch (error) {
           showToast(error.message || 'Não foi possível concluir a doação.', 'error');
+        }
+      });
+      card.querySelector('[data-action="return"]')?.addEventListener('click', async event => {
+        const recipient = skin.giftOrigin?.senderUsername || 'o remetente';
+        const confirmed = await confirmDialog({
+          title: `Devolver ${skin.name}?`,
+          message: `A skin voltará para ${recipient} e sairá do seu inventário.`,
+          confirmLabel: 'Devolver skin',
+          danger: true
+        });
+        if (!confirmed) return;
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const returnedTo = await firebaseService.returnDonatedSkin(this.user.uid, skin.id);
+          showToast(`${skin.name} foi devolvida para ${returnedTo.username}.`, 'success');
+          await this.loadInventory();
+        } catch (error) {
+          button.disabled = false;
+          showToast(error.message || 'Não foi possível devolver a skin.', 'error');
         }
       });
       card.querySelector('[data-action="discard"]')?.addEventListener('click', async event => {
