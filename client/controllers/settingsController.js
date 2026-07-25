@@ -5,10 +5,11 @@ import { showToast } from '../utils/toast.js';
 import { firebaseService } from '../services/firebaseService.js';
 
 export const DEFAULT_MOBILE_HUD = {
-  layoutVersion: 67,
+  layoutVersion: 68,
   showStats: true,
   largeButtons: false,
   mobileTackleAssistEnabled: true,
+  stickSensitivity: 100,
   opacity: 60,
   stickX: 12,
   stickY: 25,
@@ -116,6 +117,17 @@ export const settingsController = {
         localStorage.setItem('kicker_hax_music_volume', val);
       });
     }
+    const bindVisibilitySetting = (id, storageKey) => {
+      const input = document.getElementById(id);
+      if (!input) return;
+      input.checked = localStorage.getItem(storageKey) !== 'false';
+      input.addEventListener('change', () => {
+        localStorage.setItem(storageKey, String(input.checked));
+        window.dispatchEvent(new CustomEvent('kicker:performanceOverlayUpdated'));
+      });
+    };
+    bindVisibilitySetting('settings-show-ping', 'kicker_hax_show_ping');
+    bindVisibilitySetting('settings-show-fps', 'kicker_hax_show_fps');
 
     // Back buttons
     const btnSetBack = document.getElementById('settings-btn-back');
@@ -164,6 +176,10 @@ export const settingsController = {
         if (volDisplay) volDisplay.textContent = `${savedVol}%`;
         if (musicSlider) musicSlider.value = savedMusicVol;
         if (musicDisplay) musicDisplay.textContent = `${savedMusicVol}%`;
+        const showPing = document.getElementById('settings-show-ping');
+        const showFps = document.getElementById('settings-show-fps');
+        if (showPing) showPing.checked = localStorage.getItem('kicker_hax_show_ping') !== 'false';
+        if (showFps) showFps.checked = localStorage.getItem('kicker_hax_show_fps') !== 'false';
       }
     });
 
@@ -235,13 +251,13 @@ export const settingsController = {
         ...(hud?.actionStyles || {})
       }
     };
-    // Version 66 introduced the pass button at x=64. Move only that untouched
-    // default to the more usable position; custom layouts remain intact.
-    const oldPassPosition = hud?.actionPositions?.requestPass;
-    if (Number(hud?.layoutVersion || 0) < 67
-      && (!oldPassPosition || Number(oldPassPosition.x) === 64)) {
+    // Update 68 establishes one usable pass-button baseline for every account.
+    // Once migrated, later user drag edits remain untouched.
+    if (Number(hud?.layoutVersion || 0) < 68) {
       normalized.requestPassX = DEFAULT_MOBILE_HUD.requestPassX;
+      normalized.requestPassY = DEFAULT_MOBILE_HUD.requestPassY;
       normalized.actionPositions.requestPass = { ...DEFAULT_MOBILE_HUD.actionPositions.requestPass };
+      normalized.actionStyles.requestPass = { ...DEFAULT_MOBILE_HUD.actionStyles.requestPass };
     }
     normalized.layoutVersion = DEFAULT_MOBILE_HUD.layoutVersion;
     return normalized;
@@ -351,6 +367,7 @@ export const settingsController = {
     const largeButtons = document.getElementById('mobile-hud-large-buttons');
     const opacity = document.getElementById('mobile-hud-opacity');
     const tackleAssist = document.getElementById('mobile-tackle-assist-enabled');
+    const stickSensitivity = document.getElementById('mobile-stick-sensitivity');
     const stickX = document.getElementById('mobile-stick-x');
     const stickY = document.getElementById('mobile-stick-y');
     const actionsX = document.getElementById('mobile-actions-x');
@@ -363,6 +380,7 @@ export const settingsController = {
         showStats: showStats ? !!showStats.checked : (this.mobileHud.showStats !== false),
         largeButtons: largeButtons ? !!largeButtons.checked : !!this.mobileHud.largeButtons,
         mobileTackleAssistEnabled: tackleAssist ? !!tackleAssist.checked : this.mobileHud.mobileTackleAssistEnabled !== false,
+        stickSensitivity: parseInt(stickSensitivity?.value || String(this.mobileHud.stickSensitivity || 100), 10),
         opacity: parseInt(opacity?.value || String(this.mobileHud.opacity || DEFAULT_MOBILE_HUD.opacity), 10),
         stickX: parseInt(stickX?.value || String(DEFAULT_MOBILE_HUD.stickX), 10),
         stickY: parseInt(stickY?.value || String(DEFAULT_MOBILE_HUD.stickY), 10),
@@ -382,8 +400,8 @@ export const settingsController = {
       }
       this.updateMobileHudPreview();
     };
-    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
-    [showStats, largeButtons, opacity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
+    [showStats, largeButtons, opacity, stickSensitivity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('input', save));
+    [showStats, largeButtons, opacity, stickSensitivity, stickX, stickY, actionsX, actionsY].forEach(el => el?.addEventListener('change', save));
     // This is a gameplay preference, not merely an editor preview. Persist it
     // immediately so leaving Controls cannot silently enable assistance again.
     tackleAssist?.addEventListener('change', () => save({ persist: true }));
@@ -404,6 +422,7 @@ export const settingsController = {
     const largeButtons = document.getElementById('mobile-hud-large-buttons');
     const opacity = document.getElementById('mobile-hud-opacity');
     const tackleAssist = document.getElementById('mobile-tackle-assist-enabled');
+    const stickSensitivity = document.getElementById('mobile-stick-sensitivity');
     const stickX = document.getElementById('mobile-stick-x');
     const stickY = document.getElementById('mobile-stick-y');
     const actionsX = document.getElementById('mobile-actions-x');
@@ -411,6 +430,7 @@ export const settingsController = {
     if (showStats) showStats.checked = this.mobileHud.showStats;
     if (largeButtons) largeButtons.checked = this.mobileHud.largeButtons;
     if (tackleAssist) tackleAssist.checked = this.mobileHud.mobileTackleAssistEnabled !== false;
+    if (stickSensitivity) stickSensitivity.value = this.mobileHud.stickSensitivity || 100;
     if (opacity) opacity.value = this.mobileHud.opacity;
     if (stickX) stickX.value = this.mobileHud.stickX;
     if (stickY) stickY.value = this.mobileHud.stickY;

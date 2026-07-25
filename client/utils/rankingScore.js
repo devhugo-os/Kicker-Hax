@@ -111,7 +111,12 @@ export function compareWinRateRanking(a, b) {
   const rateDifference = getCompetitiveWinRate(b) - getCompetitiveWinRate(a);
   if (Math.abs(rateDifference) > Number.EPSILON) return rateDifference;
   if ((b.matchesPlayed || 0) !== (a.matchesPlayed || 0)) return (b.matchesPlayed || 0) - (a.matchesPlayed || 0);
-  return compareOverallRanking(a, b);
+  if ((b.wins || 0) !== (a.wins || 0)) return (b.wins || 0) - (a.wins || 0);
+  const headToHead = Number(b?.headToHead?.[a?.uid] || 0) - Number(a?.headToHead?.[b?.uid] || 0);
+  if (headToHead) return headToHead;
+  const recent = Number(b?.recentPerformance || 0) - Number(a?.recentPerformance || 0);
+  if (Math.abs(recent) > Number.EPSILON) return recent;
+  return String(a.uid || '').localeCompare(String(b.uid || ''));
 }
 
 export function comparePossessionRanking(a, b) {
@@ -122,7 +127,9 @@ export function comparePossessionRanking(a, b) {
   const aMatches = Number(a?.possessionMatches ?? a?.matchesPlayed ?? 0);
   const bMatches = Number(b?.possessionMatches ?? b?.matchesPlayed ?? 0);
   if (bMatches !== aMatches) return bMatches - aMatches;
-  return compareOverallRanking(a, b);
+  const recent = Number(b?.recentPerformance || 0) - Number(a?.recentPerformance || 0);
+  if (Math.abs(recent) > Number.EPSILON) return recent;
+  return String(a.uid || '').localeCompare(String(b.uid || ''));
 }
 
 export function compareRatingRanking(a, b) {
@@ -132,5 +139,7 @@ export function compareRatingRanking(a, b) {
   if (Math.abs(averageDifference) > Number.EPSILON) return averageDifference;
   const matchDifference = Number(b?.ratingMatches || 0) - Number(a?.ratingMatches || 0);
   if (matchDifference) return matchDifference;
-  return compareOverallRanking(a, b);
+  const recent = Number(b?.recentPerformance || 0) - Number(a?.recentPerformance || 0);
+  if (Math.abs(recent) > Number.EPSILON) return recent;
+  return String(a.uid || '').localeCompare(String(b.uid || ''));
 }

@@ -55,6 +55,7 @@ export class MatchRecordingPlayer {
 
   bind() {
     this.playButton?.addEventListener('click', () => this.toggle());
+    this.canvas?.addEventListener('click', () => this.toggle());
     this.previousHighlightButton?.addEventListener('click', () => this.seekToPreviousHighlight());
     this.nextHighlightButton?.addEventListener('click', () => this.seekToNextHighlight());
     this.fullscreenButton?.addEventListener('click', () => this.toggleFullscreen());
@@ -97,10 +98,13 @@ export class MatchRecordingPlayer {
       if (this.playButton) this.playButton.textContent = '▶';
     });
     document.addEventListener('keydown', event => {
-      if (event.code !== 'Space' || this.root?.classList.contains('hidden')) return;
+      if (this.root?.classList.contains('hidden')) return;
       if (event.target?.matches?.('input, textarea, select, button, [contenteditable="true"]')) return;
+      if (!['Space', 'ArrowLeft', 'ArrowRight'].includes(event.code)) return;
       event.preventDefault();
-      this.toggle();
+      if (event.code === 'ArrowLeft') this.seekToPreviousHighlight();
+      else if (event.code === 'ArrowRight') this.seekToNextHighlight();
+      else this.toggle();
     });
   }
 

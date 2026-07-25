@@ -79,6 +79,10 @@ export const gameController = {
   performanceProfile: null,
   lastOnlineRenderAt: 0,
   lastMatchHudRefreshAt: 0,
+  fpsFrameCount: 0,
+  fpsWindowStartedAt: 0,
+  displayFps: 60,
+  mobileChatUnreadCount: 0,
 
   // Local Stats Track
   goalsScored: 0,
@@ -145,6 +149,7 @@ export const gameController = {
     this.setupViewTriggers();
     this.bindDOMEvents();
     this.setupMobileControls();
+    window.addEventListener('kicker:performanceOverlayUpdated', () => this.refreshPerformanceOverlays());
 
     // Establish WebSocket connection on startup to bind indicators
     try {
@@ -270,13 +275,10 @@ export const gameController = {
       : renderCostMs;
     if (now - this.lastPerformanceAdjustmentAt < 900) return;
     this.lastPerformanceAdjustmentAt = now;
-    const target = this.currentRenderFps || this.performanceProfile.targetRenderFps;
-    const budget = 1000 / target;
-    if (this.renderCostAverage > budget * 0.82) {
-      this.currentRenderFps = Math.max(this.performanceProfile.minRenderFps, target - 4);
-    } else if (this.renderCostAverage < budget * 0.48) {
-      this.currentRenderFps = Math.min(this.performanceProfile.maxRenderFps, target + 3);
-    }
+    const budget = 1000 / 60;
+    this.currentRenderFps = this.renderCostAverage > budget * 1.15
+      ? this.performanceProfile.minRenderFps
+      : this.performanceProfile.maxRenderFps;
   },
 
   shouldRefreshMatchHud(now = performance.now()) {
@@ -284,6 +286,26 @@ export const gameController = {
     if (now - this.lastMatchHudRefreshAt < interval) return false;
     this.lastMatchHudRefreshAt = now;
     return true;
+  },
+
+  refreshPerformanceOverlays() {
+    const inMatch = router.currentScreenId === 'match-screen';
+    const showPing = localStorage.getItem('kicker_hax_show_ping') !== 'false';
+    const showFps = localStorage.getItem('kicker_hax_show_fps') !== 'false';
+    document.getElementById('ping-indicator')?.classList.toggle('hidden', !inMatch || this.mode !== 'multiplayer' || !showPing);
+    document.getElementById('fps-indicator')?.classList.toggle('hidden', !inMatch || !showFps);
+  },
+
+  trackRenderedFrame(now = performance.now()) {
+    if (!this.fpsWindowStartedAt) this.fpsWindowStartedAt = now;
+    this.fpsFrameCount += 1;
+    const elapsed = now - this.fpsWindowStartedAt;
+    if (elapsed < 750) return;
+    this.displayFps = Math.max(0, Math.round((this.fpsFrameCount * 1000) / elapsed));
+    const fps = document.getElementById('fps-indicator');
+    if (fps) fps.textContent = `FPS: ${this.displayFps}`;
+    this.fpsFrameCount = 0;
+    this.fpsWindowStartedAt = now;
   },
 
   /**
@@ -340,14 +362,15 @@ export const gameController = {
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
       const max = Math.max(24, rect.width * 0.36);
+      const sensitivity = Math.max(0.5, Math.min(1.5, Number(settingsController.mobileHud?.stickSensitivity || 100) / 100));
       const dx = e.clientX - cx;
       const dy = e.clientY - cy;
       const len = Math.hypot(dx, dy) || 1;
       const limited = Math.min(max, len);
       const nx = (dx / len) * limited;
       const ny = (dy / len) * limited;
-      this.virtualInput.x = Math.max(-1, Math.min(1, dx / max));
-      this.virtualInput.y = Math.max(-1, Math.min(1, dy / max));
+      this.virtualInput.x = Math.max(-1, Math.min(1, (dx / max) * sensitivity));
+      this.virtualInput.y = Math.max(-1, Math.min(1, (dy / max) * sensitivity));
       knob.style.transform = `translate(calc(-50% + ${nx}px), calc(-50% + ${ny}px))`;
       this.flushMobileOnlineInput();
     };
@@ -1057,6 +1080,10 @@ export const gameController = {
     this.canvas = document.getElementById('match-canvas');
     this.ctx = this.canvas.getContext('2d', { alpha: false, desynchronized: true });
     this.configureMatchPerformance();
+    this.fpsFrameCount = 0;
+    this.fpsWindowStartedAt = performance.now();
+    this.displayFps = 60;
+    this.mobileChatUnreadCount = 0;
     // Match views are disposable. Do not carry a paused menu or host pause
     // marker into a new game after a player exits and comes back.
     this.isPaused = false;
@@ -1116,8 +1143,7 @@ export const gameController = {
 
     this.refreshMobileMatchChrome();
     this.applyMobileHudSettings();
-    const pingEl = document.getElementById('ping-indicator');
-    if (pingEl) pingEl.classList.toggle('hidden', this.mode !== 'multiplayer');
+    this.refreshPerformanceOverlays();
 
     // Focus lost event listener
     const focusLostBadge = document.getElementById('focus-lost-badge');
@@ -1151,6 +1177,7 @@ export const gameController = {
           gameChat.classList.toggle('mobile-chat-modal', this.isTouchDevice() && willOpen);
           document.getElementById('game-chat-form')?.classList.toggle('active', willOpen);
           if (!gameChat.classList.contains('hidden')) {
+            this.clearMobileChatUnread();
             requestAnimationFrame(() => this.scrollChatToLatest('game-chat-messages'));
             document.getElementById('game-chat-input')?.focus();
           }
@@ -1499,6 +1526,7 @@ export const gameController = {
         try {
 
         if (typeof timestamp !== 'number') timestamp = performance.now();
+        this.trackRenderedFrame(timestamp);
         let dt = timestamp - lastTime;
         if (dt > 100) dt = 100; // Cap to avoid freeze spirals
         lastTime = timestamp;
@@ -1995,6 +2023,8 @@ export const gameController = {
             p.invuln = phys.invuln;
             p.passRequestTimer = phys.passRequestTimer || 0;
             p.lowEffects = !!this.performanceProfile?.lowEffects;
+            p.renderTrail = false;
+            p.trail.length = 0;
             p.draw(this.ctx, localBallSim.owner);
           });
         }
@@ -2816,7 +2846,9 @@ export const gameController = {
           this.players.push(p);
         }
         p.updateState(sp, snapshotReceivedAt, extrapolateMotion);
-        p.renderTrail = !this.isTouchDevice();
+        // Persistent dash silhouettes caused ghosting and canvas artifacts,
+        // especially in Android WebView. The action itself remains unchanged.
+        p.renderTrail = false;
         p.lowEffects = !!this.performanceProfile?.lowEffects;
         if (!p.renderTrail) p.trail.length = 0;
       });
@@ -3021,6 +3053,7 @@ export const gameController = {
         return;
       }
       this.lastOnlineRenderAt = timestamp;
+      this.trackRenderedFrame(timestamp);
       const renderStartedAt = performance.now();
       const refreshHud = this.shouldRefreshMatchHud(timestamp);
 
@@ -3066,8 +3099,10 @@ export const gameController = {
       const clockEl = document.getElementById('match-clock');
       const scoreEl = document.getElementById('match-score');
 
-      if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-      if (scoreEl) scoreEl.textContent = `${this.score.red} : ${this.score.blue}`;
+      if (refreshHud) {
+        if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        if (scoreEl) scoreEl.textContent = `${this.score.red} : ${this.score.blue}`;
+      }
 
       if (this.status === 'countdown' && this.phaseEndsAt > 0) {
         const serverNow = Date.now() + Number(this.serverClockOffsetMs || 0);
@@ -3081,14 +3116,15 @@ export const gameController = {
       if (me) {
         const myStam = document.getElementById('right-stam-fill');
         const myPow = document.getElementById('right-pow-fill');
-        if (myStam) myStam.style.height = `${me.stamina * 100}%`;
-
-        if (myPow) myPow.style.height = `${localCharge * 100}%`;
-        this.updateMobileActionMeters(
-          me.stamina,
-          Math.max(localCharge, me.kickCharge || 0),
-          me.passRequestCooldown || 0
-        );
+        if (refreshHud) {
+          if (myStam) myStam.style.height = `${me.stamina * 100}%`;
+          if (myPow) myPow.style.height = `${localCharge * 100}%`;
+          this.updateMobileActionMeters(
+            me.stamina,
+            Math.max(localCharge, me.kickCharge || 0),
+            me.passRequestCooldown || 0
+          );
+        }
 
         const canTrackLiveStats = this.status === 'playing' && !this.matchHostPaused && !this.inReplay;
         const serverStatsAvailable = !!me.matchStats;
@@ -3152,18 +3188,18 @@ export const gameController = {
         const rightTacklesEl = document.getElementById('right-stat-tackles');
         const rightDribblesEl = document.getElementById('right-stat-dribbles');
         const rightAssistsEl = document.getElementById('right-stat-assists');
-        if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
-        if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
-        if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
-        if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
-        if (rightAssistsEl) rightAssistsEl.textContent = this.p1Assists || 0;
         if (refreshHud) {
+          if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
+          if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
+          if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
+          if (rightDribblesEl) rightDribblesEl.textContent = this.p1Dribbles || 0;
+          if (rightAssistsEl) rightAssistsEl.textContent = this.p1Assists || 0;
           this.refreshMobileStatsModal();
           this.refreshLiveMatchReportIfOpen();
         }
       }
 
-      if (opp) {
+      if (opp && refreshHud) {
         const oppStam = document.getElementById('left-stam-fill');
         const oppPow = document.getElementById('left-pow-fill');
         if (oppStam) oppStam.style.height = `${opp.stamina * 100}%`;
@@ -3182,6 +3218,7 @@ export const gameController = {
         this.drawCenterBanner(label, assistLabel, true);
       }
 
+      this.adaptMobileRenderBudget(performance.now() - renderStartedAt, timestamp);
       this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
     };
 
@@ -3203,7 +3240,6 @@ export const gameController = {
         }, 12000);
       }
 
-      this.adaptMobileRenderBudget(performance.now() - renderStartedAt, timestamp);
     }
   },
 
@@ -3252,6 +3288,7 @@ export const gameController = {
     this.players = [];
     this.ball = null;
     document.getElementById('ping-indicator')?.classList.add('hidden');
+    document.getElementById('fps-indicator')?.classList.add('hidden');
     document.getElementById('match-screen')?.classList.remove('mobile-match', 'mobile-stats-open', 'hud-editor-mode');
     this.hudEditorMode = false;
   },
@@ -4933,6 +4970,25 @@ export const gameController = {
       // Auto scroll bottom
       chatList.scrollTop = chatList.scrollHeight;
     });
+    const gameChat = document.getElementById('game-chat-overlay');
+    const isOwnMessage = !!msg.uid && msg.uid === this.currentUser?.uid;
+    if (this.mode === 'multiplayer' && this.isTouchDevice() && gameChat?.classList.contains('hidden') && !isOwnMessage) {
+      this.mobileChatUnreadCount = Math.min(99, Number(this.mobileChatUnreadCount || 0) + 1);
+      const button = document.getElementById('mobile-chat-toggle');
+      const badge = document.getElementById('mobile-chat-unread');
+      if (badge) {
+        badge.textContent = String(this.mobileChatUnreadCount);
+        badge.classList.remove('hidden');
+      }
+      button?.classList.remove('mobile-chat-alert');
+      requestAnimationFrame(() => button?.classList.add('mobile-chat-alert'));
+    }
+  },
+
+  clearMobileChatUnread() {
+    this.mobileChatUnreadCount = 0;
+    document.getElementById('mobile-chat-unread')?.classList.add('hidden');
+    document.getElementById('mobile-chat-toggle')?.classList.remove('mobile-chat-alert');
   },
 
   clearRoomChatViews() {

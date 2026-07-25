@@ -1605,12 +1605,12 @@ export class P2PSocketService {
     if (!physicalPlayer || !this.serverRoom?.match || this.serverRoom.status !== 'playing') return;
     const rosterPlayer = this.serverRoom.players.find(player => player.id === physicalPlayer.id);
     if (!rosterPlayer || rosterPlayer.disconnected || rosterPlayer.team === 'spectator') return;
-    this.serverRoom.match.markParticipantStatus(rosterPlayer.id, 'disconnected');
     if ((rosterPlayer.rejoinCount || 0) >= 2) {
       // A disconnected roster record cannot cast the final continuation vote.
       const teammates = this.serverRoom.players.filter(player => !player.cpu && !player.disconnected && player.team === rosterPlayer.team && player.id !== rosterPlayer.id);
       this.blockRoomRejoin(rosterPlayer.uid);
       if (teammates.length === 0) {
+        this.serverRoom.match.markParticipantStatus(rosterPlayer.id, 'disconnected');
         this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${rosterPlayer.username} excedeu o limite de retornos. O time adversário venceu.` });
         this.serverRoom.match.forfeitAgainstTeam(rosterPlayer.team === 'red' ? 0 : 1, {
           code: 'return_limit_exceeded',

@@ -203,6 +203,20 @@ export class ServerMatch {
     stats.participationStatus = participationStatus || 'disconnected';
   }
 
+  /** Clears a temporary disconnect after the authoritative player returns. */
+  restoreParticipantStatus(playerId) {
+    const stats = this.playerStats.get(playerId);
+    if (!stats || stats.participationStatus !== 'disconnected') return;
+    stats.participationStatus = Number(stats.teamChanges || 0) > 0 ? 'switched' : 'active';
+  }
+
+  /** Finalizes only players whose reconnect window really expired. */
+  finalizeDisconnectedParticipants() {
+    this.players
+      .filter(player => this.disconnectedUids.has(player.uid))
+      .forEach(player => this.markParticipantStatus(player.id, 'disconnected'));
+  }
+
   createPhysicalPlayer(lobbyPlayer) {
     const isRed = lobbyPlayer.team === 'red';
     const startX = isRed ? C.BORDER + 120 : this.w - C.BORDER - 120;
@@ -669,6 +683,7 @@ export class ServerMatch {
           // vote, so the opposite side receives the W.O.
           const disconnectedTeam = this.disconnectTeam;
           const disconnectedPlayers = [...this.disconnectedNames.values()];
+          this.finalizeDisconnectedParticipants();
           this.clearDisconnectPause();
           this.forfeitAgainstTeam(disconnectedTeam, {
             code: 'continuation_vote_failed',
@@ -1155,6 +1170,7 @@ export class ServerMatch {
     if (eligible.length === 0) {
       const team = this.disconnectTeam;
       const disconnectedPlayers = [...this.disconnectedNames.values()];
+      this.finalizeDisconnectedParticipants();
       this.clearDisconnectPause();
       return this.forfeitAgainstTeam(team, {
         code: 'reconnect_timeout_empty_team',
@@ -1212,7 +1228,10 @@ export class ServerMatch {
     this.inputs.set(nextId, input || { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false });
     const stats = this.playerStats.get(previousId);
     this.playerStats.delete(previousId);
-    if (stats) this.playerStats.set(nextId, stats);
+    if (stats) {
+      this.playerStats.set(nextId, stats);
+      this.restoreParticipantStatus(nextId);
+    }
     return true;
   }
 
@@ -1245,6 +1264,7 @@ export class ServerMatch {
     if (!removed.length) return false;
     this.players = this.players.filter(item => !missing.has(item.uid));
     removed.forEach(player => {
+      this.markParticipantStatus(player.id, 'disconnected');
       if (player.uid) this.eliminatedUids.add(player.uid);
       this.inputs.delete(player.id);
       if (this.ball.owner === player.id) this.ball.owner = null;

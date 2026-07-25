@@ -133,6 +133,11 @@
                   <option value="👤">Padrão 👤</option>
                 </select>
               </div>
+              <div class="avatar-inputs profile-skin-info hidden" id="profile-skin-info">
+                <span>Skin equipada</span>
+                <strong id="profile-skin-name">Novato</strong>
+                <small id="profile-skin-rarity">Comum</small>
+              </div>
             </div>
 
             <div class="input-group">
@@ -367,8 +372,14 @@
             <span class="subtext" id="music-volume-val-display">55%</span>
           </div>
           <button id="settings-btn-fullscreen" class="btn btn-secondary w-full" type="button">Tela cheia</button>
-
-
+          <label class="mobile-hud-option">
+            <span><strong>Exibir ping</strong><small>Mostra a latência durante partidas online.</small></span>
+            <input id="settings-show-ping" type="checkbox" checked autocomplete="off" />
+          </label>
+          <label class="mobile-hud-option">
+            <span><strong>Exibir FPS</strong><small>Mostra a fluidez atual da partida.</small></span>
+            <input id="settings-show-fps" type="checkbox" checked autocomplete="off" />
+          </label>
         </div>
       </div>
     </div>
@@ -398,6 +409,10 @@
             </span>
             <input id="mobile-tackle-assist-enabled" type="checkbox" checked autocomplete="off" />
           </label>
+          <div class="input-group mobile-only-setting">
+            <label for="mobile-stick-sensitivity">Sensibilidade do analógico</label>
+            <input id="mobile-stick-sensitivity" type="range" min="50" max="150" step="5" value="100" autocomplete="off" />
+          </div>
           <button id="mobile-hud-edit-match" class="btn btn-primary w-full" type="button">Editar HUD na partida</button>
           <button id="mobile-hud-save-layout" class="btn btn-secondary w-full hidden" type="button">Confirmar HUD Mobile</button>
         </div>
@@ -848,8 +863,9 @@
 
       <!-- Ping Overlay -->
       <div id="ping-indicator" class="ping-badge">Ping: 0ms</div>
+      <div id="fps-indicator" class="fps-badge">FPS: 60</div>
       <button id="mobile-stats-toggle" class="mobile-stats-toggle hidden" type="button">⚽</button>
-      <button id="mobile-chat-toggle" class="mobile-chat-toggle hidden" type="button">💬</button>
+      <button id="mobile-chat-toggle" class="mobile-chat-toggle hidden" type="button">💬<span id="mobile-chat-unread" class="mobile-chat-unread hidden">0</span></button>
       <button id="mobile-pause-toggle" class="mobile-pause-toggle hidden" type="button">⏸️</button>
       <div class="mobile-controls hidden" id="mobile-controls">
         <div class="mobile-stick">
@@ -1053,7 +1069,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v67.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v68.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1097,6 +1113,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v68.0 - FLUIDEZ TOTAL</h4>
+            <p>O multiplayer e o app agora priorizam 60 FPS, removem rastros de dash e reduzem trabalho de interface durante a partida. O HUD mobile recebeu posição padronizada para pedir passe, sensibilidade do analógico e alerta de chat com contador. Ping e FPS podem ser ocultados nas Configurações. O reprodutor aceita clique no campo, Espaço e setas para controlar a partida. Rankings de Winrate, posse e nota exigem amostra mínima e usam consistência, desempenho recente e confronto direto. O perfil mostra nome e raridade da skin equipada. Desconexões temporárias que terminam em retorno não aparecem mais como abandono no histórico.</p>
+          </section>
           <section>
             <h4>v67.0 - SIX-SEVEN</h4>
             <p>O perfil ganhou Empates no resumo e o ranking agora abre diretamente pelo Overall, com critérios mais rígidos para Winrate, posse, nota e desempenho completo. A gravação preserva a proporção no fullscreen, reduz artefatos em celulares, reproduz torcida apenas durante o play, ajusta avisos longos e navega corretamente entre lances distintos. HUD mobile ganhou passe mais à direita, recarga maior e medidor visual. Skins voltaram a aparecer na partida, o mercado recebeu novas criações e a Mítica SIX-SEVEN 67 com chance de 0,1%. Espectadores integrais não recebem resultados; participantes que saem, trocam de time ou são removidos permanecem identificados com notas justas. O app ganhou renderização adaptativa e transporte online mais responsivo.</p>

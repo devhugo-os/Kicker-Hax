@@ -316,6 +316,7 @@ export const menuController = {
     const badgeControls = document.getElementById('profile-badge-controls');
     const usesDefaultSkin = usesProfileBadge(this.profileDraft);
     badgeControls?.classList.toggle('hidden', !usesDefaultSkin);
+    this.renderProfileCosmeticInfo(this.profileDraft);
     this.updateProfileDirtyState();
     const coins = document.getElementById('profile-coins');
     if (coins) coins.textContent = this.profileData.coins || 0;
@@ -561,6 +562,28 @@ export const menuController = {
     this.updateProfileDirtyState();
     const usesDefaultSkin = usesProfileBadge(this.profileDraft);
     document.getElementById('profile-badge-controls')?.classList.toggle('hidden', !usesDefaultSkin);
+    this.renderProfileCosmeticInfo(this.profileDraft, skin);
+  },
+
+  renderProfileCosmeticInfo(profile, selectedSkin = null) {
+    const usesDefaultSkin = usesProfileBadge(profile);
+    const info = document.getElementById('profile-skin-info');
+    info?.classList.toggle('hidden', usesDefaultSkin);
+    if (usesDefaultSkin || !info) return;
+    const skin = selectedSkin || getEquippedSkin(profile);
+    const rarityLabels = {
+      common: 'Comum',
+      rare: 'Rara',
+      epic: 'Épica',
+      legendary: 'Lendária',
+      mythic: 'Mítica',
+      custom: 'Comunidade',
+      none: 'Sem raridade'
+    };
+    const name = document.getElementById('profile-skin-name');
+    const rarity = document.getElementById('profile-skin-rarity');
+    if (name) name.textContent = skin?.name || 'Skin personalizada';
+    if (rarity) rarity.textContent = rarityLabels[skin?.rarity || (profile?.equippedSkinImage ? 'custom' : 'none')] || 'Especial';
   },
 
   updateProfileDirtyState() {

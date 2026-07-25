@@ -41,7 +41,7 @@ export class ClientPlayer {
     this.matchStats = serverPlayer.matchStats || null;
     this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
     this.passRequestCooldown = Number(serverPlayer.passRequestCooldown || 0);
-    this.renderTrail = true;
+    this.renderTrail = false;
     this.lowEffects = false;
     
     // Aesthetic trails
@@ -77,7 +77,8 @@ export class ClientPlayer {
     if (Object.hasOwn(serverPlayer, 'passRequestCooldown')) this.passRequestCooldown = Number(serverPlayer.passRequestCooldown || 0);
     if (Object.hasOwn(serverPlayer, 'matchStats')) this.matchStats = serverPlayer.matchStats || null;
 
-    // Record trail for active sprint
+    // Trails are opt-in only. Persistent silhouettes caused visible ghosting
+    // and texture tearing on lower-end Android WebViews.
     if (this.renderTrail && this.staminaLock <= 0 && this.invuln > 0) {
       this.trail.push({ x: this.x, y: this.y, alpha: 0.5 });
       if (this.trail.length > 5) this.trail.shift();
@@ -113,6 +114,11 @@ export class ClientPlayer {
       }
     }
     const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
+    const targetError = Math.hypot(expectedX - this.x, expectedY - this.y);
+    if (targetError > 180) {
+      this.x = expectedX;
+      this.y = expectedY;
+    }
 
     const previousX = this.x;
     const previousY = this.y;
@@ -120,8 +126,10 @@ export class ClientPlayer {
     // Advance the visual target between snapshots. The six-frame cap keeps
     // remote movement continuous during a short mobile/network jitter burst;
     // authoritative targets still correct every received snapshot.
-    this.x += (expectedX - this.x) * correction;
-    this.y += (expectedY - this.y) * correction;
+    if (targetError <= 180) {
+      this.x += (expectedX - this.x) * correction;
+      this.y += (expectedY - this.y) * correction;
+    }
     const renderDx = this.x - previousX;
     const renderDy = this.y - previousY;
     // Network snapshots can briefly report zero velocity while the rendered

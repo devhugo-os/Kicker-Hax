@@ -106,7 +106,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '67.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '68.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -1084,6 +1084,25 @@ export const firebaseService = {
         historySnapshot.docs.map(historyDoc => ({ id: historyDoc.id, ...historyDoc.data() })),
         CURRENT_SEASON_ID
       );
+      const uniqueCompetitiveMatches = new Map();
+      historyByUid.forEach(matches => matches.forEach(match => {
+        if (!(match.competitive || match.category === 'competitive')) return;
+        uniqueCompetitiveMatches.set(match.matchId || match.id, match);
+      }));
+      const headToHeadByUid = new Map();
+      uniqueCompetitiveMatches.forEach(match => {
+        const uids = [...new Set(match.playerUids || Object.keys(match.playerTeams || {}))];
+        uids.forEach(uid => {
+          if (!headToHeadByUid.has(uid)) headToHeadByUid.set(uid, {});
+          uids.filter(opponent => opponent !== uid).forEach(opponent => {
+            const team = match.playerTeams?.[uid];
+            const opponentTeam = match.playerTeams?.[opponent];
+            if (!team || !opponentTeam || team === opponentTeam || match.winner === 'draw') return;
+            headToHeadByUid.get(uid)[opponent] = Number(headToHeadByUid.get(uid)[opponent] || 0)
+              + (match.winner === team ? 1 : -1);
+          });
+        });
+      });
       let ranking = [];
 
       for (const userDoc of querySnapshot.docs) {
@@ -1095,6 +1114,10 @@ export const firebaseService = {
         // Match receipts are the durable fallback when a client could save
         // history but its stats transaction was interrupted or rejected.
         const statsData = mergeCompetitiveHistoryStats(storedStats, historyByUid.get(uid) || [], uid);
+        const recentMatch = (historyByUid.get(uid) || [])
+          .filter(match => match.competitive || match.category === 'competitive')
+          .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))[0];
+        const recentPlayerStats = recentMatch?.playerStats?.find(player => player.uid === uid || player.playerId === uid);
         const seasonActive = userData.seasonId === CURRENT_SEASON_ID;
         const rankingPlayer = {
           uid,
@@ -1122,6 +1145,8 @@ export const firebaseService = {
           ratingTotal: Number(statsData.ratingTotal || 0),
           ratingMatches: Number(statsData.ratingMatches || 0),
           ratingAvg: getAverageMatchRating(statsData),
+          recentPerformance: Number(recentPlayerStats?.rating || 0),
+          headToHead: headToHeadByUid.get(uid) || {},
           mvps: statsData.mvps || 0,
           xp: seasonActive ? (userData.xp || 0) : 0,
           // Wallet balance belongs to the user document and remains rankable
@@ -1149,11 +1174,11 @@ export const firebaseService = {
         if (criteria === 'draws') return (r.draws || 0) > 0;
         if (criteria === 'ownGoals') return (r.ownGoals || 0) > 0;
         if (criteria === 'tackles') return (r.tackles || 0) > 0;
-        if (criteria === 'possession') return (r.possessionAvg || 0) > 0;
-        if (criteria === 'rating') return (r.ratingMatches || 0) > 0;
+        if (criteria === 'possession') return (r.possessionMatches || 0) >= 3 && (r.possessionAvg || 0) > 0;
+        if (criteria === 'rating') return (r.ratingMatches || 0) >= 3;
         if (criteria === 'coins') return r.coins > 0;
         if (criteria === 'skins') return r.skinCount > 0;
-        if (criteria === 'winrate') return (r.matchesPlayed || 0) > 0;
+        if (criteria === 'winrate') return (r.matchesPlayed || 0) >= 3;
         if (criteria === 'overall') {
           return (r.matchesPlayed || 0) > 0;
         }

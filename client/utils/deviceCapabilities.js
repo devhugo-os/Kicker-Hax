@@ -28,13 +28,16 @@ export function getMatchPerformanceProfile(navigatorLike = globalThis.navigator,
   const cores = Number(navigatorLike?.hardwareConcurrency || 0);
   const constrained = mobileHud && ((memory > 0 && memory <= 4) || (cores > 0 && cores <= 4));
   const lowEffects = mobileHud && (nativeApp || constrained);
-  const targetRenderFps = constrained ? 36 : 60;
+  // Keep animation at the display cadence. Lowering weak phones to 36 FPS
+  // made input and interpolation visibly stutter; cosmetic work is throttled
+  // separately instead of dropping gameplay frames.
+  const targetRenderFps = 60;
   return {
     mobileHud,
     lowEffects,
     targetRenderFps,
-    minRenderFps: mobileHud ? 30 : 60,
-    maxRenderFps: constrained ? 45 : 60,
-    hudIntervalMs: lowEffects ? 150 : 50
+    minRenderFps: mobileHud ? 50 : 60,
+    maxRenderFps: 60,
+    hudIntervalMs: lowEffects ? 200 : 75
   };
 }
