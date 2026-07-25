@@ -10,6 +10,7 @@ export class ClientPlayer {
     this.name = serverPlayer.name || 'Jogador';
     this.badge = serverPlayer.badge || '';
     this.skin = serverPlayer.skin || '';
+    this.skinId = serverPlayer.skinId || '';
     this.team = serverPlayer.team; // 0 (Red) or 1 (Blue)
     
     this.x = serverPlayer.x;
@@ -54,6 +55,7 @@ export class ClientPlayer {
     if (Object.hasOwn(serverPlayer, 'name')) this.name = serverPlayer.name;
     if (Object.hasOwn(serverPlayer, 'badge')) this.badge = serverPlayer.badge;
     this.skin = serverPlayer.skin || this.skin || '';
+    if (Object.hasOwn(serverPlayer, 'skinId')) this.skinId = serverPlayer.skinId || this.skinId || '';
     this.team = serverPlayer.team;
     
     this.vx = Number(serverPlayer.vx || 0);
@@ -248,7 +250,7 @@ export class ClientPlayer {
   }
 
   getIdentityCacheKey() {
-    return [this.name, this.badge, this.skin, this.team, this.staffRole].join('|');
+    return [this.name, this.badge, this.skinId, this.skin, this.team, this.staffRole].join('|');
   }
 
   paintIdentity(ctx, x, y) {
@@ -261,7 +263,8 @@ export class ClientPlayer {
     ctx.stroke();
 
     const skinDrawn = drawSkinImage(ctx, this.skin, x, y, this.r - 1);
-    if (!skinDrawn && this.badge) {
+    const usesBadge = !this.skinId || this.skinId === 'rookie';
+    if (!skinDrawn && usesBadge && this.badge) {
       ctx.fillStyle = '#0b1020';
       const graphemes = segmentGraphemes(this.badge);
       const fontSize = (graphemes.length >= 2 && !isEmojiCluster(graphemes[0])) ? 14 : 16;
@@ -285,25 +288,34 @@ export class ClientPlayer {
   }
 
   drawIdentityLayer(ctx) {
-    const key = this.getIdentityCacheKey();
+    // Mobile stretches the logical pitch over many physical pixels. Cache the
+    // identity at 2x and downsample once so detailed skins remain recognizable
+    // without decoding or clipping the source image every gameplay frame.
+    const resolutionScale = this.lowEffects ? 2 : 1;
+    const key = `${this.getIdentityCacheKey()}|${resolutionScale}x`;
     const width = 260;
     const height = 112;
     const centerX = width / 2;
     const centerY = 70;
     if (this.identityCacheCanvas && this.identityCacheKey === key) {
-      ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY);
+      ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY, width, height);
       return;
     }
 
     const sprite = document.createElement('canvas');
-    sprite.width = width;
-    sprite.height = height;
+    sprite.width = width * resolutionScale;
+    sprite.height = height * resolutionScale;
     const spriteCtx = sprite.getContext('2d');
+    if (spriteCtx) {
+      spriteCtx.imageSmoothingEnabled = true;
+      spriteCtx.imageSmoothingQuality = 'high';
+      spriteCtx.scale(resolutionScale, resolutionScale);
+    }
     const cacheReady = spriteCtx && this.paintIdentity(spriteCtx, centerX, centerY);
     if (cacheReady) {
       this.identityCacheCanvas = sprite;
       this.identityCacheKey = key;
-      ctx.drawImage(sprite, this.x - centerX, this.y - centerY);
+      ctx.drawImage(sprite, this.x - centerX, this.y - centerY, width, height);
       return;
     }
 

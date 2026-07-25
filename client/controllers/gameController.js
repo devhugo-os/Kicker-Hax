@@ -83,6 +83,7 @@ export const gameController = {
   fpsWindowStartedAt: 0,
   displayFps: 60,
   mobileChatUnreadCount: 0,
+  matchIdentityCache: new Map(),
 
   // Local Stats Track
   goalsScored: 0,
@@ -2862,6 +2863,7 @@ export const gameController = {
           this.players.push(p);
         }
         p.updateState(sp, snapshotReceivedAt, extrapolateMotion);
+        this.refreshMatchPlayerIdentity(sp, p);
         // Persistent dash silhouettes caused ghosting and canvas artifacts,
         // especially in Android WebView. The action itself remains unchanged.
         p.renderTrail = false;
@@ -3102,13 +3104,11 @@ export const gameController = {
       this.drawNetOverlay(this.ctx);
       if (cameraShaking) this.ctx.restore();
 
-      // Refresh HUD Score clock
-      const m = Math.floor(this.matchTime / 60);
-      const s = Math.floor(this.matchTime % 60);
-      const clockEl = document.getElementById('match-clock');
-      const scoreEl = document.getElementById('match-score');
-
       if (refreshHud) {
+        const m = Math.floor(this.matchTime / 60);
+        const s = Math.floor(this.matchTime % 60);
+        const clockEl = document.getElementById('match-clock');
+        const scoreEl = document.getElementById('match-score');
         if (clockEl) clockEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
         if (scoreEl) scoreEl.textContent = `${this.score.red} : ${this.score.blue}`;
       }
@@ -3124,9 +3124,9 @@ export const gameController = {
 
       if (me) {
         this.updateMobileShootMeter(Math.max(localCharge, me.kickCharge || 0));
-        const myStam = document.getElementById('right-stam-fill');
-        const myPow = document.getElementById('right-pow-fill');
         if (refreshHud) {
+          const myStam = document.getElementById('right-stam-fill');
+          const myPow = document.getElementById('right-pow-fill');
           if (myStam) myStam.style.height = `${me.stamina * 100}%`;
           if (myPow) myPow.style.height = `${localCharge * 100}%`;
           this.updateMobileActionMeters(
@@ -3139,14 +3139,17 @@ export const gameController = {
         const canTrackLiveStats = this.status === 'playing' && !this.matchHostPaused && !this.inReplay;
         const serverStatsAvailable = !!me.matchStats;
         if (serverStatsAvailable) {
-          const allStats = this.players.map(player => player.matchStats).filter(Boolean);
-          const totalPossession = allStats.reduce((sum, stats) => sum + (stats.possessionFrames || 0), 0);
           this.p1PossessionFrames = me.matchStats.possessionFrames || 0;
-          this.totalPossessionFrames = totalPossession;
           this.p1Shots = me.matchStats.shots || 0;
           this.p1Tackles = me.matchStats.tackles || 0;
           this.p1Dribbles = me.matchStats.dribbles || 0;
           this.p1Assists = me.matchStats.assists || 0;
+          if (refreshHud) {
+            this.totalPossessionFrames = this.players.reduce(
+              (sum, player) => sum + Number(player.matchStats?.possessionFrames || 0),
+              0
+            );
+          }
         }
         // Track live stats only while the authoritative match is moving.
         if (!serverStatsAvailable && opp && canTrackLiveStats) {
@@ -3193,12 +3196,12 @@ export const gameController = {
           this.p1DribbleLock = false;
         }
 
-        const rightPossEl = document.getElementById('right-stat-possession');
-        const rightShotsEl = document.getElementById('right-stat-shots');
-        const rightTacklesEl = document.getElementById('right-stat-tackles');
-        const rightDribblesEl = document.getElementById('right-stat-dribbles');
-        const rightAssistsEl = document.getElementById('right-stat-assists');
         if (refreshHud) {
+          const rightPossEl = document.getElementById('right-stat-possession');
+          const rightShotsEl = document.getElementById('right-stat-shots');
+          const rightTacklesEl = document.getElementById('right-stat-tackles');
+          const rightDribblesEl = document.getElementById('right-stat-dribbles');
+          const rightAssistsEl = document.getElementById('right-stat-assists');
           if (rightPossEl) rightPossEl.textContent = `${p1Poss}%`;
           if (rightShotsEl) rightShotsEl.textContent = this.p1Shots || 0;
           if (rightTacklesEl) rightTacklesEl.textContent = this.p1Tackles || 0;
@@ -3765,9 +3768,12 @@ export const gameController = {
   updateMobileShootMeter(kickCharge = 0, shootButton = null) {
     const progress = Math.max(0, Math.min(1, Number(kickCharge) || 0));
     if (Math.abs(progress - Number(this.lastRenderedShootMeter || 0)) < 0.006 && progress !== 0 && progress !== 1) return;
-    const button = shootButton
-      || document.querySelector('#mobile-controls [data-mobile-action="shoot"]');
-    if (!button || button.closest('#mobile-controls')?.classList.contains('hidden')) return;
+    if (!this.mobileShootButton?.isConnected) {
+      this.mobileShootButton = document.querySelector('#mobile-controls [data-mobile-action="shoot"]');
+      this.mobileControlsElement = document.getElementById('mobile-controls');
+    }
+    const button = shootButton || this.mobileShootButton;
+    if (!button || this.mobileControlsElement?.classList.contains('hidden')) return;
     button.style.setProperty('--charge-progress', progress.toFixed(3));
     button.classList.toggle('is-charging', progress > 0 && progress < 1);
     this.lastRenderedShootMeter = progress;
@@ -4376,7 +4382,12 @@ export const gameController = {
   },
 
   drawShotPreview(cx, player, ball, input, charge = 0) {
-    if (!player || !ball || !input?.shoot) {
+    const normalizedInputCharge = Math.max(0, Math.min(1, Number(charge) || 0));
+    // Local physics releases the shot between input sampling and drawing.
+    // Treat an existing charge as held input so one transient false value does
+    // not blink the guide in solo/training.
+    const previewActive = !!input?.shoot || normalizedInputCharge > 0.001;
+    if (!player || !ball || !previewActive) {
       this.shotPreviewState = null;
       return;
     }
@@ -4387,16 +4398,26 @@ export const gameController = {
       // Remote ownership can briefly disappear between otherwise valid
       // snapshots. Keep the locally confirmed aim for a few frames so the
       // distance guide remains steady while the shoot button is held.
+      const previous = this.shotPreviewState?.playerId === player.id ? this.shotPreviewState : null;
+      const previousAngle = Number(previous?.angle ?? liveAngle);
+      const angleDelta = Math.atan2(
+        Math.sin(liveAngle - previousAngle),
+        Math.cos(liveAngle - previousAngle)
+      );
+      const nextCharge = normalizedInputCharge;
       this.shotPreviewState = {
         playerId: player.id,
-        angle: liveAngle,
+        // Shortest-path interpolation prevents the guide from jumping when
+        // crossing -PI/PI or when a mobile stick changes direction quickly.
+        angle: previousAngle + angleDelta * 0.28,
+        charge: previous ? previous.charge + (nextCharge - previous.charge) * 0.34 : nextCharge,
         expiresAt: now + 180
       };
     }
     const preview = this.shotPreviewState;
     if (!preview || preview.playerId !== player.id || preview.expiresAt < now) return;
-    const angle = inputLength > 0.01 ? liveAngle : preview.angle;
-    const normalizedCharge = Math.max(0, Math.min(1, Number(charge) || 0));
+    const angle = preview.angle;
+    const normalizedCharge = Math.max(0, Math.min(1, Number(preview.charge) || 0));
     const power = C.KICK_BASE + C.KICK_CHARGE * normalizedCharge;
     const travel = power * C.FRICTION_FIELD / Math.max(0.01, 1 - C.FRICTION_FIELD);
     const targetX = Math.max(C.BORDER, Math.min(this.canvas.width - C.BORDER, ball.x + Math.cos(angle) * travel));
@@ -4991,8 +5012,19 @@ export const gameController = {
 
     const roomPlayer = this.activeRoom?.players?.find(player => player.uid === msg.uid);
     let profile = null;
-    if (msg.uid && (!roomPlayer || roomPlayer.skin === 'custom')) {
-      profile = await firebaseService.getUserProfile(msg.uid).catch(() => null);
+    if (msg.uid) {
+      const cached = this.matchIdentityCache.get(msg.uid);
+      if (cached && Date.now() - cached.loadedAt < 2000) {
+        profile = cached.profile;
+      } else {
+        profile = await firebaseService.getUserProfile(msg.uid).catch(() => null);
+        if (profile) {
+          this.matchIdentityCache.set(msg.uid, { profile, loadedAt: Date.now() });
+          if (this.matchIdentityCache.size > 32) {
+            this.matchIdentityCache.delete(this.matchIdentityCache.keys().next().value);
+          }
+        }
+      }
     }
     const identity = profile || {
       equippedSkinId: roomPlayer?.skin ? 'room-skin' : 'rookie',
@@ -5060,6 +5092,44 @@ export const gameController = {
       button?.classList.remove('mobile-chat-alert');
       requestAnimationFrame(() => button?.classList.add('mobile-chat-alert'));
     }
+  },
+
+  refreshMatchPlayerIdentity(serverPlayer, clientPlayer) {
+    const uid = serverPlayer?.uid;
+    if (!uid || !clientPlayer) return;
+    const applyProfile = profile => {
+      if (!profile) return;
+      const skin = getEquippedSkin(profile);
+      const nextSkin = skin?.image || '';
+      const nextSkinId = profile.equippedSkinId || 'rookie';
+      const nextBadge = profile.badge || clientPlayer.badge || '';
+      const nextStaffRole = profile.staffRole || clientPlayer.staffRole || '';
+      if (
+        clientPlayer.skin === nextSkin
+        && clientPlayer.skinId === nextSkinId
+        && clientPlayer.badge === nextBadge
+        && clientPlayer.staffRole === nextStaffRole
+      ) return;
+      clientPlayer.skin = nextSkin;
+      clientPlayer.skinId = nextSkinId;
+      clientPlayer.badge = nextBadge;
+      clientPlayer.staffRole = nextStaffRole;
+      clientPlayer.identityCacheKey = '';
+      clientPlayer.identityCacheCanvas = null;
+    };
+    const cached = this.matchIdentityCache.get(uid);
+    if (cached?.profile && Date.now() - cached.loadedAt < 15000) {
+      applyProfile(cached.profile);
+      return;
+    }
+    if (cached?.promise) return;
+    const promise = firebaseService.getUserProfile(uid)
+      .then(profile => {
+        this.matchIdentityCache.set(uid, { profile, loadedAt: Date.now() });
+        applyProfile(profile);
+      })
+      .catch(() => this.matchIdentityCache.delete(uid));
+    this.matchIdentityCache.set(uid, { promise, loadedAt: Date.now() });
   },
 
   clearMobileChatUnread() {

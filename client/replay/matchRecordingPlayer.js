@@ -7,7 +7,7 @@ import firebaseService from '../services/firebaseService.js';
 import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { soundFx } from '../utils/soundFx.js';
 import { findNextRecordingHighlight, findPreviousRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
-import { getMatchPerformanceProfile } from '../utils/deviceCapabilities.js';
+import { isNativeAppFrame } from '../utils/nativeBridge.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 const HIGHLIGHT_PREROLL_MS = 2500;
@@ -19,7 +19,8 @@ function formatTime(milliseconds) {
 
 export function renderRecordingFrame(canvas, recording, frame) {
   renderMatchRecordingFrame(canvas, recording, frame, {
-    lowEffects: getMatchPerformanceProfile().lowEffects,
+    lowEffects: false,
+    pixelRatio: Math.min(2, Number(window.devicePixelRatio || 1)),
     shake: frame.status === 'playing'
       && frame.ball?.lastStrikeType === 'power'
       && Number(frame.ball?.strikeTimer || 0) > 0
@@ -50,6 +51,9 @@ export class MatchRecordingPlayer {
     this.playbackRate = 1;
     this.hideControlsTimer = 0;
     this.lastHighlightTime = null;
+    this.nativeApp = isNativeAppFrame();
+    this.lastInterfaceRenderAt = 0;
+    this.lastReportKey = '';
     this.bind();
   }
 
@@ -86,6 +90,7 @@ export class MatchRecordingPlayer {
       this.updatePlaybackToggle();
       if (fullscreen) this.showFullscreenControls();
       else clearTimeout(this.hideControlsTimer);
+      requestAnimationFrame(() => this.render(true));
     });
     ['mousemove', 'pointermove', 'pointerdown', 'touchstart'].forEach(eventName => {
       this.root?.addEventListener(eventName, () => this.showFullscreenControls(), { passive: true });
@@ -261,12 +266,25 @@ export class MatchRecordingPlayer {
       ended,
       endReason: this.recording.endReason || (this.match?.forfeit ? 'wo' : 'normal'),
       winnerTeam: this.recording.winnerTeam ?? this.match?.winnerTeam ?? this.match?.winner,
-      lowEffects: getMatchPerformanceProfile().lowEffects
+      // Recording keeps every visual effect. App performance comes from the
+      // cached stadium and throttled DOM report, never from degraded graphics.
+      lowEffects: false,
+      pixelRatio: Math.min(this.nativeApp ? 1.6 : 2, Number(window.devicePixelRatio || 1))
     });
+    const now = performance.now();
+    const interfaceInterval = this.nativeApp && this.playing ? 100 : 0;
+    const updateInterface = !interfaceInterval || now - this.lastInterfaceRenderAt >= interfaceInterval || ended;
+    if (!updateInterface) return;
+    this.lastInterfaceRenderAt = now;
     this.timeline.value = String(Math.min(this.currentMs, this.recording.durationMs || 0));
     this.timeLabel.textContent = `${formatTime(this.currentMs)} / ${formatTime(this.recording.durationMs)}`;
     const report = this.getReportAt(this.currentMs);
-    if (report) {
+    const fullscreen = this.root?.classList.contains('recording-fullscreen-active');
+    const reportKey = report
+      ? `${Math.floor(this.currentMs / (this.nativeApp ? 500 : 150))}:${ended}`
+      : '';
+    if (report && !fullscreen && (reportKey !== this.lastReportKey || !this.playing)) {
+      this.lastReportKey = reportKey;
       renderMatchReport(this.report, report);
       this.report.classList.toggle('recording-final-report', ended);
       if (ended) {

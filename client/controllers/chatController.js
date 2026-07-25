@@ -95,7 +95,7 @@ export const chatController = {
       if (msg.uid) {
         try {
           const cached = this.identityCache.get(msg.uid);
-          if (!cached || Date.now() - cached.loadedAt > 60000) {
+          if (!cached || Date.now() - cached.loadedAt > 5000) {
             profile = await firebaseService.getUserProfile(msg.uid);
             this.identityCache.set(msg.uid, { profile, loadedAt: Date.now() });
           } else {

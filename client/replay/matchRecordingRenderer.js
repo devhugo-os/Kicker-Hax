@@ -2,6 +2,8 @@ import * as C from '../../shared/constants.js';
 import { drawSkinImage } from '../utils/skinRenderer.js';
 import { drawPowerKickBallEffect } from '../utils/powerKickFx.js';
 
+const stadiumFrameCache = new Map();
+
 function drawStadium(ctx, width, height) {
   ctx.fillStyle = '#020617';
   ctx.fillRect(0, 0, width, height);
@@ -50,6 +52,28 @@ function drawStadium(ctx, width, height) {
   const boxH = Math.min(250, fieldH * .44);
   ctx.strokeRect(fieldX, (height - boxH) / 2, boxW, boxH);
   ctx.strokeRect(width - fieldX - boxW, (height - boxH) / 2, boxW, boxH);
+}
+
+/**
+ * Builds the immutable stadium once at the actual canvas resolution. Android
+ * WebViews no longer repaint hundreds of crowd primitives on every frame,
+ * while the cached bitmap preserves the exact same visual quality.
+ */
+function getStadiumFrame(fieldWidth, fieldHeight, outputWidth, outputHeight) {
+  const key = `${fieldWidth}x${fieldHeight}:${outputWidth}x${outputHeight}`;
+  const cached = stadiumFrameCache.get(key);
+  if (cached) return cached;
+  const surface = document.createElement('canvas');
+  surface.width = outputWidth;
+  surface.height = outputHeight;
+  const context = surface.getContext('2d', { alpha: false, desynchronized: false });
+  context.setTransform(outputWidth / fieldWidth, 0, 0, outputHeight / fieldHeight, 0, 0);
+  drawStadium(context, fieldWidth, fieldHeight);
+  stadiumFrameCache.set(key, surface);
+  if (stadiumFrameCache.size > 2) {
+    stadiumFrameCache.delete(stadiumFrameCache.keys().next().value);
+  }
+  return surface;
 }
 
 function drawNetOverlay(ctx, width, height) {
@@ -207,12 +231,30 @@ function drawStatusNotice(ctx, width, height, title, subtitle = '') {
 export function renderMatchRecordingFrame(canvas, recording, frame, options = {}) {
   if (!canvas || !recording || !frame) return;
   const [fieldWidth, fieldHeight] = recording.field || [1024, 640];
-  if (canvas.width !== fieldWidth) canvas.width = fieldWidth;
-  if (canvas.height !== fieldHeight) canvas.height = fieldHeight;
-  const ctx = canvas.getContext('2d', { alpha: false });
+  const cssWidth = Math.max(1, Math.round(canvas.clientWidth || fieldWidth));
+  const cssHeight = Math.max(1, Math.round(canvas.clientHeight || fieldHeight));
+  const pixelRatio = Math.max(1, Math.min(2, Number(options.pixelRatio || 1)));
+  const outputWidth = Math.max(fieldWidth, Math.round(cssWidth * pixelRatio));
+  const outputHeight = Math.max(fieldHeight, Math.round(cssHeight * pixelRatio));
+  if (canvas.width !== outputWidth) canvas.width = outputWidth;
+  if (canvas.height !== outputHeight) canvas.height = outputHeight;
+  // Synchronous compositing avoids partially presented frames (black specks)
+  // seen in Android WebViews when a canvas is both animated and fullscreen.
+  const ctx = canvas.getContext('2d', { alpha: false, desynchronized: false });
+  const scaleX = outputWidth / fieldWidth;
+  const scaleY = outputHeight / fieldHeight;
+  const shakeX = options.shake ? (Math.random() - .5) * 8 : 0;
+  const shakeY = options.shake ? (Math.random() - .5) * 8 : 0;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#020617';
+  ctx.fillRect(0, 0, outputWidth, outputHeight);
+  ctx.drawImage(
+    getStadiumFrame(fieldWidth, fieldHeight, outputWidth, outputHeight),
+    shakeX * scaleX,
+    shakeY * scaleY
+  );
   ctx.save();
-  if (options.shake) ctx.translate((Math.random() - .5) * 8, (Math.random() - .5) * 8);
-  drawStadium(ctx, fieldWidth, fieldHeight);
+  ctx.setTransform(scaleX, 0, 0, scaleY, shakeX * scaleX, shakeY * scaleY);
   const actionEffectsActive = frame.status === 'playing';
   const ball = actionEffectsActive
     ? frame.ball
@@ -225,6 +267,8 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   // visibly inside the mesh instead of floating over it.
   drawNetOverlay(ctx, fieldWidth, fieldHeight);
   ctx.restore();
+  ctx.save();
+  ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
   drawHud(ctx, frame, fieldWidth);
   if (frame.status === 'loading') {
     drawStatusNotice(ctx, fieldWidth, fieldHeight, 'Aguardando jogadores...', 'A partida inicia quando todos abrirem o campo');
@@ -266,4 +310,5 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
       fieldHeight * .61
     );
   }
+  ctx.restore();
 }

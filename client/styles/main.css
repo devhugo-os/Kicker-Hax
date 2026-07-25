@@ -538,6 +538,18 @@ input[type="range"] {
 }
 .room-chat-avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 
+@media (pointer: coarse) {
+  .room-chat-avatar,
+  .msg-badge.profile-trigger {
+    width: 28px;
+    height: 28px;
+  }
+  .room-chat-avatar img,
+  .msg-badge.profile-trigger img {
+    image-rendering: auto;
+  }
+}
+
 .staff-tag {
   display: inline-flex;
   align-items: center;

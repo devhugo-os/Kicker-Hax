@@ -29,6 +29,14 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
   const shots = Math.max(0, Number(stats.shots || 0));
   const goals = Math.max(0, Number(stats.goals || 0));
   const missedShots = Math.max(0, shots - goals);
+  const shotAccuracy = shots > 0 ? goals / shots : 0;
+  // A lead is not a permanent rating shield. Repeated wasteful attempts and
+  // prolonged low involvement can lower the live score even while the team is
+  // winning, so the number reflects the current performance rather than only
+  // accumulating positive events.
+  const wastePenalty = shots >= 2
+    ? Math.min(1.15, missedShots * (shotAccuracy < .25 ? .16 : .1))
+    : missedShots * .08;
   const statusPenalty = {
     spectator: .45,
     switched: .25,
@@ -47,7 +55,7 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
     + (Number(stats.assists || 0) * 0.65)
     + (Math.min(10, Number(stats.tackles || 0)) * 0.14)
     + (Math.min(12, Number(stats.dribbles || 0)) * 0.08)
-    - (Math.min(10, missedShots) * 0.1)
+    - wastePenalty
     - (Number(stats.ownGoals || 0) * 1.2)
     - leftPenalty
     - inactivityPenalty
