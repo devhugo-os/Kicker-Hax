@@ -188,7 +188,9 @@ export class MatchRecordingSession {
           showActionEffects && player.tackle_cd > 0 ? 1 : 0,
           showActionEffects && player.dribble_cd > 0 ? 1 : 0,
           showActionEffects ? Number(player.stun || 0) : 0,
-          Number(player.passRequestTimer || 0)]
+          Number(player.passRequestTimer || 0)],
+        q(player.vx),
+        q(player.vy)
       ];
     }).filter(player => player[0] >= 0);
     const paused = !!state.isHostPaused || !!state.isDisconnectPaused;
@@ -310,7 +312,7 @@ export class MatchRecordingSession {
       encodedLength: payload.data.length,
       durationMs: base.durationMs,
       markerCount: base.markers.length,
-      recordingVersion: 10,
+      recordingVersion: 11,
       competitive: !!result?.competitive,
       createdAt: new Date().toISOString()
     };
@@ -355,7 +357,9 @@ export async function decodeMatchRecording(documentData) {
         tackling: player[6]?.[1] === 1,
         dribbling: player[6]?.[2] === 1,
         stun: Number(player[6]?.[3] || 0),
-        passRequestTimer: Number(player[6]?.[4] || 0)
+        passRequestTimer: Number(player[6]?.[4] || 0),
+        vx: uq(player[7]),
+        vy: uq(player[8])
       }))
     })),
     reports: (compact.reports || []).map(report => ({
@@ -390,7 +394,14 @@ export function interpolateRecordingFrame(first, second, ratio) {
     },
     players: first.players.map(player => {
       const next = nextByIndex.get(player.index);
-      return next ? { ...player, x: mix(player.x, next.x), y: mix(player.y, next.y), dir: mix(player.dir, next.dir) } : player;
+      return next ? {
+        ...player,
+        x: mix(player.x, next.x),
+        y: mix(player.y, next.y),
+        dir: mix(player.dir, next.dir),
+        vx: mix(player.vx, next.vx),
+        vy: mix(player.vy, next.vy)
+      } : player;
     })
   };
 }

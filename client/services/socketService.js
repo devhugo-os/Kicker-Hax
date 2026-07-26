@@ -140,7 +140,33 @@ export class P2PSocketService {
   async cleanupRoomData(roomCode) {
     if (!roomCode) return;
     const code = String(roomCode).toUpperCase();
-    await update(ref(rtdb), buildRoomCleanupPatch(code));
+    const patch = buildRoomCleanupPatch(code);
+    // Root updates require permission for every branch at once. A guest that
+    // merely discovers an expired room cannot satisfy the host-only branch
+    // while the old room record still exists, producing a noisy denied write.
+    // Delete the room first, then let each chat rule validate the now-missing
+    // parent independently.
+    const roomPath = `multiplayerRooms/${code}`;
+    const roomSnapshot = await get(ref(rtdb, roomPath)).catch(() => null);
+    const room = roomSnapshot?.val?.() || null;
+    const canDeleteRoom = !!auth.currentUser?.uid && (
+      room?.hostUid === auth.currentUser.uid
+      || room?.hostPresent !== true
+      || Number(room?.hostHeartbeatAt || 0) < Date.now() - 15000
+    );
+    if (canDeleteRoom) {
+      await remove(ref(rtdb, roomPath)).catch(() => {});
+    } else if (room) {
+      // The record is still host-owned and live enough that this client has no
+      // cleanup permission. Leave every child untouched and avoid denied
+      // writes while the host finishes publishing or refreshing the room.
+      return;
+    }
+    await Promise.allSettled(
+      Object.keys(patch)
+        .filter(path => path !== roomPath)
+        .map(path => remove(ref(rtdb, path)))
+    );
   }
 
   async cleanupRoomChats(roomCode) {
@@ -266,6 +292,20 @@ export class P2PSocketService {
 
   hasLiveHostConnection() {
     return this.isHost || !!(this.hostConn && this.hostConn.open && !this.hostDepartureReported);
+  }
+
+  /**
+   * Rejoining creates a new PeerJS identity. The previous unordered channel
+   * can still report `open` for a few milliseconds after its peer is replaced;
+   * leaving that reference alive prevents the new state channel from opening.
+   */
+  resetGuestTransportForJoin() {
+    const previousControl = this.hostConn;
+    const previousRealtime = this.realtimeHostConn;
+    this.hostConn = null;
+    this.realtimeHostConn = null;
+    try { previousRealtime?.close(); } catch { /* Already closed by PeerJS. */ }
+    try { previousControl?.close(); } catch { /* Already closed by PeerJS. */ }
   }
 
   /**
@@ -711,6 +751,7 @@ export class P2PSocketService {
       // A fresh PeerJS ID prevents a stale signalling registration from a
       // previous room attempt from receiving the new host response.
       this.generateClientId();
+      this.resetGuestTransportForJoin();
       // Invalidate callbacks from the previous transport before destroying it.
       // PeerJS may emit close synchronously during destroy().
       const peerGeneration = ++this.peerGeneration;
@@ -735,7 +776,8 @@ export class P2PSocketService {
         // lobby response to a channel that is not ready yet. State traffic is
         // replaceable, so it starts only after the reliable join is accepted.
         const openRealtimeChannel = () => {
-          if (realtimeOpening || this.realtimeHostConn?.open || this.peer !== peer || !joinAccepted) return;
+          if (realtimeOpening || this.realtimeHostConn?.open || this.peer !== peer
+            || this.peerGeneration !== peerGeneration || !joinAccepted || this.roomCode !== roomCode) return;
           realtimeOpening = true;
           const realtimeConn = peer.connect(roomData.hostPeerId, {
             reliable: false,
@@ -759,7 +801,10 @@ export class P2PSocketService {
           const clearRealtime = () => {
             realtimeOpening = false;
             if (this.realtimeHostConn === realtimeConn) this.realtimeHostConn = null;
-            window.setTimeout(openRealtimeChannel, 600);
+            if (this.peer === peer && this.peerGeneration === peerGeneration
+              && this.roomCode === roomCode && !this.isLeavingRoom) {
+              window.setTimeout(openRealtimeChannel, 600);
+            }
           };
           realtimeConn.on('close', clearRealtime);
           realtimeConn.on('error', clearRealtime);
@@ -1052,15 +1097,28 @@ export class P2PSocketService {
     return new Promise((resolve, reject) => {
       let settled = false;
       let acceptedPayload = null;
+      let realtimeReady = false;
+      let bootstrapReady = false;
       const tryFinish = () => {
-        // Acceptance is authoritative: the host has already rebound the
-        // physical player and sent a bootstrap state on the reliable channel.
-        // The unordered realtime channel may finish opening afterwards.
-        if (acceptedPayload) finish(true, acceptedPayload);
+        // Do not navigate to a frozen field on the lifecycle ACK alone. The
+        // guest must also have either the fast state channel or a complete
+        // authoritative bootstrap containing its newly assigned Peer ID.
+        if (acceptedPayload && (realtimeReady || bootstrapReady)) finish(true, acceptedPayload);
       };
       const handleError = message => finish(false, message || 'Nao foi possivel voltar para a partida.');
       const handleRealtimeReady = () => {
+        realtimeReady = true;
         this.rejoinTransportReady = true;
+        tryFinish();
+      };
+      const handleBootstrap = state => {
+        if (!isAuthoritativeRejoinState(state, {
+          uid: profile?.uid,
+          clientId: this.clientId,
+          matchId
+        })) return;
+        bootstrapReady = true;
+        tryFinish();
       };
       const timeout = window.setTimeout(() => {
         finish(false, 'O host não confirmou o retorno à partida a tempo.');
@@ -1071,6 +1129,7 @@ export class P2PSocketService {
         window.clearTimeout(timeout);
         this.off('joinError', handleError);
         this.off('realtimeReady', handleRealtimeReady);
+        this.off('gameState', handleBootstrap);
         this.rejoinTransportReady = accepted;
         this.rejoinInProgress = false;
         if (accepted) resolve(payload || {});
@@ -1078,6 +1137,7 @@ export class P2PSocketService {
       };
       this.on('joinError', handleError);
       this.on('realtimeReady', handleRealtimeReady);
+      this.on('gameState', handleBootstrap);
       this.joinRoom(code, password, profile, {
         rejoin: true,
         matchId,

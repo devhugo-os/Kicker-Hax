@@ -1114,11 +1114,15 @@ export const gameController = {
     this.resizeCanvasContainer();
     if (this.boundResizeHandler) window.removeEventListener('resize', this.boundResizeHandler);
     this.boundResizeHandler = () => {
-      this.resizeCanvasContainer();
-      this.refreshMobileMatchChrome();
-      this.syncMatchChatLayout();
+      cancelAnimationFrame(this.pendingResponsiveLayoutFrame);
+      this.pendingResponsiveLayoutFrame = requestAnimationFrame(() => {
+        this.resizeCanvasContainer();
+        this.refreshMobileMatchChrome();
+        this.syncMatchChatLayout();
+      });
     };
     window.addEventListener('resize', this.boundResizeHandler);
+    window.visualViewport?.addEventListener('resize', this.boundResizeHandler);
     if (this.boundFullscreenHandler) document.removeEventListener('fullscreenchange', this.boundFullscreenHandler);
     this.boundFullscreenHandler = () => {
       if (this.isTouchDevice()) return;
@@ -1271,6 +1275,21 @@ export const gameController = {
 
     const aspect = this.canvas.width / this.canvas.height;
     const isMobile = this.isTouchDevice();
+    const responsiveModeChanged = this.lastResponsiveMatchMode !== undefined
+      && this.lastResponsiveMatchMode !== isMobile;
+    this.lastResponsiveMatchMode = isMobile;
+    if (responsiveModeChanged) {
+      // DevTools changes pointer capability as well as viewport dimensions.
+      // Rebuild the performance profile and clear mode-specific inline state
+      // so returning to desktop cannot retain a mobile canvas/chat layout.
+      this.configureMatchPerformance();
+      this.players?.forEach(player => { player.lowEffects = !!this.performanceProfile?.lowEffects; });
+      if (this.ball) this.ball.lowEffects = !!this.performanceProfile?.lowEffects;
+      this.fieldCacheCanvas = null;
+      this.fieldCacheKey = '';
+      this.cssFieldCacheKey = '';
+      this.canvas.style.backgroundImage = '';
+    }
     const visualViewport = window.visualViewport;
     const viewportWidth = Math.max(1, Math.round(visualViewport?.width || document.documentElement.clientWidth || window.innerWidth));
     const viewportHeight = Math.max(1, Math.round(visualViewport?.height || document.documentElement.clientHeight || window.innerHeight));
@@ -1334,6 +1353,8 @@ export const gameController = {
       stage.style.width = `${viewportWidth}px`;
       stage.style.height = `${viewportHeight}px`;
       stage.style.gap = '0px';
+      stage.style.justifyItems = 'center';
+      stage.style.alignItems = 'center';
       stage.style.overflow = 'hidden';
       // Cordova's layout viewport can differ from its visible WebView bounds.
       // Apply one computed size to the element and its cached background.
@@ -1353,6 +1374,8 @@ export const gameController = {
     wrap.style.height = '';
     stage.style.position = '';
     stage.style.inset = '';
+    stage.style.justifyItems = '';
+    stage.style.alignItems = '';
     this.canvas.style.transform = '';
     this.canvas.style.transformOrigin = '';
     this.canvas.classList.remove('mobile-field-fill');
@@ -3285,6 +3308,9 @@ export const gameController = {
     document.getElementById('focus-lost-badge')?.classList.add('hidden');
     document.getElementById('replay-overlay')?.classList.add('hidden');
     if (this.boundResizeHandler) window.removeEventListener('resize', this.boundResizeHandler);
+    if (this.boundResizeHandler) window.visualViewport?.removeEventListener('resize', this.boundResizeHandler);
+    cancelAnimationFrame(this.pendingResponsiveLayoutFrame);
+    this.pendingResponsiveLayoutFrame = 0;
     if (this.boundFullscreenHandler) document.removeEventListener('fullscreenchange', this.boundFullscreenHandler);
     if (this.boundVisibilityHandler) document.removeEventListener('visibilitychange', this.boundVisibilityHandler);
     if (this.boundBlurHandler) window.removeEventListener('blur', this.boundBlurHandler);
@@ -4383,35 +4409,43 @@ export const gameController = {
 
   drawShotPreview(cx, player, ball, input, charge = 0) {
     const normalizedInputCharge = Math.max(0, Math.min(1, Number(charge) || 0));
+    const now = performance.now();
+    const existingPreview = this.shotPreviewState?.playerId === player?.id
+      ? this.shotPreviewState
+      : null;
     // Local physics releases the shot between input sampling and drawing.
     // Treat an existing charge as held input so one transient false value does
     // not blink the guide in solo/training.
-    const previewActive = !!input?.shoot || normalizedInputCharge > 0.001;
+    const previewActive = !!input?.shoot || normalizedInputCharge > 0.001
+      || Number(existingPreview?.expiresAt || 0) >= now;
     if (!player || !ball || !previewActive) {
       this.shotPreviewState = null;
       return;
     }
-    const now = performance.now();
     const inputLength = Math.hypot(input.x || 0, input.y || 0);
     const liveAngle = inputLength > 0.01 ? Math.atan2(input.y, input.x) : player.dir;
     if (ball.owner === player.id) {
       // Remote ownership can briefly disappear between otherwise valid
       // snapshots. Keep the locally confirmed aim for a few frames so the
       // distance guide remains steady while the shoot button is held.
-      const previous = this.shotPreviewState?.playerId === player.id ? this.shotPreviewState : null;
+      const previous = existingPreview;
       const previousAngle = Number(previous?.angle ?? liveAngle);
       const angleDelta = Math.atan2(
         Math.sin(liveAngle - previousAngle),
         Math.cos(liveAngle - previousAngle)
       );
       const nextCharge = normalizedInputCharge;
+      const elapsed = Math.max(1, Math.min(80, now - Number(previous?.updatedAt || now - 16)));
+      const angleBlend = 1 - Math.exp(-elapsed / 42);
+      const chargeBlend = 1 - Math.exp(-elapsed / 36);
       this.shotPreviewState = {
         playerId: player.id,
-        // Shortest-path interpolation prevents the guide from jumping when
-        // crossing -PI/PI or when a mobile stick changes direction quickly.
-        angle: previousAngle + angleDelta * 0.28,
-        charge: previous ? previous.charge + (nextCharge - previous.charge) * 0.34 : nextCharge,
-        expiresAt: now + 180
+        // Time-based interpolation behaves identically at 30, 60 or 120 FPS,
+        // keeping multiplayer aim aligned with solo/training.
+        angle: previousAngle + angleDelta * angleBlend,
+        charge: previous ? previous.charge + (nextCharge - previous.charge) * chargeBlend : nextCharge,
+        updatedAt: now,
+        expiresAt: now + 140
       };
     }
     const preview = this.shotPreviewState;

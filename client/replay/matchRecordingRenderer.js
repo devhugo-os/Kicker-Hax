@@ -3,6 +3,7 @@ import { drawSkinImage } from '../utils/skinRenderer.js';
 import { drawPowerKickBallEffect } from '../utils/powerKickFx.js';
 
 const stadiumFrameCache = new Map();
+const recordingFrameSurfaceCache = new Map();
 
 function drawStadium(ctx, width, height) {
   ctx.fillStyle = '#020617';
@@ -72,6 +73,21 @@ function getStadiumFrame(fieldWidth, fieldHeight, outputWidth, outputHeight) {
   stadiumFrameCache.set(key, surface);
   if (stadiumFrameCache.size > 2) {
     stadiumFrameCache.delete(stadiumFrameCache.keys().next().value);
+  }
+  return surface;
+}
+
+/** A complete frame is painted offscreen and presented in one canvas copy. */
+function getRecordingFrameSurface(width, height) {
+  const key = `${width}x${height}`;
+  let surface = recordingFrameSurfaceCache.get(key);
+  if (surface) return surface;
+  surface = document.createElement('canvas');
+  surface.width = width;
+  surface.height = height;
+  recordingFrameSurfaceCache.set(key, surface);
+  if (recordingFrameSurfaceCache.size > 2) {
+    recordingFrameSurfaceCache.delete(recordingFrameSurfaceCache.keys().next().value);
   }
   return surface;
 }
@@ -157,6 +173,29 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
     ctx.beginPath(); ctx.arc(state.x, state.y, radius + 7, 0, Math.PI * 2); ctx.stroke();
     ctx.globalAlpha = 1;
   }
+  const moveSpeed = Math.hypot(Number(state.vx || 0), Number(state.vy || 0));
+  if (!state.hasBall && moveSpeed > 0.25) {
+    const angle = Math.atan2(Number(state.vy || 0), Number(state.vx || 0));
+    const distance = radius + 11;
+    ctx.save();
+    ctx.translate(
+      state.x + Math.cos(angle) * distance,
+      state.y + Math.sin(angle) * distance
+    );
+    ctx.rotate(angle);
+    ctx.fillStyle = state.team === C.Team.RED ? '#fecaca' : '#bfdbfe';
+    ctx.strokeStyle = 'rgba(2,6,23,.92)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-5, -6);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-5, 6);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fill();
+    ctx.restore();
+  }
   ctx.font = '700 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(4,9,24,.9)'; ctx.strokeText(player.name || 'Jogador', state.x, state.y - radius - 14);
   ctx.fillStyle = C.TEAM_NAME_COLORS[state.team] || '#fff'; ctx.fillText(player.name || 'Jogador', state.x, state.y - radius - 14);
@@ -234,22 +273,33 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   const cssWidth = Math.max(1, Math.round(canvas.clientWidth || fieldWidth));
   const cssHeight = Math.max(1, Math.round(canvas.clientHeight || fieldHeight));
   const pixelRatio = Math.max(1, Math.min(2, Number(options.pixelRatio || 1)));
-  const outputWidth = Math.max(fieldWidth, Math.round(cssWidth * pixelRatio));
-  const outputHeight = Math.max(fieldHeight, Math.round(cssHeight * pixelRatio));
+  const outputWidth = Math.max(1, Math.round(cssWidth * pixelRatio));
+  const outputHeight = Math.max(1, Math.round(cssHeight * pixelRatio));
   if (canvas.width !== outputWidth) canvas.width = outputWidth;
   if (canvas.height !== outputHeight) canvas.height = outputHeight;
-  // Synchronous compositing avoids partially presented frames (black specks)
-  // seen in Android WebViews when a canvas is both animated and fullscreen.
-  const ctx = canvas.getContext('2d', { alpha: false, desynchronized: false });
-  const scaleX = outputWidth / fieldWidth;
-  const scaleY = outputHeight / fieldHeight;
+
+  // App/mobile recordings use the same uniform field mapping as the live
+  // match. Desktop retains its existing full-card composition.
+  const fitScale = options.preserveAspect
+    ? Math.min(outputWidth / fieldWidth, outputHeight / fieldHeight)
+    : 0;
+  const contentWidth = options.preserveAspect
+    ? Math.max(1, Math.round(fieldWidth * fitScale))
+    : outputWidth;
+  const contentHeight = options.preserveAspect
+    ? Math.max(1, Math.round(fieldHeight * fitScale))
+    : outputHeight;
+  const frameSurface = getRecordingFrameSurface(contentWidth, contentHeight);
+  const ctx = frameSurface.getContext('2d', { alpha: false, desynchronized: false });
+  const scaleX = contentWidth / fieldWidth;
+  const scaleY = contentHeight / fieldHeight;
   const shakeX = options.shake ? (Math.random() - .5) * 8 : 0;
   const shakeY = options.shake ? (Math.random() - .5) * 8 : 0;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#020617';
-  ctx.fillRect(0, 0, outputWidth, outputHeight);
+  ctx.fillRect(0, 0, contentWidth, contentHeight);
   ctx.drawImage(
-    getStadiumFrame(fieldWidth, fieldHeight, outputWidth, outputHeight),
+    getStadiumFrame(fieldWidth, fieldHeight, contentWidth, contentHeight),
     shakeX * scaleX,
     shakeY * scaleY
   );
@@ -311,4 +361,19 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
     );
   }
   ctx.restore();
+
+  // Present the completed frame atomically. Painting individual primitives on
+  // the visible Android canvas exposed partially composed GPU tiles as black
+  // blinking dots on some WebViews.
+  const visible = canvas.getContext('2d', { alpha: false, desynchronized: false });
+  visible.setTransform(1, 0, 0, 1, 0, 0);
+  visible.fillStyle = '#000';
+  visible.fillRect(0, 0, outputWidth, outputHeight);
+  visible.imageSmoothingEnabled = true;
+  visible.imageSmoothingQuality = 'high';
+  visible.drawImage(
+    frameSurface,
+    Math.floor((outputWidth - contentWidth) / 2),
+    Math.floor((outputHeight - contentHeight) / 2)
+  );
 }

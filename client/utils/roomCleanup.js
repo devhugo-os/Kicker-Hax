@@ -2,11 +2,7 @@ export function normalizeRoomCode(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 }
 
-/**
- * Builds one RTDB root update so the room and both chat trees disappear in
- * the same permission check. This prevents the room deletion from making its
- * own chat cleanup unauthorized.
- */
+/** Lists every RTDB branch owned by one multiplayer room for ordered cleanup. */
 export function buildRoomCleanupPatch(roomCode) {
   const code = normalizeRoomCode(roomCode);
   if (!code) return {};

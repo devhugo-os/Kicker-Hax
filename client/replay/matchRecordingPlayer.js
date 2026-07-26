@@ -269,7 +269,8 @@ export class MatchRecordingPlayer {
       // Recording keeps every visual effect. App performance comes from the
       // cached stadium and throttled DOM report, never from degraded graphics.
       lowEffects: false,
-      pixelRatio: Math.min(this.nativeApp ? 1.6 : 2, Number(window.devicePixelRatio || 1))
+      pixelRatio: Math.min(this.nativeApp ? 1.6 : 2, Number(window.devicePixelRatio || 1)),
+      preserveAspect: this.nativeApp || window.matchMedia?.('(pointer: coarse)').matches
     });
     const now = performance.now();
     const interfaceInterval = this.nativeApp && this.playing ? 100 : 0;
