@@ -1,10 +1,10 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Update 76 starts a numbered, exact 30-day season cycle. The UTC instant is
-// 15:00 in Sao Paulo and remains identical in browsers from every timezone.
-export const SEASON_ANCHOR_MS = Date.parse('2026-07-28T18:00:00.000Z');
+// Update 78 opens a fresh exact 30-day season. The UTC instant is shared by
+// every browser and app regardless of timezone.
+export const SEASON_ANCHOR_MS = Date.parse('2026-07-28T20:00:00.000Z');
 export const SEASON_DURATION_MS = 30 * DAY_MS;
-export const SEASON_ANCHOR_NUMBER = 1;
+export const SEASON_ANCHOR_NUMBER = 2;
 
 /** Retained for old migration tests and legacy cosmetic keys. */
 export function getSaoPauloSeasonMonth(date = new Date()) {

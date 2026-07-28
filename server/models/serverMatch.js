@@ -1412,6 +1412,8 @@ export class ServerMatch {
     // MVP is the best individual performance in the whole match. This keeps
     // the result relevant to ratings without hiding an exceptional loser.
     const mvp = report.playerStats
+      .filter(player => !player.leftMatch
+        && !['abandoned', 'kicked', 'banned', 'disconnected'].includes(player.participationStatus))
       .sort((a, b) => {
         const ratingA = Number(a.rating || 0);
         const ratingB = Number(b.rating || 0);

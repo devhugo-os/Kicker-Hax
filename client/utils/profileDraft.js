@@ -4,7 +4,9 @@ export function createProfileDraft(profile = {}) {
     badge: String(profile.badge || '👤'),
     bio: String(profile.bio || '').trim(),
     equippedSkinId: String(profile.equippedSkinId || 'rookie'),
-    equippedSkinImage: profile.equippedSkinImage || null
+    equippedSkinImage: profile.equippedSkinImage || null,
+    equippedSkinName: String(profile.equippedSkinName || ''),
+    equippedSkinRarity: String(profile.equippedSkinRarity || '')
   };
 }
 

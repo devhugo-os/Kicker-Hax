@@ -3,6 +3,7 @@ import * as C from '../../shared/constants.js';
 import { segmentGraphemes, isEmojiCluster } from '../utils/graphemes.js';
 import { drawSkinImage } from '../utils/skinRenderer.js';
 import { drawStaffTagOnCanvas } from '../utils/staffTags.js';
+import { projectUnacknowledgedMovement, reconcilePredictedPosition } from '../utils/networkPrediction.js';
 
 export class ClientPlayer {
   constructor(serverPlayer) {
@@ -104,36 +105,33 @@ export class ClientPlayer {
     let expectedX = this.targetX + (this.extrapolateMotion ? this.vx * compensatedAge : 0);
     let expectedY = this.targetY + (this.extrapolateMotion ? this.vy * compensatedAge : 0);
     if (this.extrapolateMotion && localPrediction) {
-      const ax = Number(localPrediction.input?.x || 0);
-      const ay = Number(localPrediction.input?.y || 0);
-      const length = Math.hypot(ax, ay);
-      if (length > 0.001) {
-        const oneWayFrames = Math.max(0, Math.min(10, inferredDelayFrames));
-        const sprintMultiplier = localPrediction.input?.sprint && this.staminaLock <= 0 && this.stamina > 0 ? 1.5 : 1;
-        const predictedSpeed = C.MAX_SPEED * 1.2 * sprintMultiplier;
-        // Predict only the velocity delta. Adding a full movement estimate on
-        // top of server velocity caused mobile overshoot and rubber-banding.
-        expectedX += (((ax / length) * predictedSpeed) - this.vx) * oneWayFrames;
-        expectedY += (((ay / length) * predictedSpeed) - this.vy) * oneWayFrames;
-      }
+      const projected = projectUnacknowledgedMovement({
+        x: this.targetX,
+        y: this.targetY,
+        vx: this.vx,
+        vy: this.vy,
+        stamina: this.stamina,
+        staminaLock: this.staminaLock
+      }, {
+        ...localPrediction,
+        networkDelayFrames: inferredDelayFrames
+      }, now);
+      expectedX = projected.x;
+      expectedY = projected.y;
     }
-    const correction = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
-    const targetError = Math.hypot(expectedX - this.x, expectedY - this.y);
-    if (targetError > 180) {
-      this.x = expectedX;
-      this.y = expectedY;
-    }
-
     const previousX = this.x;
     const previousY = this.y;
 
-    // Advance the visual target between snapshots. The six-frame cap keeps
-    // remote movement continuous during a short mobile/network jitter burst;
-    // authoritative targets still correct every received snapshot.
-    if (targetError <= 180) {
-      this.x += (expectedX - this.x) * correction;
-      this.y += (expectedY - this.y) * correction;
-    }
+    // Local inputs are rolled forward from the acknowledged snapshot; remote
+    // players keep velocity interpolation. Both paths share bounded correction.
+    const reconciled = reconcilePredictedPosition(
+      { x: this.x, y: this.y },
+      { x: expectedX, y: expectedY },
+      lerpFactor,
+      elapsedFrames
+    );
+    this.x = reconciled.x;
+    this.y = reconciled.y;
     const renderDx = this.x - previousX;
     const renderDy = this.y - previousY;
     // Network snapshots can briefly report zero velocity while the rendered
@@ -143,7 +141,8 @@ export class ClientPlayer {
     // Interpolate direction angles smoothly
     let diff = this.targetDir - this.dir;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    this.dir += diff * correction;
+    const directionCorrection = 1 - Math.pow(1 - lerpFactor, elapsedFrames);
+    this.dir += diff * directionCorrection;
     this.lastRenderAt = now;
   }
 

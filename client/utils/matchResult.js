@@ -13,9 +13,14 @@ export function resolvePlayerMatchOutcome(result, uid, socketId, localPlayers = 
     || (result?.playerStats || []).find(item => item.playerId === socketId)
     || {};
   const localPlayer = localPlayers.find(player => player.id === socketId);
-  // The final score is the authoritative source. This prevents a stale
-  // winnerTeam field from turning a real victory into a draw on one client.
-  const rawWinner = score.red === score.blue ? 'draw' : score.blue > score.red ? C.Team.BLUE : C.Team.RED;
+  // The host's winnerTeam is authoritative for W.O. and surrender. The score
+  // remains the fallback for legacy results that predate that field.
+  const scoreWinner = score.red === score.blue
+    ? 'draw'
+    : score.blue > score.red ? C.Team.BLUE : C.Team.RED;
+  const rawWinner = result?.forfeit
+    ? (result?.winnerTeam ?? result?.winner ?? scoreWinner)
+    : scoreWinner;
   const winnerTeam = rawWinner === 'draw' ? 'draw' : normalizeMatchTeam(rawWinner);
   const localTeam = normalizeMatchTeam(stats.team ?? localPlayer?.team);
   const isDraw = winnerTeam === 'draw';

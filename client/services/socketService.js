@@ -2075,6 +2075,12 @@ export class P2PSocketService {
     const oldest = this.pendingInputs.values().next().value;
     return {
       input,
+      wallNow: Date.now(),
+      pendingInputs: [...this.pendingInputs.entries()].slice(-12).map(([sequence, pending]) => ({
+        sequence,
+        sentAt: pending.sentAt,
+        input: pending.input
+      })),
       pingMs: this.pendingInputs.size && oldest
         ? Math.max(0, Date.now() - oldest.sentAt)
         : 0

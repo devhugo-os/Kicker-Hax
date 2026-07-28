@@ -118,7 +118,13 @@ export function getSkinById(id) {
 
 export function getEquippedSkin(profile) {
   if (profile?.equippedSkinId === NO_SKIN.id) return NO_SKIN;
-  if (profile?.equippedSkinImage) return { id: profile.equippedSkinId || 'custom', image: profile.equippedSkinImage, name: 'Skin personalizada' };
+  if (profile?.equippedSkinImage) return {
+    id: profile.equippedSkinId || 'custom',
+    image: profile.equippedSkinImage,
+    name: profile.equippedSkinName || 'Skin personalizada',
+    rarity: profile.equippedSkinRarity || 'custom',
+    custom: true
+  };
   const skin = getSkinById(profile?.equippedSkinId || 'rookie');
   // The profile badge is the visual identity of the default Rookie skin.
   // Purchased/custom skins replace it completely while keeping the team ring.

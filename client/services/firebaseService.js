@@ -116,7 +116,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '77.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '78.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -419,11 +419,13 @@ export const firebaseService = {
       const statsSnap = await transaction.get(statsRef);
       const userSnap = await transaction.get(userRef);
 
-      if (!statsSnap.exists() || !userSnap.exists()) {
-        throw new Error("Documento não encontrado");
+      if (!userSnap.exists()) {
+        throw new Error("Perfil não encontrado");
       }
 
-      const stats = statsSnap.data();
+      // A limpeza sazonal remove os documentos de estatísticas. A primeira
+      // partida da nova temporada deve recriá-los dentro da mesma transação.
+      const stats = statsSnap.exists() ? statsSnap.data() : emptySeasonStats(uid);
       const user = userSnap.data();
       const seasonStats = stats.seasonId === CURRENT_SEASON_ID ? stats : emptySeasonStats(uid);
       const seasonUser = user.seasonId === CURRENT_SEASON_ID ? user : { ...user, level: 1, xp: 0, processedXpMatchIds: {} };
@@ -484,7 +486,7 @@ export const firebaseService = {
         xpNeeded = currentLevel * 100;
       }
 
-      transaction.update(statsRef, updatedStats);
+      transaction.set(statsRef, updatedStats, { merge: true });
       transaction.update(userRef, {
         xp: currentXp,
         level: currentLevel,
@@ -547,7 +549,9 @@ export const firebaseService = {
   async equipSkin(uid, skin) {
     const payload = {
       equippedSkinId: skin.id,
-      equippedSkinImage: skin.custom ? skin.image : null
+      equippedSkinImage: skin.custom ? skin.image : null,
+      equippedSkinName: skin.name || '',
+      equippedSkinRarity: skin.rarity || (skin.custom ? 'custom' : '')
     };
     await updateDoc(doc(db, 'users', uid), payload);
     return payload;

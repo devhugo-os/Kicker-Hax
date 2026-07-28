@@ -377,7 +377,7 @@ export const menuController = {
 
               if (match.winner === 'draw') {
                 resultClass = 'draw';
-              } else if (match.winner === match.playerTeams?.[this.currentUser.uid]) {
+              } else if (String(match.winner) === String(match.playerTeams?.[this.currentUser.uid])) {
                 resultClass = 'win';
                 resultText = 'Vit\u00f3ria';
               } else {
@@ -510,6 +510,8 @@ export const menuController = {
         bio,
         equippedSkinId: draft.equippedSkinId,
         equippedSkinImage: draft.equippedSkinImage,
+        equippedSkinName: draft.equippedSkinName,
+        equippedSkinRarity: draft.equippedSkinRarity,
         isNewUser: false
       });
       
@@ -519,6 +521,8 @@ export const menuController = {
       this.profileData.bio = bio;
       this.profileData.equippedSkinId = draft.equippedSkinId;
       this.profileData.equippedSkinImage = draft.equippedSkinImage;
+      this.profileData.equippedSkinName = draft.equippedSkinName;
+      this.profileData.equippedSkinRarity = draft.equippedSkinRarity;
       this.profileData.isNewUser = false;
       this.clearProfileDraft();
 
@@ -557,7 +561,9 @@ export const menuController = {
     this.profileDraft = {
       ...this.profileDraft,
       equippedSkinId: skin.id,
-      equippedSkinImage: skin.custom ? skin.image : null
+      equippedSkinImage: skin.custom ? skin.image : null,
+      equippedSkinName: skin.name || '',
+      equippedSkinRarity: skin.rarity || (skin.custom ? 'custom' : '')
     };
     this.updateProfileDirtyState();
     const usesDefaultSkin = usesProfileBadge(this.profileDraft);

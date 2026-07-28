@@ -306,9 +306,7 @@ export const gameController = {
     const statusChanged = this.lastRenderedMatchStatus !== renderedStatus;
     const powerKickNeedsFullClear = !this.performanceProfile?.lowEffects
       && isPowerKickActive(this.ball);
-    const hasTransientFx = !!input?.shoot
-      || !!this.shotPreviewState
-      || powerKickNeedsFullClear;
+    const hasTransientFx = powerKickNeedsFullClear;
     const canUseDirtyRegions = this.performanceProfile?.nativeApp
       && matchIsPlaying
       && !this.inReplay
@@ -350,7 +348,22 @@ export const gameController = {
     if (this.ball) {
       regions.push({ x: this.ball.x - 20, y: this.ball.y - 20, width: 40, height: 40 });
     }
+    if (Array.isArray(this.currentShotPreviewRegions)) {
+      regions.push(...this.currentShotPreviewRegions);
+    }
     this.lastDynamicFrameRegions = regions;
+  },
+
+  clearPowerKickVisualState() {
+    [this.ball, this.localBallSim].forEach(ball => {
+      if (!ball) return;
+      ball.lastStrikeType = null;
+      ball.strikeTimer = 0;
+    });
+    const matchStage = this.canvas?.closest('.match-stage');
+    if (matchStage?.style.transform) matchStage.style.transform = '';
+    this.lastPowerKickTransform = '';
+    this.previousFrameHadTransientFx = false;
   },
 
   refreshPerformanceOverlays() {
@@ -2091,6 +2104,7 @@ export const gameController = {
 
         // Render Frame Canvas
         this.clearMatchFrame(inputP1);
+        this.currentShotPreviewRegions = [];
         const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
         const cameraShaking = this.beginPowerKickCamera(
           this.ctx,
@@ -2297,6 +2311,11 @@ export const gameController = {
         localBallSim.vx = localBallSim.vy = 0;
         localBallSim.owner = null;
         localBallSim.lastTouch = null;
+        localBallSim.lastStrikeType = null;
+        localBallSim.strikeTimer = 0;
+        localBallSim.noPickupFrames = 0;
+        localBallSim.noPickupFrom = null;
+        this.clearPowerKickVisualState();
       };
       this.resetLocalFieldPositions = resetFieldPositions;
 
@@ -2396,6 +2415,22 @@ export const gameController = {
           MatchSim.replayBuffer.shift();
         }
       };
+
+      // Browsers suspend requestAnimationFrame while hidden. Restart exactly
+      // one local loop on return so a replay cannot remain frozen after the
+      // app/tab was minimized between consecutive goals.
+      this.boundVisibilityHandler = () => {
+        if (document.hidden || router.currentScreenId !== 'match-screen' || this.mode !== 'solo') return;
+        lastTime = performance.now();
+        accumulator = 0;
+        this.replayLastTickAt = Date.now();
+        this.lastDynamicFrameRegions = [];
+        cancelAnimationFrame(this.localPhysicsTick);
+        if (MatchSim.status !== 'ended') {
+          this.localPhysicsTick = requestAnimationFrame(tickLocalGame);
+        }
+      };
+      document.addEventListener('visibilitychange', this.boundVisibilityHandler);
 
       // Boot local simulation loop
       resetFieldPositions();
@@ -2549,7 +2584,10 @@ export const gameController = {
     const myId = socketService.getSocket().id;
     const outcome = resolvePlayerMatchOutcome(result, this.currentUser?.uid, myId, this.players);
     const { stats: playerStats, localTeam, winnerTeam, isDraw, isSpectator: isSpec, isWin, isLoss } = outcome;
-    const isMvp = !!result?.mvp && (result.mvp.playerId === myId || result.mvp.uid === this.currentUser?.uid);
+    const mvpEligible = !playerStats.leftMatch
+      && !['abandoned', 'kicked', 'banned', 'disconnected'].includes(playerStats.participationStatus);
+    const isMvp = mvpEligible && !!result?.mvp
+      && (result.mvp.playerId === myId || result.mvp.uid === this.currentUser?.uid);
     const xpGained = isSpec ?0 : isWin ?80 : isDraw ?30 : 15;
     const isCompetitive = !!result?.competitive;
     const coinsGained = isSpec || !isCompetitive ? 0 : (isWin ? 30 : isDraw ? 18 : 10);
@@ -3214,6 +3252,7 @@ export const gameController = {
 
       // 2) Render Frame
       this.clearMatchFrame(input);
+      this.currentShotPreviewRegions = [];
       const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
       const cameraShaking = this.beginPowerKickCamera(
         this.ctx,
@@ -4132,6 +4171,7 @@ export const gameController = {
     this.replayElapsedMs = 0;
     this.replayLastTickAt = null;
     this.lastReplaySfxIdx = -1;
+    this.clearPowerKickVisualState();
 
     // Resume persistent stadium audio
     soundFx.ensureAudio();
@@ -4633,6 +4673,19 @@ export const gameController = {
     const travel = power * C.FRICTION_FIELD / Math.max(0.01, 1 - C.FRICTION_FIELD);
     const targetX = Math.max(C.BORDER, Math.min(this.canvas.width - C.BORDER, ball.x + Math.cos(angle) * travel));
     const targetY = Math.max(C.BORDER, Math.min(this.canvas.height - C.BORDER, ball.y + Math.sin(angle) * travel));
+    // Dirty tiles follow the guide itself. Clearing a thin chain is far
+    // cheaper than repainting the entire pitch while a mobile player charges.
+    const previewLength = Math.hypot(targetX - ball.x, targetY - ball.y);
+    const segments = Math.max(2, Math.min(16, Math.ceil(previewLength / 34)));
+    for (let index = 0; index <= segments; index += 1) {
+      const ratio = index / segments;
+      this.currentShotPreviewRegions.push({
+        x: ball.x + (targetX - ball.x) * ratio - 15,
+        y: ball.y + (targetY - ball.y) * ratio - 15,
+        width: 30,
+        height: 30
+      });
+    }
     cx.save();
     cx.globalAlpha = 0.58 + normalizedCharge * 0.32;
     cx.strokeStyle = normalizedCharge > 0.72 ? '#facc15' : '#7dd3fc';

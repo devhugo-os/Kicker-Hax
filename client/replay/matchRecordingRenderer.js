@@ -200,13 +200,16 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
   ctx.font = '700 12px system-ui';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  // A soft fill shadow stays legible and avoids Android's strokeText artifact.
-  ctx.shadowColor = 'rgba(2, 6, 23, .9)';
-  ctx.shadowBlur = 3;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 1;
+  // A compact backing plate is more legible than blur on Android WebView and
+  // avoids the black glyph artifacts produced by repeated text shadows.
+  const label = player.name || 'Jogador';
+  const labelWidth = Math.ceil(ctx.measureText(label).width) + 10;
+  ctx.fillStyle = 'rgba(2, 6, 23, .78)';
+  ctx.beginPath();
+  ctx.roundRect(state.x - labelWidth / 2, state.y - radius - 29, labelWidth, 18, 6);
+  ctx.fill();
   ctx.fillStyle = C.TEAM_NAME_COLORS[state.team] || '#fff';
-  ctx.fillText(player.name || 'Jogador', state.x, state.y - radius - 14);
+  ctx.fillText(label, state.x, state.y - radius - 15);
   ctx.restore();
 }
 
