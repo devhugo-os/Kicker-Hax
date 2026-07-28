@@ -10,9 +10,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
   <!-- Stylesheets -->
-  <script type="module" crossorigin src="./assets/index-CPNm8kLH.js"></script>
+  <script type="module" crossorigin src="./assets/index-DNiG-Mrn.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/firebase-DfzM4LdL.js">
-  <link rel="modulepreload" crossorigin href="./assets/game-engine-BlI1hOa5.js">
+  <link rel="modulepreload" crossorigin href="./assets/game-engine-DYE7eRdR.js">
   <link rel="stylesheet" crossorigin href="./assets/index-C4Pwqyu_.css">
 </head>
 <body>
@@ -1075,7 +1075,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v77.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v78.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1122,6 +1122,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v78.0 - NOVO CICLO EM CAMPO</h4>
+            <p>A Temporada 2 começa com 30 dias completos e limpa estatísticas, progressão, rankings, históricos, gravações e chats, preservando skins e KX Coins; as vitrines do Mercado são sorteadas novamente sem repetir a mesma skin entre os destaques disponíveis. Resultados por desistência e W.O. passam a respeitar o vencedor autoritativo, impedem MVP para quem abandonou e registram corretamente vitória e derrota. O replay limpa totalmente o efeito do super chute antes do reinício e o Treino retoma o relógio e a reprodução ao voltar de uma aba minimizada. O perfil mostra nome e raridade da skin equipada. O multiplayer ganhou prediction local, interpolation e reconciliação limitadas para suavizar movimento sem reduzir a frequência da partida. No app, mira e elementos móveis usam limpeza regional para eliminar rastros; o teste ativo com CPU quatro vezes mais lenta manteve média próxima de 60 FPS durante corrida, chute, drible e desarme. Nomes nas gravações receberam fundo legível no mobile sem artefatos escuros.</p>
+          </section>
           <section>
             <h4>v77.0 - REDE DE VOLTA AO JOGO</h4>
             <p>O ping volta ao canal WebRTC rápido das versões 72/73 e deixa de esperar por chat, lobby, replay ou resultados, eliminando medições artificiais de centenas de milissegundos. O chat da sala é entregue imediatamente pelo host e persistido em segundo plano, enquanto identidades são carregadas sem bloquear mensagens. Desistências agora usam o mesmo resultado autoritativo salvo no histórico. Ping e FPS ganharam espaçamento próprio. No app, redes, regiões transparentes, sprites e texturas estáticas consomem menos GPU sem alterar o campo; o tremor do super chute mantém o efeito pelo compositor. Treino e Tutorial abrem confirmações sem deixar o realce azul do toque sobre o modal. As regras do Realtime Database foram republicadas para restaurar criação e atualização das salas.</p>
