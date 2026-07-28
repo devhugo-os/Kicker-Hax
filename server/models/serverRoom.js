@@ -36,7 +36,7 @@ export class ServerRoom {
     const newPlayer = {
       id: socketId,
       uid: playerProfile.uid || '',
-      username: String(playerProfile.username || 'Jogador').slice(0, USERNAME_MAX_LENGTH),
+      username: String(playerProfile.username || playerProfile.displayName || 'Jogador').slice(0, USERNAME_MAX_LENGTH),
       badge: playerProfile.badge || '🏳️',
       skin: playerProfile.skin || '',
       skinId: playerProfile.skinId || playerProfile.equippedSkinId || '',
@@ -106,10 +106,16 @@ export class ServerRoom {
 
   resetLobbyStatus(options = {}) {
     const moveToSpectator = options.moveToSpectator !== false;
+    const returnPlayersToLobby = options.returnPlayersToLobby === true;
     this.players.forEach(player => {
       player.ready = false;
       player.ping = 0;
       if (moveToSpectator) player.team = 'spectator';
+      if (returnPlayersToLobby) {
+        player.status = 'lobby';
+        player.disconnected = false;
+        player.disconnectedAt = null;
+      }
     });
   }
 

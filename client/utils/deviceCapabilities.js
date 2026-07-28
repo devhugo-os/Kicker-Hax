@@ -23,6 +23,7 @@ export function shouldUseMobileHud(navigatorLike = globalThis.navigator, runtime
  */
 export function getMatchPerformanceProfile(navigatorLike = globalThis.navigator, runtime = {}) {
   const mobileHud = shouldUseMobileHud(navigatorLike, runtime);
+  const nativeApp = !!runtime.cordova || new URLSearchParams(String(runtime.search || '')).get('app') === '1';
   // Mobile GPUs are often the limiting factor even when Android reports eight
   // CPU cores and plenty of RAM. Use the cached/light compositor path for every
   // real touch HUD instead of misclassifying mid-range phones as desktop GPUs.
@@ -33,6 +34,7 @@ export function getMatchPerformanceProfile(navigatorLike = globalThis.navigator,
   const targetRenderFps = 60;
   return {
     mobileHud,
+    nativeApp,
     lowEffects,
     targetRenderFps,
     minRenderFps: 60,

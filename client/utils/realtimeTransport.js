@@ -26,7 +26,7 @@ const REALTIME_KEYS = Object.freeze({
   power_cd: 'w', matchStats: 'M', badge: 'B', name: 'A', skinId: 'K', staffRole: 'R',
   owner: 'O', lastTouch: 'L', lastStrikeType: 'T', strikeTimer: 'I', red: '0', blue: '1',
   shoot: 'j', sprint: 'P', dribble: 'd', tackle: 'C', power: 'W', requestPass: 'G', passRequestTimer: 'J', passRequestCooldown: 'F', mobileTackleAssist: 'U',
-  sentAt: 'E', serverTime: 'V'
+  sentAt: 'E', serverTime: 'V', inputAck: 'Z'
 });
 const EXPANDED_REALTIME_KEYS = Object.freeze(Object.fromEntries(
   Object.entries(REALTIME_KEYS).map(([key, value]) => [value, key])
@@ -91,6 +91,24 @@ export function shouldDropRealtimeState(event, bufferedAmount = 0) {
  * boundary strips profile images or accidental large strings from snapshots.
  */
 export function encodeRealtimePacket(event, data) {
+  if (event === 'gameInput') {
+    const flags = (+!!data.shoot)
+      | (+!!data.sprint << 1)
+      | (+!!data.dribble << 2)
+      | (+!!data.tackle << 3)
+      | (+!!data.power << 4)
+      | (+!!data.requestPass << 5)
+      | (+!!data.mobileTackleAssist << 6);
+    return JSON.stringify({
+      e: event,
+      d: [
+        Number(data._seq || 0),
+        Math.round(Number(data.x || 0) * 127),
+        Math.round(Number(data.y || 0) * 127),
+        flags
+      ]
+    });
+  }
   const compactData = transformKeys(data, REALTIME_KEYS);
   return JSON.stringify({ e: event, d: compactData }, (key, value) => {
     if (OMITTED_REALTIME_FIELDS.has(key)) return undefined;
@@ -108,6 +126,24 @@ export function decodeRealtimePacket(payload) {
   try {
     const packet = JSON.parse(payload);
     if (!packet?.e) return packet;
+    if (packet.e === 'gameInput' && Array.isArray(packet.d)) {
+      const [sequence, x, y, flags = 0] = packet.d;
+      return {
+        event: packet.e,
+        data: {
+          _seq: Number(sequence || 0),
+          x: Number(x || 0) / 127,
+          y: Number(y || 0) / 127,
+          shoot: !!(flags & 1),
+          sprint: !!(flags & 2),
+          dribble: !!(flags & 4),
+          tackle: !!(flags & 8),
+          power: !!(flags & 16),
+          requestPass: !!(flags & 32),
+          mobileTackleAssist: !!(flags & 64)
+        }
+      };
+    }
     return { event: packet.e, data: transformKeys(packet.d, EXPANDED_REALTIME_KEYS) };
   } catch {
     return null;

@@ -13,6 +13,8 @@ export function drawSkinImage(ctx, source, x, y, radius) {
   }
   if (!image.complete || !image.naturalWidth) return false;
   ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.clip();

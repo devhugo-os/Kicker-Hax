@@ -268,6 +268,7 @@ export class ServerMatch {
       // Inputs arrive continuously from guests. This timestamp is a fallback
       // for WebViews that close without delivering the PeerJS close event.
       lastSeenAt: Date.now(),
+      lastInputSeq: 0,
       home: { x: startX, y: startY }
     };
   }
@@ -275,6 +276,11 @@ export class ServerMatch {
   updateInput(socketId, inputData) {
     if (this.inputs.has(socketId)) {
       this.touchPlayer(socketId);
+      const physicalPlayer = this.players.find(player => player.id === socketId);
+      if (physicalPlayer) physicalPlayer.lastInputSeq = Math.max(
+        Number(physicalPlayer.lastInputSeq || 0),
+        Number(inputData._seq || 0)
+      );
       this.inputs.set(socketId, {
         x: ServerPhysics.clamp(inputData.x || 0, -1, 1),
         y: ServerPhysics.clamp(inputData.y || 0, -1, 1),
@@ -356,6 +362,8 @@ export class ServerMatch {
         p.tackleEval = 0;
         p.tackleImpactReady = false;
         p.shootHalo = 0;
+        p.passRequestTimer = 0;
+        p.lastPassRequestPressed = false;
         p.aiShootLock = p.cpu ? 45 : 0;
         p.aiFeintLock = 0;
         if (p.frontSpawnBoost > 0) p.frontSpawnBoost -= 1;
@@ -798,6 +806,10 @@ export class ServerMatch {
           replayDelayMs: C.REPLAY_SYNC_LEAD_MS,
           replayFrameMs: (1000 / 60) * this.onlineReplayCaptureStride * this.onlineReplaySlowmoFactor
         });
+        this.players.forEach(player => {
+          player.passRequestTimer = 0;
+          player.lastPassRequestPressed = false;
+        });
         this.status = 'replay';
         // Keep the authoritative match paused while clients play the slow-motion replay.
         this.countdownTimer = Math.ceil(
@@ -998,7 +1010,8 @@ export class ServerMatch {
           dribble_cd: p.dribble_cd,
           power_cd: p.power_cd,
           passRequestTimer: p.passRequestTimer || 0,
-          passRequestCooldown: p.passRequestCooldown || 0
+          passRequestCooldown: p.passRequestCooldown || 0,
+          inputAck: p.lastInputSeq || 0
         };
         // Live statistics and identity do not change at rendering frequency.
         // Sending them at 1 Hz keeps the HUD current without periodic bandwidth
@@ -1067,7 +1080,8 @@ export class ServerMatch {
         skinId: player.skinId || '',
         staffRole: player.staffRole || '',
         passRequestTimer: player.passRequestTimer || 0,
-        passRequestCooldown: player.passRequestCooldown || 0
+        passRequestCooldown: player.passRequestCooldown || 0,
+        inputAck: player.lastInputSeq || 0
       })),
       score: this.score,
       matchTime: this.matchTime,

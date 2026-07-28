@@ -196,9 +196,15 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
     ctx.fill();
     ctx.restore();
   }
-  ctx.font = '700 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(4,9,24,.9)'; ctx.strokeText(player.name || 'Jogador', state.x, state.y - radius - 14);
-  ctx.fillStyle = C.TEAM_NAME_COLORS[state.team] || '#fff'; ctx.fillText(player.name || 'Jogador', state.x, state.y - radius - 14);
+  ctx.save();
+  ctx.font = '700 12px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = C.TEAM_NAME_COLORS[state.team] || '#fff';
+  ctx.fillText(player.name || 'Jogador', state.x, state.y - radius - 14);
+  ctx.restore();
 }
 
 function drawHud(ctx, frame, width) {

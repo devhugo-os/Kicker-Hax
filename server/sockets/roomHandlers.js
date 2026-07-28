@@ -355,7 +355,12 @@ export function registerRoomHandlers(io, socket) {
       io.to(room.code).emit('lobbyUpdate', room.getLobbyInfo());
     }
 
-    const activePlayers = room.players.filter(p => p.team !== 'spectator' && !p.cpu);
+    const lobbyHumans = room.players.filter(p => !p.cpu && !p.disconnected && p.status === 'lobby');
+    if (lobbyHumans.some(player => player.team === 'spectator')) {
+      socket.emit('startError', 'Defina um time para todos os jogadores antes de iniciar.');
+      return;
+    }
+    const activePlayers = lobbyHumans.filter(p => p.team !== 'spectator');
     const redTeam = activePlayers.filter(p => p.team === 'red');
     const blueTeam = activePlayers.filter(p => p.team === 'blue');
     const notReady = activePlayers.filter(p => !p.ready);

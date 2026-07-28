@@ -316,29 +316,41 @@ export const marketController = {
 
   async loadInventory() {
     if (!this.user) return;
-    const gifts = await firebaseService.claimPendingSkinGifts(this.user.uid).catch(error => {
+    const loadToken = (this.inventoryLoadToken || 0) + 1;
+    this.inventoryLoadToken = loadToken;
+    if (menuController.profileData && menuController.currentUser?.uid === this.user.uid) {
+      await this.hydrateInventory(menuController.profileData, loadToken);
+    }
+    const giftsPromise = firebaseService.claimPendingSkinGifts(this.user.uid).catch(error => {
       console.warn('[Skin Gifts] Não foi possível receber doações pendentes:', error);
       return [];
     });
-    const [profile, featured] = await Promise.all([
+    const [profile, gifts] = await Promise.all([
       firebaseService.getUserProfile(this.user.uid),
-      firebaseService.getFeaturedSkins().catch(() => ({}))
+      giftsPromise
     ]);
+    if (this.inventoryLoadToken !== loadToken) return;
     menuController.profileData = profile;
     this.renderWallet();
-    const owned = menuController.profileData?.ownedSkins?.length ? menuController.profileData.ownedSkins : ['rookie'];
+    await this.hydrateInventory(profile, loadToken);
+    gifts.forEach(gift => showToast(`${gift.senderUsername || 'Um jogador'} doou uma skin para você.`, 'success'));
+  },
+
+  async hydrateInventory(profile, loadToken = this.inventoryLoadToken) {
+    const owned = profile?.ownedSkins?.length ? profile.ownedSkins : ['rookie'];
     const ownedItems = (await Promise.all(owned.map(async id => {
       if (id.startsWith('community_')) {
         const custom = await firebaseService.getSkinAsset(id);
-        const paidValue = getCommunitySkinInventoryValue(menuController.profileData, custom, featured);
+        const paidValue = getCommunitySkinInventoryValue(profile, custom);
         return custom ? { ...custom, rarity: 'custom', value: paidValue } : null;
       }
       const skin = getSkinById(id);
       return { ...skin, value: getSkinValue(skin) };
     }))).filter(Boolean);
+    if (this.inventoryLoadToken !== loadToken) return;
     this.inventoryItems = ownedItems.flatMap(item => {
-      const giftOrigin = menuController.profileData?.skinGiftOrigins?.[item.id] || null;
-      const copies = getSkinCopyCount(menuController.profileData || {}, item.id);
+      const giftOrigin = profile?.skinGiftOrigins?.[item.id] || null;
+      const copies = getSkinCopyCount(profile || {}, item.id);
       if (!giftOrigin) return [{ ...item, giftOrigin: null, inventoryCopy: 'regular' }];
       const gifted = { ...item, giftOrigin, inventoryCopy: 'gifted' };
       return copies > 1
@@ -347,7 +359,6 @@ export const marketController = {
     });
     this.inventoryRarity ||= 'all';
     this.renderInventory();
-    gifts.forEach(gift => showToast(`${gift.senderUsername || 'Um jogador'} doou uma skin para você.`, 'success'));
   },
 
   renderInventory() {

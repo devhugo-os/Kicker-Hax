@@ -100,6 +100,8 @@ export class P2PSocketService {
     this.lastInputSentAt = 0;
     this.lastInputSignature = '';
     this.lastInputActionSignature = '';
+    this.inputSequence = 0;
+    this.pendingInputs = new Map();
     this.activeMatchId = null;
     this.rejoinInProgress = false;
     this.rejoinTransportReady = false;
@@ -706,12 +708,23 @@ export class P2PSocketService {
     this.roomCode = roomCode;
     let joinRequestInterval = null;
     let stopJoinReceipt = null;
-    const joinTimeout = window.setTimeout(() => {
+    let joinTimeout = null;
+    const joinStartedAt = Date.now();
+    const failStalledJoin = () => {
       if (this.roomOperation !== 'join' || this.roomCode !== roomCode) return;
       finishJoinOperation();
       this.triggerLocalEvent('joinError', 'A conexão com a sala demorou demais. Tente novamente.');
       this.leaveRoom();
-    }, 15000);
+    };
+    const markJoinProgress = () => {
+      if (joinTimeout) window.clearTimeout(joinTimeout);
+      const hardLimitRemaining = 35000 - (Date.now() - joinStartedAt);
+      if (hardLimitRemaining <= 0) {
+        failStalledJoin();
+        return;
+      }
+      joinTimeout = window.setTimeout(failStalledJoin, Math.min(12000, hardLimitRemaining));
+    };
     const finishJoinOperation = () => {
       window.clearTimeout(joinTimeout);
       if (joinRequestInterval) window.clearInterval(joinRequestInterval);
@@ -719,6 +732,7 @@ export class P2PSocketService {
       stopJoinReceipt?.();
       stopJoinReceipt = null;
     };
+    markJoinProgress();
 
     // Fetch room from RTDB
     const roomRef = ref(rtdb, `multiplayerRooms/${roomCode}`);
@@ -733,6 +747,7 @@ export class P2PSocketService {
       }
 
       const roomData = snapshot.val();
+      markJoinProgress();
       if (!this.isActiveRoomRecord(roomData)) {
         finishJoinOperation();
         this.cleanupRoomData(roomCode).catch(() => {});
@@ -771,6 +786,7 @@ export class P2PSocketService {
 
       peer.on('open', (id) => {
         if (this.peer !== peer || this.peerGeneration !== peerGeneration || this.roomOperation !== 'join') return;
+        markJoinProgress();
         console.log('[P2PSocket] Conectando como convidado com ID:', id);
 
         const conn = this.peer.connect(roomData.hostPeerId, {
@@ -797,6 +813,7 @@ export class P2PSocketService {
           this.realtimeHostConn = realtimeConn;
           realtimeConn.on('open', () => {
             realtimeOpening = false;
+            markJoinProgress();
             this.triggerLocalEvent('realtimeReady', { peerId: roomData.hostPeerId });
             // Refresh liveness immediately; waiting for the next periodic ping
             // can make Android WebViews look disconnected after a remount.
@@ -839,6 +856,7 @@ export class P2PSocketService {
           return true;
         };
         const handleHostPayload = (payload) => {
+          markJoinProgress();
           const packet = this.consumeControlChunk(payload);
           if (!packet) return;
           const { event, data } = packet;
@@ -932,6 +950,7 @@ export class P2PSocketService {
         }
 
         conn.on('open', () => {
+          markJoinProgress();
           console.log('[P2PSocket] WebRTC aberto com Host. Enviando requisição de entrada...');
           const safeProfile = sanitizeMultiplayerProfile(profile);
           const sendJoinRequest = () => {
@@ -1530,7 +1549,7 @@ export class P2PSocketService {
         this.serverRoom.match.stop();
         this.serverRoom.match = null;
         this.serverRoom.status = 'lobby';
-        this.serverRoom.resetLobbyStatus();
+        this.serverRoom.resetLobbyStatus({ returnPlayersToLobby: true });
         this.serverRoom.chatHistory = [];
         this.cleanupRoomChats(this.roomCode).catch(() => {});
         const lobbyInfo = this.serverRoom.getLobbyInfo();
@@ -1879,8 +1898,11 @@ export class P2PSocketService {
   startGame() {
     if (!this.isHost || !this.serverRoom) return;
 
+    const lobbyHumans = this.serverRoom.players.filter(
+      player => !player.cpu && !player.disconnected && player.status === 'lobby'
+    );
     if (this.serverRoom.competitive) {
-      const humans = this.serverRoom.players.filter(p => !p.cpu && !p.disconnected && p.status === 'lobby');
+      const humans = lobbyHumans;
       if (humans.length < 2 || humans.length % 2 !== 0) {
         this.triggerLocalEvent('startError', 'Partida competitiva exige quantidade par de jogadores.');
         return;
@@ -1890,6 +1912,11 @@ export class P2PSocketService {
         return;
       }
       this.applyCompetitiveStartRules();
+    }
+
+    if (lobbyHumans.some(player => player.team === 'spectator')) {
+      this.triggerLocalEvent('startError', 'Defina um time para todos os jogadores antes de iniciar.');
+      return;
     }
 
     // Only people who are actually back in this lobby can block a new start.
@@ -1989,8 +2016,10 @@ export class P2PSocketService {
 
   sendGameInput(inputData) {
     const now = Date.now();
+    const sequence = ++this.inputSequence;
     const normalized = {
       ...inputData,
+      _seq: sequence,
       // Five-percent direction steps are visually indistinguishable on an
       // analog stick and prevent pointer noise from flooding the DataChannel.
       x: Math.round(Number(inputData.x || 0) * 20) / 20,
@@ -2000,15 +2029,34 @@ export class P2PSocketService {
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;
-    // Direction changes stay capped near 30 Hz and button edges bypass the cap.
-    // An unchanged held direction only needs a 10 Hz heartbeat because the
-    // authoritative simulation keeps the last input, cutting guest uplink load.
-    const minimumInterval = movementChanged ? 32 : 100;
+    // The packed input is under 40 bytes, so movement follows the 60 Hz game
+    // clock without building the old 30 Hz stair-step queue.
+    const isMoving = Math.abs(normalized.x) > 0.001 || Math.abs(normalized.y) > 0.001;
+    const minimumInterval = movementChanged || isMoving ? 15 : 100;
     if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;
     this.lastInputActionSignature = actionSignature;
+    this.pendingInputs.set(sequence, { sentAt: now, input: normalized });
+    while (this.pendingInputs.size > 24) this.pendingInputs.delete(this.pendingInputs.keys().next().value);
     this.emit('gameInput', normalized);
+  }
+
+  acknowledgeInputs(sequence) {
+    const ack = Number(sequence || 0);
+    for (const pendingSequence of this.pendingInputs.keys()) {
+      if (pendingSequence <= ack) this.pendingInputs.delete(pendingSequence);
+    }
+  }
+
+  getLocalPredictionState(input) {
+    const oldest = this.pendingInputs.values().next().value;
+    return {
+      input,
+      pingMs: this.pendingInputs.size && oldest
+        ? Math.max(0, Date.now() - oldest.sentAt)
+        : 0
+    };
   }
 
   sendMatchClientReady(options = {}) {

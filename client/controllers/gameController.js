@@ -289,6 +289,31 @@ export const gameController = {
     return true;
   },
 
+  clearMatchFrame(input = null) {
+    const matchIsPlaying = this.mode === 'multiplayer'
+      ? this.status === 'playing'
+      : this.localMatchSim?.status === 'playing';
+    const canUseDirtyRegions = this.performanceProfile?.nativeApp
+      && matchIsPlaying
+      && !this.inReplay
+      && !input?.shoot
+      && !this.shotPreviewState;
+    if (!canUseDirtyRegions) {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      return;
+    }
+
+    // The pitch lives in the CSS/static cache on the app. Clear only sprites
+    // and net overlays from the preceding frame to avoid a full-screen GPU fill.
+    this.players.forEach(player => {
+      this.ctx.clearRect(player.x - 104, player.y - 104, 208, 156);
+    });
+    if (this.ball) this.ctx.clearRect(this.ball.x - 30, this.ball.y - 30, 60, 60);
+    const netWidth = C.BORDER + C.GOAL_DEPTH + 14;
+    this.ctx.clearRect(0, 0, netWidth, this.canvas.height);
+    this.ctx.clearRect(this.canvas.width - netWidth, 0, netWidth, this.canvas.height);
+  },
+
   refreshPerformanceOverlays() {
     const inMatch = router.currentScreenId === 'match-screen';
     const showPing = localStorage.getItem('kicker_hax_show_ping') !== 'false';
@@ -2027,7 +2052,7 @@ export const gameController = {
       }
 
         // Render Frame Canvas
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.clearMatchFrame(inputP1);
         const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
         const cameraShaking = this.beginPowerKickCamera(
           this.ctx,
@@ -2569,7 +2594,7 @@ export const gameController = {
     document.getElementById('post-score-blue').textContent = score.blue;
     document.getElementById('post-mvp').textContent = result?.mvp?.username || (winnerTeam === C.Team.BLUE ?'Time Azul' : winnerTeam === C.Team.RED ?'Time Vermelho' : 'Empate');
     document.getElementById('post-xp-gained').textContent = isSpec
-      ? 'Espectador'
+      ? 'Sem time'
       : (result?.hasBots ? '+0 XP (com bot)' : `+${xpGained} XP`);
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
     renderMatchReport(document.getElementById('post-match-report'), result);
@@ -2915,6 +2940,9 @@ export const gameController = {
       state.players.forEach(sp => {
         const roomPlayer = this.activeRoom?.players?.find(player => player.id === sp.id || (sp.uid && player.uid === sp.uid));
         if (!sp.uid && roomPlayer?.uid) sp.uid = roomPlayer.uid;
+        if (!sp.name && roomPlayer?.username) sp.name = roomPlayer.username;
+        if (!sp.badge && roomPlayer?.badge) sp.badge = roomPlayer.badge;
+        if (!sp.staffRole && roomPlayer?.staffRole) sp.staffRole = roomPlayer.staffRole;
         if (!sp.skinId && roomPlayer?.skinId) sp.skinId = roomPlayer.skinId;
         if (!sp.skin || sp.skin === 'custom') {
           sp.skin = roomPlayer?.skin || '';
@@ -2929,6 +2957,9 @@ export const gameController = {
           this.players.push(p);
         }
         p.updateState(sp, snapshotReceivedAt, extrapolateMotion);
+        if (p.id === socketService.getSocket().id && sp.inputAck) {
+          socketService.acknowledgeInputs(sp.inputAck);
+        }
         this.refreshMatchPlayerIdentity(sp, p);
         // Persistent dash silhouettes caused ghosting and canvas artifacts,
         // especially in Android WebView. The action itself remains unchanged.
@@ -3135,7 +3166,7 @@ export const gameController = {
       const refreshHud = this.shouldRefreshMatchHud(timestamp);
 
       // 2) Render Frame
-      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.clearMatchFrame(input);
       const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
       const cameraShaking = this.beginPowerKickCamera(
         this.ctx,
@@ -3160,7 +3191,7 @@ export const gameController = {
 
         this.players.forEach(p => {
           const localPrediction = p.id === localId && this.status === 'playing' && !this.matchHostPaused
-            ? { input, pingMs: this.pingMs || 0 }
+            ? socketService.getLocalPredictionState(input)
             : null;
           p.interpolate(networkSmoothing, timestamp, localPrediction, networkDelayFrames);
           p.draw(this.ctx, this.ball.owner);
@@ -4237,15 +4268,19 @@ export const gameController = {
   drawFieldGrid(cx) {
     const w = this.canvas.width;
     const h = this.canvas.height;
-    const cacheKey = `${w}x${h}:${C.BORDER}:${C.GOAL_W_INIT}`;
+    const cacheScale = this.performanceProfile?.lowEffects ? 1 : Math.min(2, window.devicePixelRatio || 1);
+    const cacheKey = `${w}x${h}:${C.BORDER}:${C.GOAL_W_INIT}:${cacheScale}`;
 
     if (!this.fieldCacheCanvas || this.fieldCacheKey !== cacheKey) {
       this.fieldCacheCanvas = document.createElement('canvas');
-      this.fieldCacheCanvas.width = w;
-      this.fieldCacheCanvas.height = h;
+      this.fieldCacheCanvas.width = Math.round(w * cacheScale);
+      this.fieldCacheCanvas.height = Math.round(h * cacheScale);
       this.fieldCacheKey = cacheKey;
       const cacheCtx = this.fieldCacheCanvas.getContext('2d', { alpha: false });
-      if (cacheCtx) this.drawFieldGridStatic(cacheCtx);
+      if (cacheCtx) {
+        cacheCtx.scale(cacheScale, cacheScale);
+        this.drawFieldGridStatic(cacheCtx);
+      }
     }
 
     if (this.performanceProfile?.lowEffects) {
@@ -4262,7 +4297,7 @@ export const gameController = {
       this.canvas.style.backgroundImage = '';
       this.cssFieldCacheKey = '';
     }
-    cx.drawImage(this.fieldCacheCanvas, 0, 0);
+    cx.drawImage(this.fieldCacheCanvas, 0, 0, w, h);
   },
 
   drawFieldGridStatic(cx) {
@@ -4429,7 +4464,19 @@ export const gameController = {
       const cacheCtx = this.netOverlayCacheCanvas.getContext('2d');
       if (cacheCtx) this.drawNetOverlayStatic(cacheCtx);
     }
-    cx.drawImage(this.netOverlayCacheCanvas, 0, 0);
+    const sliceWidth = C.BORDER + C.GOAL_DEPTH + 12;
+    cx.drawImage(this.netOverlayCacheCanvas, 0, 0, sliceWidth, h, 0, 0, sliceWidth, h);
+    cx.drawImage(
+      this.netOverlayCacheCanvas,
+      w - sliceWidth,
+      0,
+      sliceWidth,
+      h,
+      w - sliceWidth,
+      0,
+      sliceWidth,
+      h
+    );
   },
 
   drawNetOverlayStatic(cx) {
@@ -4542,10 +4589,19 @@ export const gameController = {
   },
 
   beginPowerKickCamera(cx, ball) {
-    // Moving a CSS-backed static field would require a full-screen repaint.
-    // Mobile keeps the ball effect while avoiding that expensive camera pass.
-    if (this.performanceProfile?.lowEffects) return false;
     const offset = getPowerKickShakeOffset(ball, performance.now());
+    const matchStage = this.canvas?.closest('.match-stage');
+    if (this.performanceProfile?.lowEffects) {
+      // Keep mobile shake on the compositor instead of repainting the cached
+      // pitch, preserving the effect at a fraction of the GPU cost.
+      if (matchStage) {
+        matchStage.style.transform = offset.x || offset.y
+          ? `translate3d(${offset.x}px, ${offset.y}px, 0)`
+          : '';
+      }
+      return false;
+    }
+    if (matchStage?.style.transform) matchStage.style.transform = '';
     if (!offset.x && !offset.y) return false;
     cx.save();
     cx.translate(offset.x, offset.y);
@@ -5022,7 +5078,7 @@ export const gameController = {
       const hostTeamActions = isHost && !room.competitive ?`
         <button class="team-move-btn red" id="lobby-move-red-${p.id}" title="Mover para o vermelho">R</button>
         <button class="team-move-btn blue" id="lobby-move-blue-${p.id}" title="Mover para o azul">A</button>
-        <button class="team-move-btn spec" id="lobby-move-spec-${p.id}" title="Mover para espectador">E</button>
+        <button class="team-move-btn spec" id="lobby-move-spec-${p.id}" title="Mover para sem time">S</button>
       ` : '';
 
       row.innerHTML = `

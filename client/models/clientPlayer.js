@@ -262,7 +262,7 @@ export class ClientPlayer {
     ctx.strokeStyle = 'rgba(0,0,0,.45)';
     ctx.stroke();
 
-    const skinDrawn = drawSkinImage(ctx, this.skin, x, y, this.r - 1);
+    const skinDrawn = drawSkinImage(ctx, this.skin, x, y, this.r - 0.45);
     const usesBadge = !this.skinId || this.skinId === 'rookie';
     if (!skinDrawn && usesBadge && this.badge) {
       ctx.fillStyle = '#0b1020';
@@ -291,12 +291,12 @@ export class ClientPlayer {
     // Mobile stretches the logical pitch over many physical pixels. Cache the
     // identity at 2x and downsample once so detailed skins remain recognizable
     // without decoding or clipping the source image every gameplay frame.
-    const resolutionScale = this.lowEffects ? 2 : 1;
+    const resolutionScale = this.lowEffects ? 3 : 2;
     const key = `${this.getIdentityCacheKey()}|${resolutionScale}x`;
-    const width = 260;
-    const height = 112;
+    const width = 196;
+    const height = 104;
     const centerX = width / 2;
-    const centerY = 70;
+    const centerY = 66;
     if (this.identityCacheCanvas && this.identityCacheKey === key) {
       ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY, width, height);
       return;

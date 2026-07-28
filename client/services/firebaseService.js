@@ -43,6 +43,8 @@ import {
   getAverageMatchRating
 } from '../utils/rankingScore.js';
 import { getSessionLeaseLifetime } from '../utils/sessionLease.js';
+
+const skinAssetCache = new Map();
 import { getInsufficientCoinsMessage } from '../utils/marketPricing.js';
 import { appendChestPurchaseReceipt, findChestPurchaseReceipt, normalizeChestPurchaseId, resolveChestReward } from '../utils/chestPurchase.js';
 import { getMatchParticipantUids, getWritableHistoryUids, matchIncludesPlayer } from '../utils/matchHistory.js';
@@ -114,7 +116,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '74.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '75.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -578,8 +580,18 @@ export const firebaseService = {
   },
 
   async getSkinAsset(id) {
-    const snapshot = await get(ref(rtdb, `skinAssets/${id}`));
-    return snapshot.exists() ? { id, ...snapshot.val(), custom: true } : null;
+    if (!id) return null;
+    if (!skinAssetCache.has(id)) {
+      const request = get(ref(rtdb, `skinAssets/${id}`))
+        .then(snapshot => snapshot.exists() ? { id, ...snapshot.val(), custom: true } : null)
+        .catch(error => {
+          skinAssetCache.delete(id);
+          throw error;
+        });
+      skinAssetCache.set(id, request);
+      if (skinAssetCache.size > 80) skinAssetCache.delete(skinAssetCache.keys().next().value);
+    }
+    return skinAssetCache.get(id);
   },
 
   skinDayKey(date = new Date()) {
