@@ -1520,6 +1520,12 @@ html.browser-immersive #match-canvas {
 #post-game-screen {
   padding: 12px;
 }
+.post-result-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.post-result-actions small { text-align: center; }
 
 .post-card {
   width: min(920px, calc(100vw - 24px));
@@ -1672,6 +1678,27 @@ html.browser-immersive #match-canvas {
   }
 
   .post-stats {
-    padding: 8px;
+    padding: 6px 8px;
+  }
+
+  .post-stats .adv-stat-row {
+    padding: 4px 0;
+  }
+
+  .post-result-actions {
+    width: 100%;
+    gap: 4px;
+    margin-top: 2px;
+  }
+
+  .post-result-actions .btn-lg {
+    min-height: 30px;
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .post-result-actions small {
+    font-size: 9px;
+    line-height: 1.1;
   }
 }

@@ -1117,11 +1117,11 @@ export class ServerMatch {
     const frames = Math.min(6, Math.max(1, Math.round(elapsed / (1000 / 60))));
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
-      // Physics remains at 60 Hz. Velocity-aware rendering fills the gap
-      // between 30 Hz snapshots while the lower cadence leaves headroom for
-      // remote/mobile WebRTC links and rooms with several spectators.
+      // Physics and compact network snapshots both remain at 60 Hz. The raw
+      // unordered channel drops obsolete queued states, preserving freshness
+      // without reducing motion cadence for distant or mobile players.
       const finalFrame = frame === frames - 1;
-      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 33;
+      this.skipBroadcast = !finalFrame || now - this.lastBroadcastAt < 15;
       this.tick();
       if (!this.skipBroadcast) this.lastBroadcastAt = now;
       if (this.status === 'ended') break;

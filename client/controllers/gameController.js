@@ -1003,7 +1003,7 @@ export const gameController = {
             return;
           }
           socketService.getPublicRoomMeta(this.activeRoom?.code).then(room => {
-            if (room) {
+            if (room?.status === 'lobby' && room.hostPresent !== false) {
               btnPostContinue.disabled = true;
               socketService.off('returnedToLobby');
               const returnTimeout = window.setTimeout(() => {
@@ -1042,6 +1042,18 @@ export const gameController = {
         } else {
           router.show('solo-screen');
         }
+      };
+    }
+    const btnPostArena = document.getElementById('post-btn-arena');
+    if (btnPostArena) {
+      btnPostArena.onclick = () => {
+        window.clearInterval(this.postLobbyWatchInterval);
+        this.postLobbyWatchInterval = null;
+        this.activeRoom = null;
+        this.clearRoomChatViews();
+        socketService.leaveRoom();
+        router.show('multiplayer-screen');
+        socketService.refreshPublicRooms();
       };
     }
 
@@ -2455,6 +2467,7 @@ export const gameController = {
       winnerTeam: score.red === score.blue ? 'draw' : score.red > score.blue ? C.Team.RED : C.Team.BLUE,
       playerStats: localStats
     });
+    this.preparePostMatchActions();
     this.showPostGameAfterEndAnimation();
   },
 
@@ -2560,7 +2573,37 @@ export const gameController = {
       : (result?.hasBots ? '+0 XP (com bot)' : `+${xpGained} XP`);
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
     renderMatchReport(document.getElementById('post-match-report'), result);
+    this.preparePostMatchActions();
     this.showPostGameAfterEndAnimation();
+  },
+
+  preparePostMatchActions() {
+    const lobbyButton = document.getElementById('post-btn-continue');
+    const arenaButton = document.getElementById('post-btn-arena');
+    const waitLabel = document.getElementById('post-lobby-wait');
+    window.clearInterval(this.postLobbyWatchInterval);
+    this.postLobbyWatchInterval = null;
+    const multiplayer = this.mode === 'multiplayer';
+    arenaButton?.classList.toggle('hidden', !multiplayer);
+    if (!multiplayer || socketService.isHost) {
+      if (lobbyButton) lobbyButton.disabled = false;
+      waitLabel?.classList.add('hidden');
+      return;
+    }
+    if (lobbyButton) lobbyButton.disabled = true;
+    waitLabel?.classList.remove('hidden');
+    const refresh = async () => {
+      const room = await socketService.getPublicRoomMeta(this.activeRoom?.code).catch(() => null);
+      const hostReturned = room?.status === 'lobby' && room.hostPresent !== false;
+      if (lobbyButton) lobbyButton.disabled = !hostReturned;
+      waitLabel?.classList.toggle('hidden', hostReturned);
+      if (!hostReturned) return;
+      this.activeRoom = { ...this.activeRoom, ...room };
+      window.clearInterval(this.postLobbyWatchInterval);
+      this.postLobbyWatchInterval = null;
+    };
+    refresh();
+    this.postLobbyWatchInterval = window.setInterval(refresh, 900);
   },
 
   showPostGameAfterEndAnimation() {
@@ -2718,6 +2761,7 @@ export const gameController = {
     this.lastGameStateSequence = 0;
     this.lastOnlineActionInput = {};
     this.localActionSoundUntil = {};
+    this.rejoinBootstrapApplied = false;
     if (this.pingInterval) clearInterval(this.pingInterval);
 
     socketService.off('pong');
@@ -2774,11 +2818,10 @@ export const gameController = {
         const localId = socketService.getSocket().id;
         const localPlayerRestored = state?.players?.some(player => player.id === localId);
         if (localPlayerRestored) {
-          window.clearInterval(this.rejoinReadyInterval);
-          this.rejoinReadyInterval = null;
-          window.clearTimeout(this.pendingRejoinConfirmation.timeout);
-          this.pendingRejoinConfirmation = null;
-          showToast('Você voltou para a partida.', 'success');
+          // The host only releases the disconnect pause after the returning
+          // renderer proves that its authoritative player was applied.
+          this.rejoinBootstrapApplied = true;
+          socketService.sendMatchClientReady({ stateApplied: true });
         }
       }
       if (!this.lastPingAt && Number.isFinite(Number(state.serverSentAt))) {
@@ -3258,6 +3301,19 @@ export const gameController = {
       this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
     };
 
+    socketService.off('rejoinActivated');
+    socketService.on('rejoinActivated', ({ matchId, playerId } = {}) => {
+      if (!this.pendingRejoinConfirmation) return;
+      if (matchId && matchId !== this.onlineMatchMeta?.matchId) return;
+      if (playerId && playerId !== socketService.getSocket().id) return;
+      window.clearInterval(this.rejoinReadyInterval);
+      this.rejoinReadyInterval = null;
+      window.clearTimeout(this.pendingRejoinConfirmation.timeout);
+      this.pendingRejoinConfirmation = null;
+      this.rejoinBootstrapApplied = true;
+      showToast('Você voltou para a partida.', 'success');
+    });
+
     this.localPhysicsTick = requestAnimationFrame(tickOnlineGame);
     // The authoritative clock remains stopped until every active client has
     // installed its state/replay listeners and opened this match view.
@@ -3265,7 +3321,9 @@ export const gameController = {
     socketService.sendMatchClientReady();
     if (this.onlineMatchMeta?.rejoined) {
       window.clearInterval(this.rejoinReadyInterval);
-      this.rejoinReadyInterval = window.setInterval(() => socketService.sendMatchClientReady(), 600);
+      this.rejoinReadyInterval = window.setInterval(() => {
+        socketService.sendMatchClientReady({ stateApplied: this.rejoinBootstrapApplied });
+      }, 600);
       if (this.pendingRejoinConfirmation) {
         this.pendingRejoinConfirmation.timeout = window.setTimeout(() => {
           if (this.pendingRejoinConfirmation) this.pendingRejoinConfirmation.timeout = null;
@@ -3299,6 +3357,7 @@ export const gameController = {
       this.pendingRejoinConfirmation = null;
     }
     this.pingMs = null;
+    this.rejoinBootstrapApplied = false;
     this.isPaused = false;
     this.pauseMenuOpen = false;
     this.matchHostPaused = false;
@@ -4410,24 +4469,26 @@ export const gameController = {
   drawShotPreview(cx, player, ball, input, charge = 0) {
     const normalizedInputCharge = Math.max(0, Math.min(1, Number(charge) || 0));
     const now = performance.now();
+    // Ownership changes in the same simulation step that releases the shot.
+    // Never keep drawing from the moving ball after that transition.
+    if (!player || !ball || ball.owner !== player.id) {
+      this.shotPreviewState = null;
+      return;
+    }
     const existingPreview = this.shotPreviewState?.playerId === player?.id
       ? this.shotPreviewState
       : null;
     // Local physics releases the shot between input sampling and drawing.
     // Treat an existing charge as held input so one transient false value does
     // not blink the guide in solo/training.
-    const previewActive = !!input?.shoot || normalizedInputCharge > 0.001
-      || Number(existingPreview?.expiresAt || 0) >= now;
-    if (!player || !ball || !previewActive) {
+    const previewActive = !!input?.shoot || normalizedInputCharge > 0.001;
+    if (!previewActive) {
       this.shotPreviewState = null;
       return;
     }
     const inputLength = Math.hypot(input.x || 0, input.y || 0);
     const liveAngle = inputLength > 0.01 ? Math.atan2(input.y, input.x) : player.dir;
-    if (ball.owner === player.id) {
-      // Remote ownership can briefly disappear between otherwise valid
-      // snapshots. Keep the locally confirmed aim for a few frames so the
-      // distance guide remains steady while the shoot button is held.
+    {
       const previous = existingPreview;
       const previousAngle = Number(previous?.angle ?? liveAngle);
       const angleDelta = Math.atan2(
@@ -4445,7 +4506,7 @@ export const gameController = {
         angle: previousAngle + angleDelta * angleBlend,
         charge: previous ? previous.charge + (nextCharge - previous.charge) * chargeBlend : nextCharge,
         updatedAt: now,
-        expiresAt: now + 140
+        expiresAt: now + 80
       };
     }
     const preview = this.shotPreviewState;
@@ -4712,7 +4773,8 @@ export const gameController = {
         this.activeRoom = payload.lobbyInfo || room;
         this.fieldSize = this.activeRoom.fieldSize || 'medium';
         this.onlineMatchMeta = { rejoined: true, matchId: payload.matchId || saved.matchId };
-        socketService.sendMatchClientReady();
+        this.rejoinBootstrapApplied = true;
+        socketService.sendMatchClientReady({ stateApplied: true });
         showToast('Retorno aceito. Sincronizando a partida...', 'info');
       } catch (error) {
         socketService.leaveRoom();

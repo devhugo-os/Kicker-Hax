@@ -24,13 +24,23 @@ export function getDuplicateChestRefund(chestPrice) {
 }
 
 /** Resolves ownership changes without ever adding the empty-roll marker. */
-export function resolveChestReward(ownedSkins, skin, chestPrice) {
+export function resolveChestReward(ownedSkins, skin, chestPrice, ownership = {}) {
   const owned = Array.isArray(ownedSkins) ? [...ownedSkins] : ['rookie'];
   const noPrize = skin?.id === 'no_prize' || skin?.noPrize === true;
-  const duplicate = !noPrize && owned.includes(skin?.id);
+  const gifted = !!ownership.skinGiftOrigins?.[skin?.id]?.senderUid;
+  const copyCount = Math.max(
+    Number(ownership.skinOwnedCopies?.[skin?.id] || 0),
+    owned.includes(skin?.id) ? 1 : 0
+  );
+  const mayKeepSecondCopy = copyCount === 1 && gifted;
+  const duplicate = !noPrize && copyCount > 0 && !mayKeepSecondCopy;
   const refund = duplicate ? getDuplicateChestRefund(chestPrice) : 0;
-  if (!noPrize && !duplicate && skin?.id) owned.push(skin.id);
-  return { owned, noPrize, duplicate, refund };
+  const skinOwnedCopies = { ...(ownership.skinOwnedCopies || {}) };
+  if (!noPrize && !duplicate && skin?.id) {
+    if (!owned.includes(skin.id)) owned.push(skin.id);
+    skinOwnedCopies[skin.id] = copyCount + 1;
+  }
+  return { owned, skinOwnedCopies, noPrize, duplicate, refund };
 }
 
 export function markChestPurchaseCommitted(pending, result) {

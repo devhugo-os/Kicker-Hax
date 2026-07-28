@@ -12,6 +12,7 @@ let rouletteTimers = [];
 let isMuted = false;
 let globalVolume = 0.8; // 0.0 to 1.0
 let musicVolume = 0.55; // 0.0 to 1.0
+let outputVolumeScale = 1;
 
 function audioCtx() {
   if (!AC) {
@@ -41,13 +42,18 @@ export const soundFx = {
     }
   },
 
+  setOutputVolumeScale(scale = 1) {
+    outputVolumeScale = Math.max(0, Math.min(1, Number(scale) || 0));
+    this.updateBuses();
+  },
+
   ensureBuses() {
     const ac = audioCtx();
     if (!ac) return null;
 
     if (!outGain) {
       outGain = ac.createGain();
-      outGain.gain.value = isMuted ? 0.0 : globalVolume * 0.9;
+      outGain.gain.value = isMuted ? 0.0 : globalVolume * 0.9 * outputVolumeScale;
       outGain.connect(ac.destination);
     }
     
@@ -69,7 +75,7 @@ export const soundFx = {
     const buses = this.ensureBuses();
     if (!buses) return;
     const { ac, outGain } = buses;
-    const target = isMuted ? 0.0 : globalVolume * 0.9;
+    const target = isMuted ? 0.0 : globalVolume * 0.9 * outputVolumeScale;
     try {
       outGain.gain.cancelScheduledValues(ac.currentTime);
       outGain.gain.setTargetAtTime(target, ac.currentTime, 0.05);

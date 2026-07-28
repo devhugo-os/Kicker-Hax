@@ -52,6 +52,14 @@ import { getFeaturedCycle } from '../utils/featuredCycle.js';
 import { getSaoPauloChatDayWindow } from '../utils/chatRetention.js';
 import { getSeasonId } from '../utils/seasonCycle.js';
 import { consumeChatRateLimit } from '../utils/chatRateLimit.js';
+import {
+  addRegularSkinCopy,
+  canAcquireSkinCopy,
+  getSkinCopyCount,
+  hasGiftedSkinCopy,
+  removeGiftedSkinCopy,
+  removeRegularSkinCopy
+} from '../utils/skinOwnership.js';
 
 const _dec = (val) => atob(val);
 const firebaseConfig = {
@@ -106,7 +114,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '73.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '74.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -499,13 +507,17 @@ export const firebaseService = {
         return {
           ...previous,
           recovered: true,
-          profile: { coins, ownedSkins: profile.ownedSkins || ['rookie'] }
+          profile: {
+            coins,
+            ownedSkins: profile.ownedSkins || ['rookie'],
+            skinOwnedCopies: profile.skinOwnedCopies || {}
+          }
         };
       }
       if (coins < chest.price) {
         throw new Error(getInsufficientCoinsMessage(coins, chest.price, `abrir o ${chest.name}`));
       }
-      const outcome = resolveChestReward(profile.ownedSkins, skin, chest.price);
+      const outcome = resolveChestReward(profile.ownedSkins, skin, chest.price, profile);
       const { noPrize, duplicate, refund } = outcome;
       // The refund is committed together with the receipt. If the app closes,
       // replaying the same purchase ID returns this receipt without charging
@@ -522,6 +534,7 @@ export const firebaseService = {
       const next = {
         coins: coins - chest.price + refund,
         ownedSkins: outcome.owned,
+        skinOwnedCopies: outcome.skinOwnedCopies,
         chestPurchaseReceipts: appendChestPurchaseReceipt(profile.chestPurchaseReceipts, receipt)
       };
       transaction.update(userRef, next);
@@ -554,11 +567,10 @@ export const firebaseService = {
       if (coins < price) {
         throw new Error(getInsufficientCoinsMessage(coins, price, 'comprar a skin selecionada'));
       }
-      const owned = Array.isArray(profile.ownedSkins) ? [...profile.ownedSkins] : ['rookie'];
-      if (owned.includes(skin.id)) throw new Error('Você já possui esta skin.');
-      owned.push(skin.id);
+      const ownership = addRegularSkinCopy(profile, skin.id);
+      if (!ownership) throw new Error('Você já possui esta skin.');
       const skinPurchaseValues = { ...(profile.skinPurchaseValues || {}), [skin.id]: Number(price || 0) };
-      const updated = { coins: coins - price, ownedSkins: owned, skinPurchaseValues };
+      const updated = { coins: coins - price, ...ownership, skinPurchaseValues };
       transaction.update(userRef, updated);
       return updated;
     });
@@ -796,15 +808,19 @@ export const firebaseService = {
       const profile = snapshot.data();
       const owned = Array.isArray(profile.ownedSkins) ? [...profile.ownedSkins] : ['rookie'];
       if (!owned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
+      if (hasGiftedSkinCopy(profile, skinId) && getSkinCopyCount(profile, skinId) < 2) {
+        throw new Error('Uma skin doada só pode ser devolvida ao remetente.');
+      }
       if ((profile.equippedSkinId || 'rookie') === skinId) {
         throw new Error('Equipe outra skin antes de descartar esta.');
       }
       const skinPurchaseValues = { ...(profile.skinPurchaseValues || {}) };
       const skinGiftOrigins = { ...(profile.skinGiftOrigins || {}) };
       delete skinPurchaseValues[skinId];
-      delete skinGiftOrigins[skinId];
+      const ownership = removeRegularSkinCopy(profile, skinId);
+      if (!ownership.ownedSkins.includes(skinId)) delete skinGiftOrigins[skinId];
       const updated = {
-        ownedSkins: owned.filter(id => id !== skinId),
+        ...ownership,
         skinPurchaseValues,
         skinGiftOrigins,
         coins: Math.max(0, Number(profile.coins || 0)) + safeReward
@@ -847,23 +863,28 @@ export const firebaseService = {
       const owned = Array.isArray(sender.ownedSkins) ? sender.ownedSkins : ['rookie'];
       if (!owned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
       if ((sender.equippedSkinId || 'rookie') === skinId) throw new Error('Equipe outra skin antes de doar esta.');
-      if ((receiver.ownedSkins || ['rookie']).includes(skinId)) throw new Error('Esse jogador já possui esta skin.');
+      if (getSkinCopyCount(receiver, skinId) > 0) throw new Error('Esse jogador já possui esta skin.');
+      if (hasGiftedSkinCopy(sender, skinId) && getSkinCopyCount(sender, skinId) < 2) {
+        throw new Error('Uma skin recebida por doação só pode ser devolvida.');
+      }
       const purchaseValues = { ...(sender.skinPurchaseValues || {}) };
       const senderGiftOrigins = { ...(sender.skinGiftOrigins || {}) };
       const skinValue = Math.max(0, Number(purchaseValues[skinId] || 0));
       delete purchaseValues[skinId];
-      delete senderGiftOrigins[skinId];
+      const senderOwnership = removeRegularSkinCopy(sender, skinId);
+      if (!senderOwnership.ownedSkins.includes(skinId)) delete senderGiftOrigins[skinId];
       const receiverOwned = Array.isArray(receiver.ownedSkins) ? [...receiver.ownedSkins] : ['rookie'];
       receiverOwned.push(skinId);
       const claimedAt = Date.now();
       const giftOrigin = { senderUid, senderUsername: sender.username || '', giftedAt: claimedAt };
       transaction.update(senderRef, {
-        ownedSkins: owned.filter(id => id !== skinId),
+        ...senderOwnership,
         skinPurchaseValues: purchaseValues,
         skinGiftOrigins: senderGiftOrigins
       });
       transaction.update(recipientRef, {
         ownedSkins: receiverOwned,
+        skinOwnedCopies: { ...(receiver.skinOwnedCopies || {}), [skinId]: 1 },
         skinPurchaseValues: { ...(receiver.skinPurchaseValues || {}), [skinId]: skinValue },
         skinGiftOrigins: { ...(receiver.skinGiftOrigins || {}), [skinId]: giftOrigin },
         lastReceivedGiftId: giftRef.id
@@ -903,27 +924,30 @@ export const firebaseService = {
       const holderOwned = Array.isArray(holder.ownedSkins) ? [...holder.ownedSkins] : ['rookie'];
       if (!holderOwned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
       const originalOwned = Array.isArray(originalOwner.ownedSkins) ? [...originalOwner.ownedSkins] : ['rookie'];
-      if (originalOwned.includes(skinId)) throw new Error('O remetente já possui esta skin.');
+      if (getSkinCopyCount(originalOwner, skinId) > 0) throw new Error('O remetente já possui esta skin.');
 
       const holderValues = { ...(holder.skinPurchaseValues || {}) };
       const holderOrigins = { ...(holder.skinGiftOrigins || {}) };
       const restoredValue = Math.max(0, Number(holderValues[skinId] || 0));
       delete holderValues[skinId];
       delete holderOrigins[skinId];
+      const holderOwnership = removeGiftedSkinCopy(holder, skinId);
 
       const originalValues = { ...(originalOwner.skinPurchaseValues || {}), [skinId]: restoredValue };
       const originalOrigins = { ...(originalOwner.skinGiftOrigins || {}) };
       delete originalOrigins[skinId];
       originalOwned.push(skinId);
+      const originalCopies = { ...(originalOwner.skinOwnedCopies || {}), [skinId]: 1 };
       const returnedAt = Date.now();
 
       transaction.update(holderRef, {
-        ownedSkins: holderOwned.filter(id => id !== skinId),
+        ...holderOwnership,
         skinPurchaseValues: holderValues,
         skinGiftOrigins: holderOrigins
       });
       transaction.update(originalOwnerRef, {
         ownedSkins: originalOwned,
+        skinOwnedCopies: originalCopies,
         skinPurchaseValues: originalValues,
         skinGiftOrigins: originalOrigins,
         lastReceivedGiftId: giftRef.id
@@ -963,6 +987,7 @@ export const firebaseService = {
         owned.push(gift.skinId);
         transaction.update(receiverRef, {
           ownedSkins: owned,
+          skinOwnedCopies: { ...(receiver.skinOwnedCopies || {}), [gift.skinId]: 1 },
           skinPurchaseValues: { ...(receiver.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) },
           skinGiftOrigins: {
             ...(receiver.skinGiftOrigins || {}),
@@ -995,6 +1020,7 @@ export const firebaseService = {
         if (!owned.includes(gift.skinId)) owned.push(gift.skinId);
         transaction.update(userRef, {
           ownedSkins: owned,
+          skinOwnedCopies: { ...(profile.skinOwnedCopies || {}), [gift.skinId]: 1 },
           skinPurchaseValues: { ...(profile.skinPurchaseValues || {}), [gift.skinId]: Number(gift.skinValue || 0) },
           skinGiftOrigins: {
             ...(profile.skinGiftOrigins || {}),

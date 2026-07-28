@@ -13,6 +13,7 @@ import { encodeSkinCanvas, validateSkinImageFile } from '../utils/skinImage.js';
 import { SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { soundFx } from '../utils/soundFx.js';
 import { formatFeaturedTimeLeft } from '../utils/featuredCycle.js';
+import { canAcquireSkinCopy, getSkinCopyCount } from '../utils/skinOwnership.js';
 
 const FEATURED = {
   hourly: { label: 'Skin da hora', price: 45, reset: 'Troca a cada hora' },
@@ -274,7 +275,7 @@ export const marketController = {
         grid.appendChild(card);
         return;
       }
-      const owned = (menuController.profileData?.ownedSkins || []).includes(skin.id);
+      const owned = !canAcquireSkinCopy(menuController.profileData || {}, skin.id);
       const resetLabel = skin.expiresAt ? formatFeaturedTimeLeft(skin.expiresAt) : config.reset;
       const loopLabel = cadence === 'hourly' ? ' • fila rotativa' : '';
       const carriedLabel = skin.carried && cadence !== 'hourly' ? ' • mantida por falta de nova candidata' : '';
@@ -335,8 +336,15 @@ export const marketController = {
       const skin = getSkinById(id);
       return { ...skin, value: getSkinValue(skin) };
     }))).filter(Boolean);
-    ownedItems.forEach(item => { item.giftOrigin = menuController.profileData?.skinGiftOrigins?.[item.id] || null; });
-    this.inventoryItems = ownedItems;
+    this.inventoryItems = ownedItems.flatMap(item => {
+      const giftOrigin = menuController.profileData?.skinGiftOrigins?.[item.id] || null;
+      const copies = getSkinCopyCount(menuController.profileData || {}, item.id);
+      if (!giftOrigin) return [{ ...item, giftOrigin: null, inventoryCopy: 'regular' }];
+      const gifted = { ...item, giftOrigin, inventoryCopy: 'gifted' };
+      return copies > 1
+        ? [gifted, { ...item, giftOrigin: null, inventoryCopy: 'regular' }]
+        : [gifted];
+    });
     this.inventoryRarity ||= 'all';
     this.renderInventory();
     gifts.forEach(gift => showToast(`${gift.senderUsername || 'Um jogador'} doou uma skin para você.`, 'success'));
@@ -364,7 +372,8 @@ export const marketController = {
       // Every account starts with Rookie equipped even when older profiles do
       // not yet have equippedSkinId persisted.
       const equippedId = menuController.profileDraft?.equippedSkinId || menuController.profileData?.equippedSkinId || 'rookie';
-      const equipped = equippedId === skin.id;
+      const hasRegularCopy = (this.inventoryItems || []).some(item => item.id === skin.id && item.inventoryCopy === 'regular');
+      const equipped = equippedId === skin.id && (skin.inventoryCopy !== 'gifted' || !hasRegularCopy);
       const skinPending = equipped && equippedId !== (menuController.profileData?.equippedSkinId || 'rookie');
       const card = document.createElement('article');
       card.className = `inventory-skin-card rarity-border-${skin.rarity} ${equipped ? 'equipped' : ''}`;

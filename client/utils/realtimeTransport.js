@@ -1,6 +1,9 @@
 // Keep at most roughly one compact snapshot queued. Old positions have no
 // value and are the main source of apparent high ping on distant peers.
-export const MAX_REALTIME_BUFFERED_BYTES = 1024;
+// Keep a few compact datagrams of headroom. The old 1 KB limit was smaller
+// than one multi-player snapshot, effectively throttling a nominal 60 Hz
+// stream to an uneven 20-30 Hz whenever bufferedAmount had not drained yet.
+export const MAX_REALTIME_BUFFERED_BYTES = 6144;
 export const MAX_REALTIME_TEXT_LENGTH = 255;
 
 const OMITTED_REALTIME_FIELDS = new Set([
@@ -39,7 +42,33 @@ function transformKeys(value, dictionary) {
 }
 
 export function isRealtimeEvent(event) {
-  return event === 'gameState' || event === 'gameInput';
+  return event === 'gameState' || event === 'gameInput' || event === 'ping' || event === 'pong';
+}
+
+/**
+ * High-frequency state packets carry only simulation data. Player identity is
+ * refreshed periodically and match statistics at a lower cadence; both are
+ * already available in the reliable lobby/bootstrap payload.
+ */
+export function compactRealtimeGameState(state, options = {}) {
+  if (!state?.players) return state;
+  const includeIdentity = options.includeIdentity === true;
+  const includeStats = options.includeStats === true;
+  return {
+    ...state,
+    players: state.players.map(player => {
+      const compact = { ...player };
+      if (!includeIdentity) {
+        delete compact.uid;
+        delete compact.name;
+        delete compact.badge;
+        delete compact.skinId;
+        delete compact.staffRole;
+      }
+      if (!includeStats) delete compact.matchStats;
+      return compact;
+    })
+  };
 }
 
 /**
@@ -48,7 +77,10 @@ export function isRealtimeEvent(event) {
  * Lobby, chat, replay and result events are never discarded here.
  */
 export function shouldDropRealtimeState(event, bufferedAmount = 0) {
-  return isRealtimeEvent(event)
+  // Input, ping and pong are tiny and semantically newer than the previous
+  // value; dropping one can leave a held action or a stale liveness reading.
+  // Only replaceable host snapshots are discarded under congestion.
+  return event === 'gameState'
     && Number.isFinite(Number(bufferedAmount))
     && Number(bufferedAmount) > MAX_REALTIME_BUFFERED_BYTES;
 }

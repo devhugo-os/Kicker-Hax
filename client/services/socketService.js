@@ -7,6 +7,7 @@ import { ServerMatch } from '../../server/models/serverMatch.js';
 import { ServerPhysics } from '../../server/models/serverPhysics.js';
 import { buildRoomCleanupPatch, getOrphanRoomCodes, getRoomActivityTimestamp } from '../utils/roomCleanup.js';
 import {
+  compactRealtimeGameState,
   decodeRealtimePacket,
   encodeRealtimePacket,
   shouldDropRealtimeState
@@ -249,8 +250,11 @@ export class P2PSocketService {
       this.unloadBound = true;
       window.addEventListener('pagehide', () => {
         // Guests must leave too; otherwise their peer can remain in the
-        // host's roster after closing the tab and create a ghost player.
-        if (this.roomCode) this.leaveRoom();
+        // host's roster after closing the tab and create a ghost player. A
+        // Cordova WebView can emit pagehide when Android only backgrounds the
+        // Activity, so native sessions are handled by the host watchdog.
+        const nativeFrame = new URLSearchParams(window.location.search).get('native') === '1';
+        if (this.roomCode && !nativeFrame) this.leaveRoom();
       });
     }
     return this;
@@ -395,7 +399,7 @@ export class P2PSocketService {
     if (this.isHost) {
       // Direct local execution for host's own emissions
       this.handleHostReceivedData(this.clientId, event, data);
-    } else if (event === 'gameInput' && this.realtimeHostConn?.open) {
+    } else if (['gameInput', 'ping'].includes(event) && this.realtimeHostConn?.open) {
       const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
       if (!shouldDropRealtimeState(event, bufferedAmount)) {
         this.realtimeHostConn.send(encodeRealtimePacket(event, data));
@@ -423,8 +427,14 @@ export class P2PSocketService {
       ? compactMultiplayerPayload(transportPayload)
       : transportPayload;
     this.triggerLocalEvent(event, localPayload);
+    const realtimeState = event === 'gameState'
+      ? compactRealtimeGameState(transportPayload, {
+        includeIdentity: this.gameStateSequence % 60 === 1,
+        includeStats: this.gameStateSequence % 6 === 1
+      })
+      : null;
     const realtimePacket = event === 'gameState'
-      ? encodeRealtimePacket(event, transportPayload)
+      ? encodeRealtimePacket(event, realtimeState)
       : null;
     this.connections.forEach(conn => {
       if (conn.open) {
@@ -614,7 +624,7 @@ export class P2PSocketService {
         });
         conn.on('data', (payload) => {
           const packet = decodeRealtimePacket(payload);
-          if (packet?.event === 'gameInput') {
+          if (['gameInput', 'ping'].includes(packet?.event)) {
             this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
           }
         });
@@ -1097,27 +1107,25 @@ export class P2PSocketService {
     return new Promise((resolve, reject) => {
       let settled = false;
       let acceptedPayload = null;
-      let realtimeReady = false;
       let bootstrapReady = false;
+      let bootstrapState = null;
       const tryFinish = () => {
-        // Do not navigate to a frozen field on the lifecycle ACK alone. The
-        // guest must also have either the fast state channel or a complete
-        // authoritative bootstrap containing its newly assigned Peer ID.
-        if (acceptedPayload && (realtimeReady || bootstrapReady)) finish(true, acceptedPayload);
+        // An open DataChannel is not proof that state reached the renderer.
+        // Resolve only after a snapshot contains this UID and the new Peer ID.
+        if (acceptedPayload && bootstrapReady) {
+          finish(true, { ...acceptedPayload, bootstrapState });
+        }
       };
       const handleError = message => finish(false, message || 'Nao foi possivel voltar para a partida.');
-      const handleRealtimeReady = () => {
-        realtimeReady = true;
-        this.rejoinTransportReady = true;
-        tryFinish();
-      };
       const handleBootstrap = state => {
         if (!isAuthoritativeRejoinState(state, {
           uid: profile?.uid,
           clientId: this.clientId,
           matchId
         })) return;
+        bootstrapState = state;
         bootstrapReady = true;
+        this.rejoinTransportReady = true;
         tryFinish();
       };
       const timeout = window.setTimeout(() => {
@@ -1128,7 +1136,6 @@ export class P2PSocketService {
         settled = true;
         window.clearTimeout(timeout);
         this.off('joinError', handleError);
-        this.off('realtimeReady', handleRealtimeReady);
         this.off('gameState', handleBootstrap);
         this.rejoinTransportReady = accepted;
         this.rejoinInProgress = false;
@@ -1136,7 +1143,6 @@ export class P2PSocketService {
         else reject(new Error(String(payload || 'Nao foi possivel voltar para a partida.')));
       };
       this.on('joinError', handleError);
-      this.on('realtimeReady', handleRealtimeReady);
       this.on('gameState', handleBootstrap);
       this.joinRoom(code, password, profile, {
         rejoin: true,
@@ -1144,9 +1150,6 @@ export class P2PSocketService {
         onAccepted: payload => {
           acceptedPayload = payload || {};
           this.activeMatchId = payload?.matchId || matchId || this.activeMatchId;
-          // Readiness is part of the reconnect handshake. Sending it here lets
-          // the host return an authoritative bootstrap state immediately.
-          this.emit('matchClientReady', { matchId: this.activeMatchId });
           tryFinish();
         }
       });
@@ -1315,9 +1318,6 @@ export class P2PSocketService {
         }
         if (conn) this.registerHostControlConnection(conn, socketId);
         this.serverRoom.match.reconnectPlayer(reconnecting.previousId, socketId, reconnecting.player);
-        // Rebinding the authoritative player proves the return. Clear the old
-        // countdown now so it cannot expire after the player is already back.
-        this.serverRoom.match.resumeAfterReconnect(reconnecting.player.uid);
         // Do not let the silent-disconnect watchdog eject a player while the
         // new realtime channel is still negotiating after an accepted return.
         this.serverRoom.match.touchPlayer(socketId);
@@ -1439,13 +1439,20 @@ export class P2PSocketService {
       if (!match || (data?.matchId && data.matchId !== match.matchId)) return;
       match.touchPlayer(socketId);
       match.markClientReady(socketId);
-      // Resume only after the returning client has mounted the match view.
       const readyPlayer = this.serverRoom.players.find(player => player.id === socketId);
-      if (readyPlayer?.uid) match.resumeAfterReconnect(readyPlayer.uid);
+      const rejoinActivated = !!readyPlayer?.uid
+        && data?.stateApplied === true
+        && match.resumeAfterReconnect(readyPlayer.uid);
       // A returning guest may mount before its unordered realtime channel is
       // open. Deliver one chunked authoritative state through the reliable
       // control connection; later snapshots continue on the fast channel.
       if (conn?.open) this.sendControlEvent(conn, 'gameState', match.getCurrentState());
+      if (rejoinActivated && conn?.open) {
+        this.sendControlEvent(conn, 'rejoinActivated', {
+          matchId: match.matchId,
+          playerId: socketId
+        });
+      }
       match.emitCurrentState();
     }
 
@@ -2004,10 +2011,13 @@ export class P2PSocketService {
     this.emit('gameInput', normalized);
   }
 
-  sendMatchClientReady() {
+  sendMatchClientReady(options = {}) {
     // Blocking this while rejoining created a circular wait between the
     // restored player state and the client's readiness confirmation.
-    this.emit('matchClientReady', { matchId: this.activeMatchId });
+    this.emit('matchClientReady', {
+      matchId: this.activeMatchId,
+      stateApplied: options.stateApplied === true
+    });
   }
 
   hostResetMatch() {

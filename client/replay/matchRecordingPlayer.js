@@ -42,6 +42,7 @@ export class MatchRecordingPlayer {
     this.timeLabel = root?.querySelector('#recording-time');
     this.report = root?.querySelector('#recording-live-report');
     this.markers = root?.querySelector('#recording-markers');
+    this.playbackFeedback = root?.querySelector('#recording-playback-feedback');
     this.recording = null;
     this.currentMs = 0;
     this.playing = false;
@@ -54,6 +55,7 @@ export class MatchRecordingPlayer {
     this.nativeApp = isNativeAppFrame();
     this.lastInterfaceRenderAt = 0;
     this.lastReportKey = '';
+    this.feedbackTimer = 0;
     this.bind();
   }
 
@@ -73,8 +75,9 @@ export class MatchRecordingPlayer {
       this.lastTick = performance.now();
       this.lastAudioMarkerMs = this.currentMs;
       this.render();
-      if (this.playing) soundFx.startCrowd();
+      this.applyPlaybackAudioState();
     });
+    this.volumeInput?.addEventListener('input', () => this.applyPlaybackAudioState());
     this.speedSelect?.addEventListener('change', () => {
       this.playbackRate = Math.max(.1, Math.min(8, Number(this.speedSelect.value) || 1));
       this.lastTick = performance.now();
@@ -99,7 +102,7 @@ export class MatchRecordingPlayer {
       if (!document.hidden || !this.playing) return;
       this.playing = false;
       cancelAnimationFrame(this.raf);
-      soundFx.stopCrowd();
+      this.applyPlaybackAudioState();
       if (this.playButton) this.playButton.textContent = '▶';
     });
     document.addEventListener('keydown', event => {
@@ -114,6 +117,7 @@ export class MatchRecordingPlayer {
   }
 
   async open(documentData, match = {}) {
+    soundFx.stopMenuTheme();
     this.recording = await decodeMatchRecording(documentData);
     await this.hydratePlayerSkins();
     this.match = match;
@@ -173,24 +177,29 @@ export class MatchRecordingPlayer {
   }
 
   close() {
+    const wasVisible = this.root && !this.root.classList.contains('hidden');
     this.playing = false;
     cancelAnimationFrame(this.raf);
     // A recording goal can raise the shared crowd bed. Stop it immediately
     // when the player closes so no recording audio leaks into other screens.
     soundFx.stopCrowd();
+    soundFx.stopMatchTheme();
+    soundFx.setOutputVolumeScale(1);
     if (this.playButton) this.playButton.textContent = '▶';
     clearTimeout(this.hideControlsTimer);
+    clearTimeout(this.feedbackTimer);
     this.root?.classList.remove('recording-controls-hidden', 'recording-timeline-hidden', 'recording-playback-hidden');
     this.root?.classList.add('hidden');
+    if (wasVisible) soundFx.startMenuTheme();
   }
 
   toggle() {
     if (!this.recording) return;
     if (this.currentMs >= this.recording.durationMs) this.currentMs = 0;
     this.playing = !this.playing;
-    if (this.playing) soundFx.startCrowd();
-    else soundFx.stopCrowd();
+    this.applyPlaybackAudioState();
     this.playButton.textContent = this.playing ? '⏸' : '▶';
+    this.showPlaybackFeedback();
     this.lastTick = performance.now();
     if (this.playing) this.raf = requestAnimationFrame(time => this.tick(time));
   }
@@ -200,12 +209,15 @@ export class MatchRecordingPlayer {
     const speed = this.playbackRate;
     const previousMs = this.currentMs;
     this.currentMs += Math.max(0, now - this.lastTick) * speed;
+    if (this.lastHighlightTime !== null && this.currentMs > this.lastHighlightTime + 250) {
+      this.lastHighlightTime = null;
+    }
     this.lastTick = now;
     this.playMarkerAudio(previousMs, this.currentMs);
     if (this.currentMs >= this.recording.durationMs) {
       this.currentMs = this.recording.durationMs;
       this.playing = false;
-      soundFx.stopCrowd();
+      this.applyPlaybackAudioState();
       this.playButton.textContent = '▶';
     }
     this.render();
@@ -363,6 +375,31 @@ export class MatchRecordingPlayer {
   seekToMarker(marker) {
     this.lastHighlightTime = Number(marker?.t || 0);
     this.currentMs = Math.max(0, Number(marker?.t || 0) - HIGHLIGHT_PREROLL_MS);
+  }
+
+  showPlaybackFeedback() {
+    if (!this.playbackFeedback) return;
+    clearTimeout(this.feedbackTimer);
+    this.playbackFeedback.textContent = this.playing ? '▶' : '❚❚';
+    this.playbackFeedback.classList.remove('visible');
+    void this.playbackFeedback.offsetWidth;
+    this.playbackFeedback.classList.add('visible');
+    this.feedbackTimer = setTimeout(() => {
+      this.playbackFeedback?.classList.remove('visible');
+    }, 520);
+  }
+
+  applyPlaybackAudioState() {
+    const active = this.playing && !this.root?.classList.contains('hidden');
+    const volume = Math.max(0, Math.min(1, Number(this.volumeInput?.value || 0) / 100));
+    soundFx.setOutputVolumeScale(active ? volume : 1);
+    if (active && volume > 0) {
+      soundFx.startCrowd();
+      soundFx.startMatchTheme();
+    } else {
+      soundFx.stopCrowd();
+      soundFx.stopMatchTheme();
+    }
   }
 
   async toggleFullscreen() {

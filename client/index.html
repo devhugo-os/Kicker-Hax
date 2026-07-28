@@ -935,7 +935,11 @@
 
         <div id="post-match-report" class="match-report" aria-label="Relatório detalhado da partida"></div>
 
-        <button id="post-btn-continue" class="btn btn-primary btn-glow btn-lg w-full mt-4">Voltar ao Lobby</button>
+        <div class="post-result-actions">
+          <button id="post-btn-continue" class="btn btn-primary btn-glow btn-lg w-full" type="button">Voltar ao Lobby</button>
+          <small id="post-lobby-wait" class="subtext hidden">Aguardando o host voltar ao lobby...</small>
+          <button id="post-btn-arena" class="btn btn-secondary btn-lg w-full hidden" type="button">Voltar à Arena Multiplayer</button>
+        </div>
       </div>
     </div>
 
@@ -965,6 +969,7 @@
         </div>
         <div class="recording-stage">
           <canvas id="recording-canvas" width="1024" height="640"></canvas>
+          <div id="recording-playback-feedback" class="recording-playback-feedback" aria-hidden="true"></div>
         </div>
         <div class="recording-timeline-wrap">
           <div id="recording-markers" class="recording-markers"></div>
@@ -1065,7 +1070,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v73.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v74.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1112,6 +1117,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v74.0 - CONEXÃO EM CAMPO</h4>
+            <p>O retorno à partida ganhou confirmação em duas etapas e só libera a pausa depois que o jogador reaparece no estado aplicado pelo cliente. Multiplayer mantém física e snapshots compactos em 60 Hz, envia input e ping pelo canal WebRTC rápido e descarta somente estados realmente congestionados. A mira desaparece no instante do chute. Gravações navegam pelos lances a partir da posição atual, exibem resposta visual de play e pause e controlam torcida, ambiente e efeitos pelo volume. Minimizar o app deixa de encerrar a sala. O inventário permite uma segunda cópia regular apenas quando a primeira veio por doação. Após a partida, visitantes aguardam o host para voltar ao lobby ou podem seguir direto para a Arena.</p>
+          </section>
           <section>
             <h4>v73.0 - RETORNO EM CAMPO</h4>
             <p>O retorno &agrave; partida agora substitui os canais antigos e s&oacute; abre o campo depois que o novo transporte de estados ou um snapshot completo estiver dispon&iacute;vel, eliminando retorno congelado e ping infinito. A mira do chute usa suaviza&ccedil;&atilde;o baseada em tempo para manter o mesmo comportamento no multiplayer, Solo e Treino. Alternar o modo responsivo recomp&otilde;e campo, HUD e chat sem herdar estilos mobile. Grava&ccedil;&otilde;es no app preservam a propor&ccedil;&atilde;o do campo, exibem as setas de movimento e apresentam cada quadro completo de uma vez para remover pontos pretos piscando. A limpeza de salas deixa de tentar uma escrita proibida na raiz do Realtime Database.</p>
