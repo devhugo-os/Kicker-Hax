@@ -219,7 +219,11 @@ export const gameController = {
       document.getElementById('pause-modal')?.classList.add('hidden');
       this.pauseMenuOpen = false;
       socketService.off('surrenderAccepted');
-      socketService.once('surrenderAccepted', () => {
+      socketService.once('surrenderAccepted', ({ matchWillEnd } = {}) => {
+        if (matchWillEnd) {
+          showToast('Desistência registrada. Preparando o resultado da partida.', 'info');
+          return;
+        }
         this.onlineMatchFinished = true;
         this.activeRoom = null;
         this.clearRoomChatViews();
@@ -300,9 +304,11 @@ export const gameController = {
       : this.localMatchSim?.status;
     const matchIsPlaying = renderedStatus === 'playing';
     const statusChanged = this.lastRenderedMatchStatus !== renderedStatus;
+    const powerKickNeedsFullClear = !this.performanceProfile?.lowEffects
+      && isPowerKickActive(this.ball);
     const hasTransientFx = !!input?.shoot
       || !!this.shotPreviewState
-      || isPowerKickActive(this.ball);
+      || powerKickNeedsFullClear;
     const canUseDirtyRegions = this.performanceProfile?.nativeApp
       && matchIsPlaying
       && !this.inReplay
@@ -320,27 +326,29 @@ export const gameController = {
     // and net overlays from the preceding frame to avoid a full-screen GPU fill.
     const previousRegions = this.lastDynamicFrameRegions.length
       ? this.lastDynamicFrameRegions
-      : this.players.map(player => ({ x: player.x - 104, y: player.y - 104, width: 208, height: 156 }));
+      : this.players.map(player => ({ x: player.x - 92, y: player.y - 92, width: 184, height: 136 }));
     previousRegions.forEach(region => {
       this.ctx.clearRect(region.x, region.y, region.width, region.height);
     });
     if (!this.lastDynamicFrameRegions.length && this.ball) {
-      this.ctx.clearRect(this.ball.x - 38, this.ball.y - 38, 76, 76);
+      this.ctx.clearRect(this.ball.x - 20, this.ball.y - 20, 40, 40);
     }
     const netWidth = C.BORDER + C.GOAL_DEPTH + 14;
-    this.ctx.clearRect(0, 0, netWidth, this.canvas.height);
-    this.ctx.clearRect(this.canvas.width - netWidth, 0, netWidth, this.canvas.height);
+    const netTop = Math.max(0, (this.canvas.height - C.GOAL_W_INIT) / 2 - 4);
+    const netHeight = Math.min(this.canvas.height - netTop, C.GOAL_W_INIT + 8);
+    this.ctx.clearRect(0, netTop, netWidth, netHeight);
+    this.ctx.clearRect(this.canvas.width - netWidth, netTop, netWidth, netHeight);
   },
 
   rememberMatchFrameRegions() {
     const regions = this.players.map(player => ({
-      x: player.x - 104,
-      y: player.y - 104,
-      width: 208,
-      height: 156
+      x: player.x - 92,
+      y: player.y - 92,
+      width: 184,
+      height: 136
     }));
     if (this.ball) {
-      regions.push({ x: this.ball.x - 38, y: this.ball.y - 38, width: 76, height: 76 });
+      regions.push({ x: this.ball.x - 20, y: this.ball.y - 20, width: 40, height: 40 });
     }
     this.lastDynamicFrameRegions = regions;
   },
@@ -2619,7 +2627,11 @@ export const gameController = {
       });
     }
 
-    const resultTitle = isDraw ?'Empate' : `Vitória do Time ${winnerTeam === C.Team.BLUE ?'Azul' : 'Vermelho'}`;
+    const resultTitle = isDraw
+      ? 'Empate'
+      : isSpec
+        ? `Vitória do Time ${winnerTeam === C.Team.BLUE ? 'Azul' : 'Vermelho'}`
+        : isWin ? 'Vitória' : 'Derrota';
     document.getElementById('post-result-title').textContent = resultTitle;
     document.getElementById('post-score-red').textContent = score.red;
     document.getElementById('post-score-blue').textContent = score.blue;
@@ -2628,7 +2640,11 @@ export const gameController = {
       ? 'Sem time'
       : (result?.hasBots ? '+0 XP (com bot)' : `+${xpGained} XP`);
     document.getElementById('post-coins-gained').textContent = coinsGained > 0 ? `+${coinsGained}` : '+0';
-    renderMatchReport(document.getElementById('post-match-report'), result);
+    renderMatchReport(document.getElementById('post-match-report'), {
+      ...result,
+      score,
+      winnerTeam
+    });
     this.preparePostMatchActions();
     this.showPostGameAfterEndAnimation();
   },
@@ -4302,7 +4318,12 @@ export const gameController = {
     const h = this.canvas.height;
     // This static texture is generated only when field geometry changes.
     // Keeping it at device density fixes the blurry fullscreen pitch cheaply.
-    const cacheScale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    // The app always fits the logical arena inside a smaller WebView, so a
+    // 1:1 static pitch texture is already lossless on screen. Avoid keeping a
+    // 2048x1280 duplicate texture in Android GPU memory.
+    const cacheScale = this.performanceProfile?.nativeApp
+      ? 1
+      : Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cacheKey = `${w}x${h}:${C.BORDER}:${C.GOAL_W_INIT}:${cacheScale}`;
 
     if (!this.fieldCacheCanvas || this.fieldCacheKey !== cacheKey) {
@@ -4499,17 +4520,31 @@ export const gameController = {
       if (cacheCtx) this.drawNetOverlayStatic(cacheCtx);
     }
     const sliceWidth = C.BORDER + C.GOAL_DEPTH + 12;
-    cx.drawImage(this.netOverlayCacheCanvas, 0, 0, sliceWidth, h, 0, 0, sliceWidth, h);
+    const sliceTop = Math.max(0, (h - C.GOAL_W_INIT) / 2 - 2);
+    const sliceHeight = Math.min(h - sliceTop, C.GOAL_W_INIT + 4);
+    // Only composite the goal mouths. Copying two full-height transparent
+    // strips every frame was a measurable fill-rate cost on Android WebView.
+    cx.drawImage(
+      this.netOverlayCacheCanvas,
+      0,
+      sliceTop,
+      sliceWidth,
+      sliceHeight,
+      0,
+      sliceTop,
+      sliceWidth,
+      sliceHeight
+    );
     cx.drawImage(
       this.netOverlayCacheCanvas,
       w - sliceWidth,
-      0,
+      sliceTop,
       sliceWidth,
-      h,
+      sliceHeight,
       w - sliceWidth,
-      0,
+      sliceTop,
       sliceWidth,
-      h
+      sliceHeight
     );
   },
 
@@ -4629,13 +4664,18 @@ export const gameController = {
       // Keep mobile shake on the compositor instead of repainting the cached
       // pitch, preserving the effect at a fraction of the GPU cost.
       if (matchStage) {
-        matchStage.style.transform = offset.x || offset.y
+        const nextTransform = offset.x || offset.y
           ? `translate3d(${offset.x}px, ${offset.y}px, 0)`
           : '';
+        if (this.lastPowerKickTransform !== nextTransform) {
+          matchStage.style.transform = nextTransform;
+          this.lastPowerKickTransform = nextTransform;
+        }
       }
       return false;
     }
     if (matchStage?.style.transform) matchStage.style.transform = '';
+    this.lastPowerKickTransform = '';
     if (!offset.x && !offset.y) return false;
     cx.save();
     cx.translate(offset.x, offset.y);
@@ -5202,14 +5242,19 @@ export const gameController = {
       const cached = this.matchIdentityCache.get(msg.uid);
       if (cached && Date.now() - cached.loadedAt < 2000) {
         profile = cached.profile;
-      } else {
-        profile = await firebaseService.getUserProfile(msg.uid).catch(() => null);
-        if (profile) {
-          this.matchIdentityCache.set(msg.uid, { profile, loadedAt: Date.now() });
-          if (this.matchIdentityCache.size > 32) {
-            this.matchIdentityCache.delete(this.matchIdentityCache.keys().next().value);
-          }
-        }
+      } else if (!cached?.promise) {
+        // The lobby already carries the current identity. Render immediately
+        // and refresh the Firestore cache without delaying the chat line.
+        const promise = firebaseService.getUserProfile(msg.uid)
+          .then(loadedProfile => {
+            if (!loadedProfile) return;
+            this.matchIdentityCache.set(msg.uid, { profile: loadedProfile, loadedAt: Date.now() });
+            if (this.matchIdentityCache.size > 32) {
+              this.matchIdentityCache.delete(this.matchIdentityCache.keys().next().value);
+            }
+          })
+          .catch(() => this.matchIdentityCache.delete(msg.uid));
+        this.matchIdentityCache.set(msg.uid, { promise, loadedAt: Date.now() });
       }
     }
     const identity = profile || {

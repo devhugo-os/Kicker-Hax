@@ -198,9 +198,11 @@ export class P2PSocketService {
 
     match.markParticipantStatus(player.id, 'abandoned');
     this.blockRoomRejoin(player.uid);
-    const accepted = { roomCode: this.roomCode, matchId: match.matchId };
-    if (conn?.open) conn.send({ event: 'abandonAccepted', data: accepted });
-    else if (player.id === this.clientId) this.triggerLocalEvent('surrenderAccepted', accepted);
+    const notifyAccepted = matchWillEnd => {
+      const accepted = { roomCode: this.roomCode, matchId: match.matchId, matchWillEnd };
+      if (conn?.open) conn.send({ event: 'abandonAccepted', data: accepted });
+      else if (player.id === this.clientId) this.triggerLocalEvent('surrenderAccepted', accepted);
+    };
 
     if (teammates.length === 0) {
       this.sendRoomChatMessage({
@@ -213,9 +215,13 @@ export class P2PSocketService {
         players: [player.username],
         message: `${player.username} abandonou a partida e não havia outro jogador na equipe.`
       });
+      // The result is emitted before this acknowledgement so the surrendering
+      // player sees the same defeat that is persisted in match history.
+      notifyAccepted(true);
       return true;
     }
 
+    notifyAccepted(false);
     if (!player.disconnected) this.serverRoom.markPlayerDisconnected(player.id);
     if (!match.disconnectPauseUntil) {
       match.pauseForDisconnectedTeam(team, player.uid, player.username, {
@@ -401,7 +407,7 @@ export class P2PSocketService {
     if (this.isHost) {
       // Direct local execution for host's own emissions
       this.handleHostReceivedData(this.clientId, event, data);
-    } else if (event === 'gameInput' && this.realtimeHostConn?.open) {
+    } else if (['gameInput', 'ping'].includes(event) && this.realtimeHostConn?.open) {
       const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
       if (!shouldDropRealtimeState(event, bufferedAmount)) {
         this.realtimeHostConn.send(encodeRealtimePacket(event, data));
@@ -626,7 +632,7 @@ export class P2PSocketService {
         });
         conn.on('data', (payload) => {
           const packet = decodeRealtimePacket(payload);
-          if (packet?.event === 'gameInput') {
+          if (['gameInput', 'ping'].includes(packet?.event)) {
             this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
           }
         });
@@ -821,7 +827,7 @@ export class P2PSocketService {
           });
           realtimeConn.on('data', payload => {
             const packet = decodeRealtimePacket(payload);
-            if (packet?.event === 'gameState') {
+            if (['gameState', 'pong'].includes(packet?.event)) {
               this.triggerLocalEvent(packet.event, packet.data);
             }
           });
@@ -1498,8 +1504,7 @@ export class P2PSocketService {
       if (!this.serverRoom.match || this.serverRoom.status !== 'playing') return;
       const player = this.serverRoom.players.find(item => item.id === socketId);
       if (!player || player.cpu || player.team === 'spectator' || player.disconnected) return;
-      this.acceptPlayerSurrender(player, null);
-      if (socketId !== this.clientId && conn?.open) conn.send({ event: 'surrenderAccepted' });
+      this.acceptPlayerSurrender(player, conn);
     }
 
     else if (event === 'ping') {
@@ -1515,9 +1520,13 @@ export class P2PSocketService {
       if (socketId === this.clientId) {
         this.triggerLocalEvent('pong', payload);
       } else if (conn?.open) {
-        // RTT probes use the reliable control channel so they never wait
-        // behind replaceable 60 Hz state snapshots.
-        this.sendControlEvent(conn, 'pong', payload);
+        // Restore the low-latency RTT path from versions 72/73. Ping never
+        // waits behind reliable lobby, chat, replay or result messages.
+        if (conn.metadata?.channel === 'realtime') {
+          conn.send(encodeRealtimePacket('pong', payload));
+        } else {
+          this.sendControlEvent(conn, 'pong', payload);
+        }
       }
     }
 
@@ -2371,7 +2380,8 @@ export class P2PSocketService {
     });
     const unsubscribeChild = onChildAdded(chatRef, (snapshot) => {
       if (this.roomCode !== expectedRoomCode) return;
-      const msg = { ...snapshot.val(), id: snapshot.key };
+      const value = snapshot.val() || {};
+      const msg = { ...value, id: value.clientMessageId || snapshot.key };
       if (msg.instanceId && this.roomInstanceId && msg.instanceId !== this.roomInstanceId) return;
       if (msg) this.triggerLocalEvent('chatMessage', msg);
     });
@@ -2398,11 +2408,15 @@ export class P2PSocketService {
       staffRole: message.staffRole || '',
       instanceId: this.roomInstanceId || '',
       text: String(message.text || '').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH),
+      clientMessageId: `room_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
       // Host wall time is immediately sortable. serverTimestamp resolves later
       // and caused clients to append old messages grouped by sender.
       timestamp: firebaseService.getRealtimeNow()
     };
     if (!msg.text) return;
+    // The browser host is authoritative for live chat. Deliver immediately
+    // over P2P, then persist for late joiners without blocking the interface.
+    this.broadcast('chatMessage', { ...msg, id: msg.clientMessageId });
     if (msg.uid) {
       let retryAfterMs = 0;
       const limiter = await runRtdbTransaction(ref(rtdb, `chatRateLimits/rooms/${this.roomCode}/${msg.uid}`), current => {
@@ -2411,12 +2425,12 @@ export class P2PSocketService {
         return result.allowed ? result.state : undefined;
       }, { applyLocally: false }).catch(() => ({ committed: false }));
       if (!limiter.committed) {
-        this.triggerLocalEvent('chatRateLimited', { retryAfterMs });
+        console.warn('[P2PSocket] Chat entregue ao vivo, mas não persistido por rate limit/permissão.', { retryAfterMs });
         return;
       }
     }
-    await push(ref(rtdb, `roomChats/${this.roomCode}`), msg).catch(() => {
-      this.triggerLocalEvent('chatMessage', msg);
+    await push(ref(rtdb, `roomChats/${this.roomCode}`), msg).catch(error => {
+      console.warn('[P2PSocket] Chat entregue ao vivo, mas não persistido no Realtime Database.', error);
     });
   }
 

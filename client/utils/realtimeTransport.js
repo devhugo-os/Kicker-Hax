@@ -39,7 +39,10 @@ function transformKeys(value, dictionary) {
 }
 
 export function isRealtimeEvent(event) {
-  return event === 'gameState' || event === 'gameInput';
+  return event === 'gameState'
+    || event === 'gameInput'
+    || event === 'ping'
+    || event === 'pong';
 }
 
 /**

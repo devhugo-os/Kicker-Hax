@@ -423,7 +423,7 @@ html.mobile-low-effects #match-screen * {
 .fps-badge {
   position: absolute;
   top: 20px;
-  left: 112px;
+  left: 156px;
   z-index: 3;
   padding: 6px 10px;
   border: 1px solid var(--border-light);
@@ -1379,7 +1379,7 @@ html.browser-immersive #match-canvas {
 
   .fps-badge {
     top: 4px !important;
-    left: 94px !important;
+    left: 132px !important;
     z-index: 100 !important;
   }
 

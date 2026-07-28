@@ -162,15 +162,17 @@ export class ClientPlayer {
 
   draw(ctx, ballOwnerId) {
     // 1) Draw trail for dribbles
-    ctx.save();
-    for (const t of this.lowEffects ? [] : this.trail) {
-      ctx.fillStyle = this.team === C.Team.RED ? `rgba(239, 68, 68, ${t.alpha})` : `rgba(96, 165, 250, ${t.alpha})`;
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, this.r - 2, 0, Math.PI * 2);
-      ctx.fill();
-      t.alpha -= 0.1;
+    if (!this.lowEffects && this.trail.length) {
+      ctx.save();
+      for (const t of this.trail) {
+        ctx.fillStyle = this.team === C.Team.RED ? `rgba(239, 68, 68, ${t.alpha})` : `rgba(96, 165, 250, ${t.alpha})`;
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, this.r - 2, 0, Math.PI * 2);
+        ctx.fill();
+        t.alpha -= 0.1;
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     // 2) Draw Player shadow
     if (!this.lowEffects) {
@@ -292,11 +294,11 @@ export class ClientPlayer {
     // identity at 2x and downsample once so detailed skins remain recognizable
     // without decoding or clipping the source image every gameplay frame.
     const resolutionScale = this.lowEffects ? 3 : 2;
-    const key = `${this.getIdentityCacheKey()}|${resolutionScale}x`;
-    const width = 196;
-    const height = 104;
+    const width = 176;
+    const height = 92;
+    const key = `${this.getIdentityCacheKey()}|${resolutionScale}x|${width}x${height}`;
     const centerX = width / 2;
-    const centerY = 66;
+    const centerY = 58;
     if (this.identityCacheCanvas && this.identityCacheKey === key) {
       ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY, width, height);
       return;

@@ -69,6 +69,9 @@ function openDialog({ title, message, confirmLabel, cancelLabel = 'Cancelar', da
   if (activeDialog) activeDialog.resolve(null);
   // Prevent the originating mobile ripple from painting above the new dialog.
   document.querySelectorAll('.ripple').forEach(ripple => ripple.remove());
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
 
   refs.title.textContent = title;
   refs.message.textContent = message;

@@ -44,12 +44,23 @@ html, body {
 }
 
 button,
+.mode-card,
 .mobile-controls,
 .mobile-controls * {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+.mode-card-confirmed {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+.mode-card-confirmed:focus,
+.mode-card-confirmed:active {
+  outline: none;
 }
 
 h1, h2, h3, h4, h5, h6 {
