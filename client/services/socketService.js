@@ -401,7 +401,7 @@ export class P2PSocketService {
     if (this.isHost) {
       // Direct local execution for host's own emissions
       this.handleHostReceivedData(this.clientId, event, data);
-    } else if (['gameInput', 'ping'].includes(event) && this.realtimeHostConn?.open) {
+    } else if (event === 'gameInput' && this.realtimeHostConn?.open) {
       const bufferedAmount = Number(this.realtimeHostConn.dataChannel?.bufferedAmount || 0);
       if (!shouldDropRealtimeState(event, bufferedAmount)) {
         this.realtimeHostConn.send(encodeRealtimePacket(event, data));
@@ -626,7 +626,7 @@ export class P2PSocketService {
         });
         conn.on('data', (payload) => {
           const packet = decodeRealtimePacket(payload);
-          if (['gameInput', 'ping'].includes(packet?.event)) {
+          if (packet?.event === 'gameInput') {
             this.handleHostReceivedData(conn.peer, packet.event, packet.data, conn);
           }
         });
@@ -821,7 +821,7 @@ export class P2PSocketService {
           });
           realtimeConn.on('data', payload => {
             const packet = decodeRealtimePacket(payload);
-            if (['gameState', 'pong'].includes(packet?.event)) {
+            if (packet?.event === 'gameState') {
               this.triggerLocalEvent(packet.event, packet.data);
             }
           });
@@ -1515,10 +1515,9 @@ export class P2PSocketService {
       if (socketId === this.clientId) {
         this.triggerLocalEvent('pong', payload);
       } else if (conn?.open) {
-        const packet = conn.metadata?.channel === 'realtime'
-          ? encodeRealtimePacket('pong', payload)
-          : { event: 'pong', data: payload };
-        conn.send(packet);
+        // RTT probes use the reliable control channel so they never wait
+        // behind replaceable 60 Hz state snapshots.
+        this.sendControlEvent(conn, 'pong', payload);
       }
     }
 
@@ -1841,21 +1840,35 @@ export class P2PSocketService {
           this.serverRoom.match.forceContinueVote(targetPlayer.uid, targetPlayer.username);
           this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${targetPlayer.username} foi expulso. O time tem 30 segundos para votar e continuar sem ele.` });
         } else {
-          // A 1v1 cannot vote. Close the room without results or XP and send
-          // everyone to the arena rather than giving the host a free victory.
-          const closingCode = this.roomCode;
+          // Administrative removal in a 1v1 invalidates the match completely:
+          // no result, XP, history or recording. The room itself remains alive
+          // for the host, while the banned/kicked participant leaves it.
           this.serverRoom.match.stop();
-          this.broadcast('matchAborted', { closeRoom: true, removedPlayerId: targetPlayer.id });
+          this.serverRoom.match = null;
+          this.serverRoom.status = 'lobby';
+          this.serverRoom.removePlayer(targetSocketId);
+          this.serverRoom.resetLobbyStatus({ returnPlayersToLobby: true });
+          const lobbyInfo = this.serverRoom.getLobbyInfo();
+          this.triggerLocalEvent('lobbyUpdate', lobbyInfo);
+          this.triggerLocalEvent('matchAborted', {
+            lobbyInfo,
+            removedPlayerId: targetPlayer.id,
+            reason: 'administrative_removal'
+          });
           if (conn) {
-            // Let the administrative abort reach the guest before closing the
-            // channel; otherwise its close handler can mistake this for a host
-            // abandonment and award XP/result.
-            setTimeout(() => conn.close(), 180);
+            this.sendControlEvent(conn, 'matchAborted', {
+              closeRoom: true,
+              removedPlayerId: targetPlayer.id,
+              reason: 'administrative_removal'
+            });
+            setTimeout(() => conn.close(), 240);
           }
-          this.cleanupRoomData(closingCode).catch(() => {});
-          this.serverRoom = null;
-          this.roomCode = null;
-          this.isHost = false;
+          update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+            status: 'lobby',
+            playersCount: this.serverRoom.players.length,
+            updatedAt: Date.now()
+          }).catch(() => {});
+          remove(ref(rtdb, `matchChats/${this.roomCode}`)).catch(() => {});
           return;
         }
       }
@@ -2029,10 +2042,10 @@ export class P2PSocketService {
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
     const urgentActionChanged = actionSignature !== this.lastInputActionSignature;
     const movementChanged = signature !== this.lastInputSignature;
-    // The packed input is under 40 bytes, so movement follows the 60 Hz game
-    // clock without building the old 30 Hz stair-step queue.
+    // Direction changes remain immediate. A held direction only needs a
+    // heartbeat because the host keeps applying the latest accepted input.
     const isMoving = Math.abs(normalized.x) > 0.001 || Math.abs(normalized.y) > 0.001;
-    const minimumInterval = movementChanged || isMoving ? 15 : 100;
+    const minimumInterval = movementChanged ? 15 : (isMoving ? 100 : 120);
     if (!urgentActionChanged && now - this.lastInputSentAt < minimumInterval) return;
     this.lastInputSentAt = now;
     this.lastInputSignature = signature;

@@ -3589,6 +3589,29 @@ html.app-runtime #menu-btn-download-app {
   pointer-events: none;
   z-index: 8;
 }
+
+.ranking-season-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 9px 12px;
+  border: 1px solid rgba(59, 130, 246, .45);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, .72);
+  color: #cbd5e1;
+}
+
+.ranking-season-banner strong { color: #60a5fa; }
+
+@media (max-width: 760px) {
+  .ranking-season-banner {
+    padding: 5px 8px;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+}
 .recording-playback-feedback.visible { animation: recording-feedback .52s ease-out; }
 @keyframes recording-feedback {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(.72); }

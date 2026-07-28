@@ -996,6 +996,10 @@
           <button id="ranking-btn-back" class="btn btn-secondary">⬅️ Voltar</button>
           <h2>Ranking Global de Jogadores</h2>
         </div>
+        <div class="ranking-season-banner" aria-live="polite">
+          <strong id="ranking-season-label">Temporada 1</strong>
+          <span id="ranking-season-countdown">Reinício em 30d</span>
+        </div>
 
         <div class="ranking-filters">
           <button id="rank-filter-overall" class="btn btn-secondary active">Overall</button>
@@ -1070,7 +1074,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v75.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v76.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1117,6 +1121,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v76.0 - NOVA TEMPORADA</h4>
+            <p>A Temporada 1 inicia um ciclo exato de 30 dias, com identificação e contagem regressiva no ranking. Estatísticas, progressão, históricos, gravações e chats anteriores são reiniciados, enquanto skins e KX Coins permanecem; o Mercado mantém a fila comunitária e sorteia novas vitrines. Partidas casuais 1v1 encerradas por expulsão ou banimento deixam de gerar XP, resultado e gravação, mantendo o host no lobby. O multiplayer separa as medições de ping da fila de estados e elimina retransmissões redundantes de movimento para reduzir latência. Campo e identidades ficam mais nítidos em fullscreen, a limpeza de frames remove rastros de contagens, miras e super chutes, a gravação recupera nomes sombreados corretamente, os modais não herdam o efeito de clique e copiar o código funciona também no aplicativo.</p>
+          </section>
           <section>
             <h4>v75.0 - RESPOSTA IMEDIATA</h4>
             <p>O inventário abre usando os dados já carregados e busca skins comunitárias com cache, sem aguardar todas as vitrines. O multiplayer envia movimento em 60 Hz com pacotes compactos, confirmação do input aplicado e previsão local mais precisa, reduzindo filas sem sacrificar fluidez. Entradas em sala acompanham o progresso real da conexão em vez de falhar após um prazo fixo. Partidas não iniciam com pessoas sem time, e o retorno administrativo ao lobby restaura todos corretamente. O app reduz redesenhos do campo e das redes mantendo skins nítidas, enquanto fullscreen ganhou cenário em alta resolução. Super chutes preservam a contagem de chutes, voltaram a sacudir a tela no mobile e pedidos de passe são limpos no replay, reinício e gravação. Os nomes no reprodutor agora usam texto sólido, sem o contorno escuro defeituoso dos WebViews móveis.</p>

@@ -67,6 +67,8 @@ function ensureDialog() {
 function openDialog({ title, message, confirmLabel, cancelLabel = 'Cancelar', danger = false, input = false, inputType = 'text', placeholder = '' }) {
   const refs = ensureDialog();
   if (activeDialog) activeDialog.resolve(null);
+  // Prevent the originating mobile ripple from painting above the new dialog.
+  document.querySelectorAll('.ripple').forEach(ripple => ripple.remove());
 
   refs.title.textContent = title;
   refs.message.textContent = message;

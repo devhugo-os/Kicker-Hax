@@ -17,7 +17,7 @@ import { normalizeMatchTeam, resolvePlayerMatchOutcome } from '../utils/matchRes
 import { escapeHtml } from '../utils/safeHtml.js';
 import { appendStaffTag, drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { getMatchPerformanceProfile, isMobilePhoneDevice, shouldUseMobileHud } from '../utils/deviceCapabilities.js';
-import { drawPowerKickBallEffect, getPowerKickShakeOffset } from '../utils/powerKickFx.js';
+import { drawPowerKickBallEffect, getPowerKickShakeOffset, isPowerKickActive } from '../utils/powerKickFx.js';
 import { TutorialSession, tutorialNeedsAlly, tutorialNeedsBall, tutorialNeedsEnemy } from '../tutorial/tutorialSession.js';
 import { calculateOverallRating, getPossessionConfidenceScore, getRatingConfidenceScore, getWinRateConfidenceScore } from '../utils/rankingScore.js';
 import { buildMatchReport } from '../../shared/matchReport.js';
@@ -30,6 +30,8 @@ import {
   interpolateReplayFrame
 } from '../replay/goalReplay.js';
 import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
+import { formatSeasonCountdown, getSeasonInfo } from '../utils/seasonCycle.js';
+import { copyText } from '../utils/clipboard.js';
 
 export const gameController = {
   currentUser: null,
@@ -84,6 +86,9 @@ export const gameController = {
   displayFps: 60,
   mobileChatUnreadCount: 0,
   matchIdentityCache: new Map(),
+  lastRenderedMatchStatus: '',
+  previousFrameHadTransientFx: false,
+  lastDynamicFrameRegions: [],
 
   // Local Stats Track
   goalsScored: 0,
@@ -290,14 +295,22 @@ export const gameController = {
   },
 
   clearMatchFrame(input = null) {
-    const matchIsPlaying = this.mode === 'multiplayer'
-      ? this.status === 'playing'
-      : this.localMatchSim?.status === 'playing';
+    const renderedStatus = this.mode === 'multiplayer'
+      ? this.status
+      : this.localMatchSim?.status;
+    const matchIsPlaying = renderedStatus === 'playing';
+    const statusChanged = this.lastRenderedMatchStatus !== renderedStatus;
+    const hasTransientFx = !!input?.shoot
+      || !!this.shotPreviewState
+      || isPowerKickActive(this.ball);
     const canUseDirtyRegions = this.performanceProfile?.nativeApp
       && matchIsPlaying
       && !this.inReplay
-      && !input?.shoot
-      && !this.shotPreviewState;
+      && !statusChanged
+      && !hasTransientFx
+      && !this.previousFrameHadTransientFx;
+    this.lastRenderedMatchStatus = renderedStatus || '';
+    this.previousFrameHadTransientFx = hasTransientFx;
     if (!canUseDirtyRegions) {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       return;
@@ -305,13 +318,31 @@ export const gameController = {
 
     // The pitch lives in the CSS/static cache on the app. Clear only sprites
     // and net overlays from the preceding frame to avoid a full-screen GPU fill.
-    this.players.forEach(player => {
-      this.ctx.clearRect(player.x - 104, player.y - 104, 208, 156);
+    const previousRegions = this.lastDynamicFrameRegions.length
+      ? this.lastDynamicFrameRegions
+      : this.players.map(player => ({ x: player.x - 104, y: player.y - 104, width: 208, height: 156 }));
+    previousRegions.forEach(region => {
+      this.ctx.clearRect(region.x, region.y, region.width, region.height);
     });
-    if (this.ball) this.ctx.clearRect(this.ball.x - 30, this.ball.y - 30, 60, 60);
+    if (!this.lastDynamicFrameRegions.length && this.ball) {
+      this.ctx.clearRect(this.ball.x - 38, this.ball.y - 38, 76, 76);
+    }
     const netWidth = C.BORDER + C.GOAL_DEPTH + 14;
     this.ctx.clearRect(0, 0, netWidth, this.canvas.height);
     this.ctx.clearRect(this.canvas.width - netWidth, 0, netWidth, this.canvas.height);
+  },
+
+  rememberMatchFrameRegions() {
+    const regions = this.players.map(player => ({
+      x: player.x - 104,
+      y: player.y - 104,
+      width: 208,
+      height: 156
+    }));
+    if (this.ball) {
+      regions.push({ x: this.ball.x - 38, y: this.ball.y - 38, width: 76, height: 76 });
+    }
+    this.lastDynamicFrameRegions = regions;
   },
 
   refreshPerformanceOverlays() {
@@ -746,11 +777,10 @@ export const gameController = {
     // Copy Lobby Code button
     const btnCopyCode = document.getElementById('btn-copy-code');
     if (btnCopyCode) {
-      btnCopyCode.onclick = () => {
+      btnCopyCode.onclick = async () => {
         const codeText = document.getElementById('lobby-room-code').textContent;
-        navigator.clipboard.writeText(codeText).then(() => {
-          showToast('Código copiado!', 'success');
-        });
+        const copied = await copyText(codeText);
+        showToast(copied ? 'Código copiado!' : 'Não foi possível copiar o código.', copied ? 'success' : 'error');
       };
     }
 
@@ -2106,6 +2136,7 @@ export const gameController = {
 
         this.drawNetOverlay(this.ctx);
         if (cameraShaking) this.ctx.restore();
+        this.rememberMatchFrameRegions();
         this.updateMobileShootMeter(bluePlayer.kickCharge || 0);
 
         // Physics/input stay at 60 Hz, while DOM writes are batched. Updating
@@ -3200,6 +3231,7 @@ export const gameController = {
 
       this.drawNetOverlay(this.ctx);
       if (cameraShaking) this.ctx.restore();
+      this.rememberMatchFrameRegions();
 
       if (refreshHud) {
         const m = Math.floor(this.matchTime / 60);
@@ -4268,7 +4300,9 @@ export const gameController = {
   drawFieldGrid(cx) {
     const w = this.canvas.width;
     const h = this.canvas.height;
-    const cacheScale = this.performanceProfile?.lowEffects ? 1 : Math.min(2, window.devicePixelRatio || 1);
+    // This static texture is generated only when field geometry changes.
+    // Keeping it at device density fixes the blurry fullscreen pitch cheaply.
+    const cacheScale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     const cacheKey = `${w}x${h}:${C.BORDER}:${C.GOAL_W_INIT}:${cacheScale}`;
 
     if (!this.fieldCacheCanvas || this.fieldCacheKey !== cacheKey) {
@@ -5308,6 +5342,23 @@ export const gameController = {
   async loadRanking(filter = 'overall') {
     const tbody = document.getElementById('leaderboard-body');
     if (!tbody) return;
+    const season = getSeasonInfo();
+    const seasonLabel = document.getElementById('ranking-season-label');
+    const seasonCountdown = document.getElementById('ranking-season-countdown');
+    if (seasonLabel) seasonLabel.textContent = season.label;
+    const refreshSeasonCountdown = () => {
+      if (seasonCountdown) seasonCountdown.textContent = `Reinício em ${formatSeasonCountdown(season.expiresAt)}`;
+    };
+    refreshSeasonCountdown();
+    window.clearInterval(this.rankingSeasonInterval);
+    this.rankingSeasonInterval = window.setInterval(() => {
+      if (router.currentScreenId !== 'ranking-screen') {
+        window.clearInterval(this.rankingSeasonInterval);
+        this.rankingSeasonInterval = null;
+        return;
+      }
+      refreshSeasonCountdown();
+    }, 1000);
 
     const headRow = document.getElementById('leaderboard-head-row');
     const allColumns = [

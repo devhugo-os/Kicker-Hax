@@ -212,16 +212,21 @@ export function registerRoomHandlers(io, socket) {
         io.to(room.code).emit('chatMessage', voteMsg);
       } else {
         room.match.stop();
-        io.to(room.code).emit('matchAborted', { closeRoom: true });
-        room.players.forEach(player => {
-          const peer = io.sockets.sockets.get(player.id);
-          if (peer) peer.leave(room.code);
-          db.removeConnection(player.id);
-        });
-        db.deleteRoom(room.code);
-        broadcastLobbyList(io);
+        room.match = null;
+        room.status = 'lobby';
+        room.removePlayer(targetSocketId);
+        room.resetLobbyStatus({ returnPlayersToLobby: true });
+        const lobbyInfo = room.getLobbyInfo();
+        socket.emit('matchAborted', { lobbyInfo, reason: 'administrative_removal' });
         const targetSocket = io.sockets.sockets.get(targetSocketId);
-        if (targetSocket) targetSocket.emit('kicked');
+        if (targetSocket) {
+          targetSocket.emit('matchAborted', { closeRoom: true, reason: 'administrative_removal' });
+          targetSocket.emit('kicked');
+          targetSocket.leave(room.code);
+          db.removeConnection(targetSocketId);
+        }
+        io.to(room.code).emit('lobbyUpdate', lobbyInfo);
+        broadcastLobbyList(io);
         return;
       }
     }
@@ -257,13 +262,13 @@ export function registerRoomHandlers(io, socket) {
       io.to(room.code).emit('chatMessage', voteMsg);
     } else if (room.match) {
       room.match.stop();
-      io.to(room.code).emit('matchAborted', { closeRoom: true });
-      room.players.forEach(player => {
-        const peer = io.sockets.sockets.get(player.id);
-        if (peer) peer.leave(room.code);
-        db.removeConnection(player.id);
-      });
-      db.deleteRoom(room.code);
+      room.match = null;
+      room.status = 'lobby';
+      room.removePlayer(target.id);
+      room.resetLobbyStatus({ returnPlayersToLobby: true });
+      const lobbyInfo = room.getLobbyInfo();
+      socket.emit('matchAborted', { lobbyInfo, reason: 'administrative_removal' });
+      io.to(room.code).emit('lobbyUpdate', lobbyInfo);
       broadcastLobbyList(io);
     } else {
       room.removePlayer(target.id);

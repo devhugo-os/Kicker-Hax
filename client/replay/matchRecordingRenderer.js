@@ -200,8 +200,11 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
   ctx.font = '700 12px system-ui';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
+  // A soft fill shadow stays legible and avoids Android's strokeText artifact.
+  ctx.shadowColor = 'rgba(2, 6, 23, .9)';
+  ctx.shadowBlur = 3;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 1;
   ctx.fillStyle = C.TEAM_NAME_COLORS[state.team] || '#fff';
   ctx.fillText(player.name || 'Jogador', state.x, state.y - radius - 14);
   ctx.restore();

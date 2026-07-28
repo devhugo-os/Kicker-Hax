@@ -1,9 +1,6 @@
-// Keep at most roughly one compact snapshot queued. Old positions have no
-// value and are the main source of apparent high ping on distant peers.
-// Keep a few compact datagrams of headroom. The old 1 KB limit was smaller
-// than one multi-player snapshot, effectively throttling a nominal 60 Hz
-// stream to an uneven 20-30 Hz whenever bufferedAmount had not drained yet.
-export const MAX_REALTIME_BUFFERED_BYTES = 6144;
+// Keep only a couple of replaceable snapshots queued. Larger queues turned
+// brief upload contention into 60-100 ms of extra input/state latency.
+export const MAX_REALTIME_BUFFERED_BYTES = 2048;
 export const MAX_REALTIME_TEXT_LENGTH = 255;
 
 const OMITTED_REALTIME_FIELDS = new Set([
@@ -42,7 +39,7 @@ function transformKeys(value, dictionary) {
 }
 
 export function isRealtimeEvent(event) {
-  return event === 'gameState' || event === 'gameInput' || event === 'ping' || event === 'pong';
+  return event === 'gameState' || event === 'gameInput';
 }
 
 /**
@@ -77,9 +74,8 @@ export function compactRealtimeGameState(state, options = {}) {
  * Lobby, chat, replay and result events are never discarded here.
  */
 export function shouldDropRealtimeState(event, bufferedAmount = 0) {
-  // Input, ping and pong are tiny and semantically newer than the previous
-  // value; dropping one can leave a held action or a stale liveness reading.
-  // Only replaceable host snapshots are discarded under congestion.
+  // Inputs are small and must remain ordered. Only replaceable host snapshots
+  // are discarded under congestion.
   return event === 'gameState'
     && Number.isFinite(Number(bufferedAmount))
     && Number(bufferedAmount) > MAX_REALTIME_BUFFERED_BYTES;

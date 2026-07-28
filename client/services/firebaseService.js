@@ -116,7 +116,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '75.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '76.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -635,8 +635,9 @@ export const firebaseService = {
       get(ref(rtdb, 'skinFeatured'))
     ]);
     const requestsByDay = requestsSnapshot.val() || {};
-    const currentRequests = Object.fromEntries(Object.entries(requestsByDay)
-      .filter(([requestDay]) => requestDay.startsWith(`${CURRENT_SEASON_ID}_`)));
+    // A season reset rotates the storefront but preserves pending community
+    // submissions. Previously featured requests remain excluded by queue logic.
+    const currentRequests = requestsByDay;
     const allFeatured = allFeaturedSnapshot.val() || {};
     if (cadence === 'hourly') {
       const queue = getHourlySkinQueue(currentRequests, allFeatured, this.skinDayKey());
@@ -672,7 +673,7 @@ export const firebaseService = {
     if (!candidates.length) {
       const previousEntries = Object.entries(allFeatured).flatMap(([sourceCadence, periods]) =>
         Object.entries(periods || {}).map(([sourcePeriod, item]) => ({ sourceCadence, sourcePeriod, item }))
-      ).filter(entry => entry.item?.image && String(entry.sourcePeriod).startsWith(`${CURRENT_SEASON_ID}_`))
+      ).filter(entry => entry.item?.image)
         .sort((a, b) => Number(a.item.createdAt || a.item.startsAt || 0) - Number(b.item.createdAt || b.item.startsAt || 0));
       const previousEntry = previousEntries.at(-1) || null;
       const previous = previousEntry?.item || null;
@@ -1365,11 +1366,17 @@ export const firebaseService = {
       const allSnapshot = await get(chatRef);
       if (allSnapshot.exists() && allSnapshot.size >= 450) {
         const updates = {};
-        allSnapshot.forEach(child => {
-          updates[child.key] = null;
-        });
+        allSnapshot.forEach(child => { updates[child.key] = null; });
         await update(chatRef, updates);
         return;
+      }
+
+      if (allSnapshot.exists()) {
+        const staleSeasonUpdates = {};
+        allSnapshot.forEach(child => {
+          if (child.val()?.seasonId !== CURRENT_SEASON_ID) staleSeasonUpdates[child.key] = null;
+        });
+        if (Object.keys(staleSeasonUpdates).length) await update(chatRef, staleSeasonUpdates);
       }
 
       if (allSnapshot.exists() && allSnapshot.size > 400) {
@@ -1416,7 +1423,8 @@ export const firebaseService = {
       badge: profile.badge || '👤',
       staffRole: profile.staffRole || '',
       text: String(text || '').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH),
-      timestamp: now
+      timestamp: now,
+      seasonId: CURRENT_SEASON_ID
     });
   },
 
@@ -1430,7 +1438,9 @@ export const firebaseService = {
       if (!snapshot.exists() && onReset) onReset();
     }, handleError);
     const unsubscribeChild = onChildAdded(chatRef, (snapshot) => {
-      callback({ ...snapshot.val(), id: snapshot.key });
+      const message = snapshot.val();
+      if (message?.seasonId !== CURRENT_SEASON_ID) return;
+      callback({ ...message, id: snapshot.key });
     }, handleError);
     const unsubscribeRemoved = onChildRemoved(chatRef, (snapshot) => {
       onRemoved?.(snapshot.key);
