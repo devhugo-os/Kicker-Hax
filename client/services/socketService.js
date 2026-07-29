@@ -239,7 +239,10 @@ export class P2PSocketService {
       text: `${player.username} desistiu. O time tem 30 segundos para decidir se continua com um jogador a menos.`
     });
     this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
-    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { updatedAt: Date.now() }).catch(() => {});
+    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+      playersCount: this.serverRoom.getConnectedPlayerCount(),
+      updatedAt: Date.now()
+    }).catch(() => {});
     return true;
   }
 
@@ -438,10 +441,21 @@ export class P2PSocketService {
       ? compactMultiplayerPayload(transportPayload)
       : transportPayload;
     this.triggerLocalEvent(event, localPayload);
+    // The match decides when identity and statistics are present. A second
+    // cadence here used to strip every stats snapshot after sequence one
+    // because the two modulo schedules never aligned.
+    const realtimePlayers = event === 'gameState' ? transportPayload?.players || [] : [];
+    const stateCarriesIdentity = realtimePlayers.some(player => (
+      Object.hasOwn(player, 'name')
+      || Object.hasOwn(player, 'badge')
+      || Object.hasOwn(player, 'skinId')
+      || Object.hasOwn(player, 'staffRole')
+    ));
+    const stateCarriesStats = realtimePlayers.some(player => Object.hasOwn(player, 'matchStats'));
     const realtimeState = event === 'gameState'
       ? compactRealtimeGameState(transportPayload, {
-        includeIdentity: this.gameStateSequence % 60 === 1,
-        includeStats: this.gameStateSequence % 6 === 1
+        includeIdentity: stateCarriesIdentity,
+        includeStats: stateCarriesStats
       })
       : null;
     const realtimePacket = event === 'gameState'
@@ -1397,7 +1411,7 @@ export class P2PSocketService {
       const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
       const joinedAt = Date.now();
       update(roomRef, {
-        playersCount: this.serverRoom.players.length,
+        playersCount: this.serverRoom.getConnectedPlayerCount(),
         hostHeartbeatAt: joinedAt,
         updatedAt: joinedAt
       }).catch(error => console.warn('[P2PSocket] Falha ao atualizar presença da sala:', error));
@@ -1503,7 +1517,10 @@ export class P2PSocketService {
       this.serverRoom.match.continueWithoutDisconnected();
       this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `Votação aprovada. A partida continua sem ${disconnectedName}.` });
       this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
-      update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { playersCount: this.serverRoom.players.length, updatedAt: Date.now() }).catch(() => {});
+      update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        updatedAt: Date.now()
+      }).catch(() => {});
     }
 
     else if (event === 'surrenderMatch') {
@@ -1731,7 +1748,10 @@ export class P2PSocketService {
     );
     this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
     this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${reserved.username} perdeu a conexão. Aguardando retorno por 1 minuto e 30 segundos.` });
-    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { updatedAt: Date.now() }).catch(() => {});
+    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+      playersCount: this.serverRoom.getConnectedPlayerCount(),
+      updatedAt: Date.now()
+    }).catch(() => {});
     if (overReturnLimit) {
       this.sendRoomChatMessage({ username: 'Sistema', badge: '', text: 'Retorno bloqueado. A votacao do time encerra em 30 segundos.' });
     }
@@ -1755,7 +1775,10 @@ export class P2PSocketService {
       const removed = this.serverRoom.removePlayer(socketId);
       
       const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
-      update(roomRef, { playersCount: this.serverRoom.players.length, updatedAt: Date.now() });
+      update(roomRef, {
+        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        updatedAt: Date.now()
+      });
 
       if (removed) {
         this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${removed.username} saiu da sala.` });
@@ -1819,7 +1842,10 @@ export class P2PSocketService {
     if (!this.isHost || !this.serverRoom) return;
     this.serverRoom.removePlayer(botId);
     this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
-    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { playersCount: this.serverRoom.players.length, updatedAt: Date.now() });
+    update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+      playersCount: this.serverRoom.getConnectedPlayerCount(),
+      updatedAt: Date.now()
+    });
   }
 
   kickPlayer(targetSocketId, reason = 'kicked') {
@@ -1882,7 +1908,7 @@ export class P2PSocketService {
           }
           update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
             status: 'lobby',
-            playersCount: this.serverRoom.players.length,
+            playersCount: this.serverRoom.getConnectedPlayerCount(),
             updatedAt: Date.now()
           }).catch(() => {});
           remove(ref(rtdb, `matchChats/${this.roomCode}`)).catch(() => {});
@@ -1891,7 +1917,10 @@ export class P2PSocketService {
       }
       this.serverRoom.removePlayer(targetSocketId);
       this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
-      update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), { playersCount: this.serverRoom.players.length, updatedAt: Date.now() });
+      update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
+        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        updatedAt: Date.now()
+      });
 
       this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${targetPlayer.username} foi expulso da sala.` });
 
@@ -2015,7 +2044,7 @@ export class P2PSocketService {
           status: 'results',
           matchId: null,
           matchEndedAt: Date.now(),
-          playersCount: matchRoom.players.filter(player => !player.disconnected && !player.cpu).length,
+          playersCount: matchRoom.getConnectedPlayerCount(),
           updatedAt: Date.now()
         });
       },
@@ -2289,9 +2318,12 @@ export class P2PSocketService {
     this.roomHeartbeatTicker = createRealtimeTicker(() => {
       if (!this.isHost || !this.roomCode) return;
       const roomStatus = this.serverRoom?.status || 'lobby';
-      const liveLobbyPlayers = this.serverRoom?.players?.filter(player => player.status === 'lobby').length || 0;
+      const connectedHumans = this.serverRoom?.players
+        ?.filter(player => !player.cpu && !player.disconnected).length || 0;
+      const liveLobbyPlayers = this.serverRoom?.players
+        ?.filter(player => !player.cpu && !player.disconnected && player.status === 'lobby').length || 0;
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
-        playersCount: roomStatus === 'lobby' ? liveLobbyPlayers : (this.serverRoom?.players?.length || 0),
+        playersCount: roomStatus === 'lobby' ? liveLobbyPlayers : connectedHumans,
         status: roomStatus,
         hostPresent: true,
         hostHeartbeatAt: Date.now(),

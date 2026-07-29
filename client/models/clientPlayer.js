@@ -222,11 +222,10 @@ export class ClientPlayer {
     if (ballOwnerId === this.id) {
       ctx.fillStyle = 'rgba(255,255,255,.85)';
       ctx.beginPath();
-      // Keep possession below the avatar. Above it, the triangle overlapped
-      // short usernames and staff tags in Android WebView.
-      ctx.moveTo(this.x, this.y + this.r + 10);
-      ctx.lineTo(this.x - 6, this.y + this.r + 2);
-      ctx.lineTo(this.x + 6, this.y + this.r + 2);
+      // Point down toward the avatar while leaving the name and role above it.
+      ctx.moveTo(this.x, this.y - this.r - 3);
+      ctx.lineTo(this.x - 6, this.y - this.r - 10);
+      ctx.lineTo(this.x + 6, this.y - this.r - 10);
       ctx.closePath();
       ctx.fill();
     }
@@ -300,7 +299,7 @@ export class ClientPlayer {
       ctx.fillStyle = C.TEAM_NAME_COLORS[this.team] || '#e2e8f0';
       ctx.fillText(this.name, x, y - this.r - 14);
     }
-    drawStaffTagOnCanvas(ctx, x, y - this.r - 31, this.staffRole);
+    drawStaffTagOnCanvas(ctx, x, y - this.r - 39, this.staffRole);
     return !this.skin || skinDrawn;
   }
 
@@ -312,10 +311,12 @@ export class ClientPlayer {
     // while cutting each cached texture to 44% of the former Android size.
     const resolutionScale = 2;
     const width = 176;
-    const height = 92;
+    const height = 104;
     const key = `${this.getIdentityCacheKey()}|${resolutionScale}x|${width}x${height}`;
     const centerX = width / 2;
-    const centerY = 58;
+    // Reserve enough pixels above the avatar for the staff tag. The previous
+    // 92px surface clipped the tag and made it look displaced on Android.
+    const centerY = 68;
     if (this.identityCacheCanvas && this.identityCacheKey === key) {
       ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY, width, height);
       return;

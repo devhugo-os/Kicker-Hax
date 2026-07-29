@@ -407,6 +407,8 @@ export class ServerMatch {
       id: p.id,
       x: p.x,
       y: p.y,
+      vx: p.vx,
+      vy: p.vy,
       dir: p.dir,
       team: p.team,
       has: (this.ball.owner === p.id),
@@ -460,6 +462,8 @@ export class ServerMatch {
         id: player.id,
         x: player.x,
         y: player.y,
+        vx: player.vx,
+        vy: player.vy,
         dir: player.dir,
         team: player.team,
         has: player.has,
@@ -468,6 +472,12 @@ export class ServerMatch {
         halo: player.halo
       }))
     }));
+  }
+
+  /** Starts the next replay window after the previous goal is fully handled. */
+  resetReplayCapture() {
+    this.replayBuffer = new Array(C.REPLAY_CAPTURE_FRAMES);
+    this.replayBufferIndex = 0;
   }
 
   triggerGoal(side, scorerId) {
@@ -857,6 +867,10 @@ export class ServerMatch {
           this.status = 'end-freeze';
           this.endFreezeTimer = C.MATCH_END_SETTLE_FRAMES;
         } else {
+          // A replay may only include play since the previous goal. Resetting
+          // here preserves a short first possession after the countdown and
+          // prevents old goals from leaking into the next replay.
+          this.resetReplayCapture();
           this.setTimedPhase('countdown', C.RESTART_COUNTDOWN_FRAMES);
           this.kickoff();
         }
@@ -1003,7 +1017,7 @@ export class ServerMatch {
 
     // Broadcast current snapshot to all users in room
     const sequence = ++this.snapshotSequence;
-    const includeExtendedState = sequence === 1 || sequence % 12 === 0;
+    const includeExtendedState = sequence === 1 || sequence % 60 === 0;
     const snap = {
       matchId: this.matchId,
       sequence,
@@ -1550,8 +1564,7 @@ export class ServerMatch {
     this.isHostPaused = false;
     this.clearDisconnectPause();
     this.lastGoal = null;
-    this.replayBuffer = new Array(C.REPLAY_CAPTURE_FRAMES);
-    this.replayBufferIndex = 0;
+    this.resetReplayCapture();
     this.resetPlayerStats();
     this.kickoff();
     this.resetting = false;

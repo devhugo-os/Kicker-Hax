@@ -173,11 +173,20 @@ export class ServerRoom {
     return message;
   }
 
+  /** Returns only connected human players visible to matchmaking. */
+  getConnectedPlayerCount({ lobbyOnly = false } = {}) {
+    return this.players.filter(player => (
+      !player.cpu
+      && !player.disconnected
+      && (!lobbyOnly || player.status === 'lobby')
+    )).length;
+  }
+
   getPublicInfo() {
     return {
       code: this.code,
       name: this.name,
-      playersCount: this.players.length,
+      playersCount: this.getConnectedPlayerCount({ lobbyOnly: this.status === 'lobby' }),
       maxPlayers: this.maxPlayers,
       hasPassword: !!this.password,
       competitive: this.competitive,

@@ -116,7 +116,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '79.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '80.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -576,6 +576,9 @@ export const firebaseService = {
       if (coins < price) {
         throw new Error(getInsufficientCoinsMessage(coins, price, 'comprar a skin selecionada'));
       }
+      if (getSkinCopyCount(profile, skin.id) > 0) {
+        throw new Error('Você já possui esta skin.');
+      }
       const ownership = addRegularSkinCopy(profile, skin.id);
       if (!ownership) throw new Error('Você já possui esta skin.');
       const skinPurchaseValues = { ...(profile.skinPurchaseValues || {}), [skin.id]: Number(price || 0) };
@@ -844,7 +847,9 @@ export const firebaseService = {
         ...ownership,
         skinPurchaseValues,
         skinGiftOrigins,
-        coins: Math.max(0, Number(profile.coins || 0)) + safeReward
+        coins: Math.max(0, Number(profile.coins || 0)) + safeReward,
+        // Bind the KX Coins credit to the collectible removed in this write.
+        lastDiscardedSkinId: skinId
       };
       transaction.update(userRef, updated);
       return updated;
@@ -901,7 +906,8 @@ export const firebaseService = {
       transaction.update(senderRef, {
         ...senderOwnership,
         skinPurchaseValues: purchaseValues,
-        skinGiftOrigins: senderGiftOrigins
+        skinGiftOrigins: senderGiftOrigins,
+        lastSentGiftId: giftRef.id
       });
       transaction.update(recipientRef, {
         ownedSkins: receiverOwned,
@@ -964,7 +970,8 @@ export const firebaseService = {
       transaction.update(holderRef, {
         ...holderOwnership,
         skinPurchaseValues: holderValues,
-        skinGiftOrigins: holderOrigins
+        skinGiftOrigins: holderOrigins,
+        lastSentGiftId: giftRef.id
       });
       transaction.update(originalOwnerRef, {
         ownedSkins: originalOwned,

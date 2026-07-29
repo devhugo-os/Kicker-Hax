@@ -741,6 +741,8 @@ export const menuController = {
         item.dataset.rarity = skin.rarity || 'custom';
         item.dataset.value = String(getSkinValue(skin));
         item.dataset.skinName = String(skin.name || '');
+        const giftOrigin = profile.skinGiftOrigins?.[skin.id];
+        item.dataset.gifted = giftOrigin?.senderUid ? 'true' : 'false';
         if ((profile.equippedSkinId || 'rookie') === skin.id) item.classList.add('equipped');
         const image = document.createElement('img');
         image.src = skin.image;
@@ -750,9 +752,11 @@ export const menuController = {
         name.textContent = `${skin.name || 'Skin da comunidade'}${(profile.equippedSkinId || 'rookie') === skin.id ? ' · Em uso' : ''}`;
         const value = document.createElement('span');
         value.textContent = `${getSkinValue(skin)} KX`;
-        const giftOrigin = profile.skinGiftOrigins?.[skin.id];
         const giftedBy = document.createElement('small');
-        if (giftOrigin?.senderUsername) giftedBy.textContent = `Doada por ${giftOrigin.senderUsername}`;
+        if (giftOrigin?.senderUsername) {
+          giftedBy.className = 'public-skin-gift-origin';
+          giftedBy.innerHTML = `<span aria-hidden="true">🎁</span> Doada por <strong>${escapeHtml(giftOrigin.senderUsername)}</strong>`;
+        }
         item.append(image, name, value);
         if (giftedBy.textContent) item.appendChild(giftedBy);
         inventory.appendChild(item);
@@ -779,7 +783,11 @@ export const menuController = {
     const sort = document.getElementById('public-inventory-sort')?.value || 'rarity';
     const rarityOrder = { mythic: 6, legendary: 5, epic: 4, rare: 3, custom: 2, common: 1 };
     const items = [...inventory.querySelectorAll('.public-skin-item')];
-    items.forEach(item => item.classList.toggle('hidden', active !== 'all' && item.dataset.rarity !== active));
+    items.forEach(item => {
+      const visible = active === 'all'
+        || (active === 'gifted' ? item.dataset.gifted === 'true' : item.dataset.rarity === active);
+      item.classList.toggle('hidden', !visible);
+    });
     items.sort((a, b) => {
       if (sort === 'price-asc') return Number(a.dataset.value) - Number(b.dataset.value);
       if (sort === 'price-desc') return Number(b.dataset.value) - Number(a.dataset.value);

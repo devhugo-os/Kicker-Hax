@@ -1,5 +1,6 @@
 import * as C from '../../shared/constants.js';
 import { drawSkinImage } from '../utils/skinRenderer.js';
+import { drawStaffTagOnCanvas } from '../utils/staffTags.js';
 import { drawPowerKickBallEffect } from '../utils/powerKickFx.js';
 
 const stadiumFrameCache = new Map();
@@ -148,9 +149,9 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
   }
   if (state.hasBall) {
     ctx.fillStyle = '#fff'; ctx.beginPath();
-    ctx.moveTo(state.x, state.y + radius + 10);
-    ctx.lineTo(state.x - 6, state.y + radius + 2);
-    ctx.lineTo(state.x + 6, state.y + radius + 2);
+    ctx.moveTo(state.x, state.y - radius - 3);
+    ctx.lineTo(state.x - 6, state.y - radius - 10);
+    ctx.lineTo(state.x + 6, state.y - radius - 10);
     ctx.fill();
   }
   if (Number(state.passRequestTimer || 0) > 0) {
@@ -213,6 +214,7 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
   ctx.fill();
   ctx.fillStyle = C.TEAM_NAME_COLORS[state.team] || '#fff';
   ctx.fillText(label, state.x, state.y - radius - 15);
+  drawStaffTagOnCanvas(ctx, state.x, state.y - radius - 39, player.staffRole);
   ctx.restore();
 }
 

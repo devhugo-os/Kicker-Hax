@@ -275,6 +275,20 @@ export class MatchRecordingSession {
 
   async finalize({ matchId, ownerUid, result } = {}) {
     this.active = false;
+    // The authoritative result can arrive between two sampled snapshots.
+    // Merge it before the last report so a goal on the final tick is present
+    // in both the recording HUD and its final statistics.
+    (result?.playerStats || []).forEach(player => {
+      const index = this.ensurePlayer({
+        ...player,
+        id: player.playerId || player.id,
+        name: player.username || player.name
+      });
+      if (index >= 0) this.latestStats.set(index, {
+        ...this.latestStats.get(index),
+        ...player
+      });
+    });
     this.captureReport(result?.score || { red: result?.scoreRed, blue: result?.scoreBlue });
     const base = {
       v: 10,

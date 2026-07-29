@@ -35,6 +35,7 @@ import { copyText } from '../utils/clipboard.js';
 
 export const gameController = {
   currentUser: null,
+  currentShotPreviewRegions: [],
 
   // Game state
   mode: 'solo', // 'solo' | 'multiplayer'
@@ -389,7 +390,7 @@ export const gameController = {
     if (matchStage?.style.transform) matchStage.style.transform = '';
     this.lastPowerKickTransform = '';
     this.shotPreviewState = null;
-    this.currentShotPreviewRegions = [];
+    if (this.currentShotPreviewRegions) this.currentShotPreviewRegions.length = 0;
     this.previousFrameHadTransientFx = false;
   },
 
@@ -795,8 +796,26 @@ export const gameController = {
 
     const btnLobbyStart = document.getElementById('lobby-btn-start');
     if (btnLobbyStart) {
-      btnLobbyStart.onclick = () => {
+      btnLobbyStart.onclick = async () => {
+        if (this.lobbySettingsDirty) {
+          const startWithoutSaving = await confirmDialog({
+            title: 'Configurações não salvas',
+            message: 'Existem alterações na sala que ainda não foram salvas. Deseja iniciar com as configurações atuais da sala?',
+            confirmLabel: 'Iniciar sem salvar',
+            cancelLabel: 'Voltar e salvar'
+          });
+          if (!startWithoutSaving) return;
+        }
         socketService.startGame();
+      };
+    }
+
+    const btnToggleLobbySettings = document.getElementById('lobby-btn-toggle-settings');
+    if (btnToggleLobbySettings) {
+      btnToggleLobbySettings.onclick = () => {
+        this.lobbySettingsOpen = !this.lobbySettingsOpen;
+        document.getElementById('lobby-host-settings')?.classList.toggle('hidden', !this.lobbySettingsOpen);
+        btnToggleLobbySettings.setAttribute('aria-expanded', String(this.lobbySettingsOpen));
       };
     }
 
@@ -1178,13 +1197,25 @@ export const gameController = {
           competitive,
           password: pass
         });
+        this.lobbySettingsDirty = false;
+        this.lobbySettingsOpen = false;
+        btnSaveLobbySettings.disabled = true;
+        document.getElementById('lobby-host-settings')?.classList.add('hidden');
+        document.getElementById('lobby-btn-toggle-settings')?.setAttribute('aria-expanded', 'false');
         showToast('Configurações da sala atualizadas.', 'success');
       };
     }
     ['lobby-password-input', 'lobby-duration-input', 'lobby-goals-input', 'lobby-field-input', 'lobby-type-input']
       .forEach(id => document.getElementById(id)?.addEventListener('input', () => {
+        this.lobbySettingsDirty = true;
         const btn = document.getElementById('lobby-btn-save-settings');
         if (btn) btn.disabled = false;
+        if (id === 'lobby-type-input') {
+          const competitive = document.getElementById('lobby-type-input')?.value === 'competitive';
+          document.querySelector('#lobby-host-settings .lobby-password-setting')?.classList.toggle('hidden', competitive);
+          const password = document.getElementById('lobby-password-input');
+          if (competitive && password) password.value = '';
+        }
       }));
 
     window.addEventListener('kicker:openMobileHudEditor', () => this.startMobileHudEditor());
@@ -1195,6 +1226,12 @@ export const gameController = {
   // RENDER & MATCH LOGIC
   // ==========================================================================
   startMatchView() {
+    // Invalidate every older RAF closure before creating this disposable
+    // match view. Re-entering the screen or opening the HUD editor used to
+    // leave concurrent loops drawing the same canvas and degrading FPS.
+    this.matchViewGeneration = Number(this.matchViewGeneration || 0) + 1;
+    cancelAnimationFrame(this.localPhysicsTick);
+    this.localPhysicsTick = null;
     this.administrativeMatchAbort = false;
     if (!this.hudEditorMode) this.closeMobileHudEditorUI();
     this.canvas = document.getElementById('match-canvas');
@@ -1532,6 +1569,7 @@ export const gameController = {
   // OFFLINE SOLO MATCH LOOP
   // ==========================================================================
   startLocalSoloMatch() {
+    const viewGeneration = this.matchViewGeneration;
     // Reset local stats tracking variables
     this.p1Tackles = 0; this.p1Dribbles = 0;
     this.p2Tackles = 0; this.p2Dribbles = 0;
@@ -1688,6 +1726,7 @@ export const gameController = {
       const activeLocalPlayers = [];
 
       const tickLocalGame = (timestamp) => {
+        if (viewGeneration !== this.matchViewGeneration) return;
         if (router.currentScreenId !== 'match-screen') return;
         try {
 
@@ -1720,6 +1759,9 @@ export const gameController = {
           if (!this.isPaused) {
           if (MatchSim.skipReplayRequested) {
             MatchSim.skipReplayRequested = false;
+            MatchSim.replayBuffer = new Array(C.REPLAY_CAPTURE_FRAMES);
+            MatchSim.replayBufferIndex = 0;
+            MatchSim.replayBufferCount = 0;
             MatchSim.status = 'countdown';
             MatchSim.countdownTimer = C.RESTART_COUNTDOWN_FRAMES;
             resetFieldPositions();
@@ -1772,6 +1814,9 @@ export const gameController = {
                 MatchSim.status = 'ended';
                 this.localMatchEnd(MatchSim.score);
               } else {
+                MatchSim.replayBuffer = new Array(C.REPLAY_CAPTURE_FRAMES);
+                MatchSim.replayBufferIndex = 0;
+                MatchSim.replayBufferCount = 0;
                 MatchSim.status = 'countdown';
                 MatchSim.countdownTimer = C.RESTART_COUNTDOWN_FRAMES;
                 resetFieldPositions();
@@ -2171,7 +2216,7 @@ export const gameController = {
 
         // Render Frame Canvas
         this.clearMatchFrame(inputP1);
-        this.currentShotPreviewRegions = [];
+        this.currentShotPreviewRegions.length = 0;
         const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
         const cameraShaking = this.beginPowerKickCamera(
           this.ctx,
@@ -2979,6 +3024,7 @@ export const gameController = {
   },
 
   startOnlineMatch() {
+    const viewGeneration = this.matchViewGeneration;
     // Reset stats tracking variables for online match
     this.p1Tackles = 0; this.p1Dribbles = 0;
     this.p2Tackles = 0; this.p2Dribbles = 0;
@@ -3308,6 +3354,7 @@ export const gameController = {
 
     // High frequency client tick loop (60Hz animation loop)
     const tickOnlineGame = (timestamp = performance.now()) => {
+      if (viewGeneration !== this.matchViewGeneration) return;
       if (router.currentScreenId !== 'match-screen') return;
 
       const localId = socketService.getSocket().id;
@@ -3371,7 +3418,7 @@ export const gameController = {
 
       // 2) Render Frame
       this.clearMatchFrame(input);
-      this.currentShotPreviewRegions = [];
+      this.currentShotPreviewRegions.length = 0;
       const replayCameraFrame = this.inReplay && !this.isReplayPostGoalHold() ? this.getCurrentReplayFrame() : null;
       const cameraShaking = this.beginPowerKickCamera(
         this.ctx,
@@ -3575,7 +3622,9 @@ export const gameController = {
   },
 
   stopMatchView() {
+    this.matchViewGeneration = Number(this.matchViewGeneration || 0) + 1;
     cancelAnimationFrame(this.localPhysicsTick);
+    this.localPhysicsTick = null;
     this.tutorialSession?.destroy();
     this.tutorialSession = null;
     clearTimeout(this.replayFallbackTimer);
@@ -3793,7 +3842,6 @@ export const gameController = {
     this.goalLimit = 0;
     this.status = 'countdown';
     router.show('match-screen');
-    this.startMatchView();
     setTimeout(() => this.enableMobileHudEditor(), 80);
   },
 
@@ -4090,6 +4138,12 @@ export const gameController = {
   updateMobileShootMeter(kickCharge = 0, shootButton = null) {
     const progress = Math.max(0, Math.min(1, Number(kickCharge) || 0));
     if (Math.abs(progress - Number(this.lastRenderedShootMeter || 0)) < 0.006 && progress !== 0 && progress !== 1) return;
+    const now = performance.now();
+    const terminalState = progress === 0 || progress === 1;
+    // CSS custom-property writes trigger style recalculation in Android
+    // WebView. A 30 Hz meter remains visually continuous while leaving the
+    // 60 Hz canvas/physics budget available for movement and collisions.
+    if (!terminalState && now - Number(this.lastMobileShootMeterAt || 0) < (1000 / 30)) return;
     if (!this.mobileShootButton?.isConnected) {
       this.mobileShootButton = document.querySelector('#mobile-controls [data-mobile-action="shoot"]');
       this.mobileControlsElement = document.getElementById('mobile-controls');
@@ -4099,6 +4153,7 @@ export const gameController = {
     button.style.setProperty('--charge-progress', progress.toFixed(3));
     button.classList.toggle('is-charging', progress > 0 && progress < 1);
     this.lastRenderedShootMeter = progress;
+    this.lastMobileShootMeterAt = now;
   },
 
   toggleMobileStatsModal() {
@@ -5288,6 +5343,11 @@ export const gameController = {
       return;
     }
     this.activeRoom = room;
+    if (this.lobbySettingsRoomCode !== room.code) {
+      this.lobbySettingsRoomCode = room.code;
+      this.lobbySettingsDirty = false;
+      this.lobbySettingsOpen = false;
+    }
     this.fieldSize = room.fieldSize || 'medium';
     this.showReplay = room.showReplay !== undefined ?room.showReplay : true;
     const myId = socketService.getSocket().id;
@@ -5319,24 +5379,36 @@ export const gameController = {
     if (randomTeamsBtn) randomTeamsBtn.classList.toggle('hidden', !isHost || room.competitive);
     if (botControls) botControls.classList.toggle('hidden', !isHost);
     const lobbyHostSettings = document.getElementById('lobby-host-settings');
-    if (lobbyHostSettings) lobbyHostSettings.classList.toggle('hidden', !isHost);
-    const lobbyPasswordInput = document.getElementById('lobby-password-input');
-    if (lobbyPasswordInput) {
-      lobbyPasswordInput.value = '';
-      lobbyPasswordInput.placeholder = room.hasPassword ? 'Senha privada ativa' : 'Vazio = pública';
+    if (lobbyHostSettings) lobbyHostSettings.classList.toggle('hidden', !isHost || !this.lobbySettingsOpen);
+    const lobbySettingsButton = document.getElementById('lobby-btn-toggle-settings');
+    if (lobbySettingsButton) {
+      lobbySettingsButton.classList.toggle('hidden', !isHost);
+      lobbySettingsButton.setAttribute('aria-expanded', String(isHost && !!this.lobbySettingsOpen));
     }
+    const lobbyPasswordInput = document.getElementById('lobby-password-input');
     const durationInput = document.getElementById('lobby-duration-input');
     const goalsInput = document.getElementById('lobby-goals-input');
     const fieldInput = document.getElementById('lobby-field-input');
     const typeInput = document.getElementById('lobby-type-input');
+    if (!this.lobbySettingsDirty) {
+    if (lobbyPasswordInput) {
+      lobbyPasswordInput.value = '';
+      lobbyPasswordInput.placeholder = room.hasPassword ? 'Senha privada ativa' : 'Vazio = pública';
+    }
     if (durationInput) durationInput.value = String(room.competitive ? 5 : room.duration);
     if (goalsInput) goalsInput.value = String(room.competitive ? 0 : room.goalLimit);
     if (fieldInput) fieldInput.value = room.fieldSize || 'medium';
     if (typeInput) typeInput.value = room.competitive ? 'competitive' : 'casual';
+      const saveSettings = document.getElementById('lobby-btn-save-settings');
+      if (saveSettings) saveSettings.disabled = true;
+    }
     [durationInput, goalsInput, fieldInput].forEach(input => {
       if (input) input.disabled = !!room.competitive;
     });
-    document.querySelector('#lobby-host-settings .lobby-password-setting')?.classList.toggle('hidden', !!room.competitive);
+    document.querySelector('#lobby-host-settings .lobby-password-setting')?.classList.toggle(
+      'hidden',
+      (typeInput?.value || (room.competitive ? 'competitive' : 'casual')) === 'competitive'
+    );
     ['lobby-btn-join-red', 'lobby-btn-join-blue', 'lobby-btn-join-spec'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) btn.classList.toggle('hidden', true);
@@ -5378,9 +5450,14 @@ export const gameController = {
         </span>
       `;
       const playerName = row.querySelector('.lobby-player-name');
-      const lobbySkin = p.skin && p.skin !== 'custom'
-        ? { id: p.skinId || 'custom', image: p.skin, name: p.username }
-        : getSkinById(p.skinId || 'rookie');
+      const localProfile = p.uid && p.uid === this.currentUser?.uid
+        ? menuController.profileData
+        : null;
+      const lobbySkin = localProfile
+        ? getEquippedSkin(localProfile)
+        : p.skin && p.skin !== 'custom'
+          ? { id: p.skinId || 'custom', image: p.skin, name: p.username }
+          : getSkinById(p.skinId || 'rookie');
       menuController.renderSkin(row.querySelector('.lobby-player-avatar'), lobbySkin, p.badge);
       appendStaffTag(playerName, p.staffRole);
       if (p.uid && playerName) {
@@ -5991,9 +6068,9 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
   if (hasBall) {
     cx.fillStyle = 'rgba(255,255,255,.85)';
     cx.beginPath();
-    cx.moveTo(x, y - C.PLAYER_RADIUS - 10);
-    cx.lineTo(x - 6, y - C.PLAYER_RADIUS - 2);
-    cx.lineTo(x + 6, y - C.PLAYER_RADIUS - 2);
+    cx.moveTo(x, y - C.PLAYER_RADIUS - 3);
+    cx.lineTo(x - 6, y - C.PLAYER_RADIUS - 10);
+    cx.lineTo(x + 6, y - C.PLAYER_RADIUS - 10);
     cx.closePath();
     cx.fill();
   }
@@ -6012,7 +6089,7 @@ function ctxPlayerDraw(cx, x, y, team, name, badge, skin, halo, inv, stun, hasBa
     cx.fillStyle = C.TEAM_NAME_COLORS[team] || '#e2e8f0';
     cx.fillText(name, x, y - C.PLAYER_RADIUS - 14);
   }
-  drawStaffTagOnCanvas(cx, x, y - C.PLAYER_RADIUS - 31, staffRole);
+  drawStaffTagOnCanvas(cx, x, y - C.PLAYER_RADIUS - 37, staffRole);
 }
 
 function drawPlayerDirectionArrow(cx, x, y, angle, team) {

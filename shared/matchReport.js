@@ -56,9 +56,9 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
     + (Math.min(10, Number(stats.tackles || 0)) * 0.14)
     + (Math.min(12, Number(stats.dribbles || 0)) * 0.08)
     - wastePenalty
-    // An own goal directly changes the score against the player's team, so it
-    // must outweigh ordinary accumulated actions in both live and final grades.
-    - (Number(stats.ownGoals || 0) * 2.6)
+    // An own goal matters, but one accidental touch must not erase an otherwise
+    // strong match. Repeated own goals still accumulate a meaningful penalty.
+    - (Number(stats.ownGoals || 0) * 0.85)
     - leftPenalty
     - inactivityPenalty
     + possessionImpact;

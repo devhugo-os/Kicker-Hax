@@ -13,7 +13,7 @@ import { encodeSkinCanvas, validateSkinImageFile } from '../utils/skinImage.js';
 import { SKIN_IMAGE_MAX_BYTES, SKIN_NAME_MAX_LENGTH } from '../../shared/constants.js';
 import { soundFx } from '../utils/soundFx.js';
 import { formatFeaturedTimeLeft } from '../utils/featuredCycle.js';
-import { canAcquireSkinCopy, getSkinCopyCount } from '../utils/skinOwnership.js';
+import { getSkinCopyCount } from '../utils/skinOwnership.js';
 
 const FEATURED = {
   hourly: { label: 'Skin da hora', price: 45, reset: 'Troca a cada hora' },
@@ -275,7 +275,7 @@ export const marketController = {
         grid.appendChild(card);
         return;
       }
-      const owned = !canAcquireSkinCopy(menuController.profileData || {}, skin.id);
+      const owned = getSkinCopyCount(menuController.profileData || {}, skin.id) > 0;
       const resetLabel = skin.expiresAt ? formatFeaturedTimeLeft(skin.expiresAt) : config.reset;
       const loopLabel = cadence === 'hourly' ? ' • fila rotativa' : '';
       const carriedLabel = skin.carried && cadence !== 'hourly' ? ' • mantida por falta de nova candidata' : '';
@@ -384,7 +384,10 @@ export const marketController = {
     const rarityOrder = { mythic: 6, legendary: 5, custom: 4, epic: 3, rare: 2, common: 1 };
     const sort = document.getElementById('inventory-sort')?.value || 'rarity';
     const items = (this.inventoryItems || [])
-      .filter(skin => this.inventoryRarity === 'all' || skin.rarity === this.inventoryRarity)
+      .filter(skin => this.inventoryRarity === 'all'
+        || (this.inventoryRarity === 'gifted'
+          ? skin.inventoryCopy === 'gifted'
+          : skin.rarity === this.inventoryRarity))
       .sort((a, b) => {
         if (sort === 'price-asc') return a.value - b.value;
         if (sort === 'price-desc') return b.value - a.value;
@@ -448,6 +451,8 @@ export const marketController = {
         }
       });
       card.querySelector('[data-action="return"]')?.addEventListener('click', async event => {
+        // currentTarget is cleared by the browser after the first await.
+        const button = event.currentTarget;
         const recipient = skin.giftOrigin?.senderUsername || 'o remetente';
         const confirmed = await confirmDialog({
           title: `Devolver ${skin.name}?`,
@@ -456,7 +461,7 @@ export const marketController = {
           danger: true
         });
         if (!confirmed) return;
-        const button = event.currentTarget;
+        if (!(button instanceof HTMLButtonElement)) return;
         button.disabled = true;
         try {
           const returnedTo = await firebaseService.returnDonatedSkin(this.user.uid, skin.id);
@@ -468,6 +473,7 @@ export const marketController = {
         }
       });
       card.querySelector('[data-action="discard"]')?.addEventListener('click', async event => {
+        const button = event.currentTarget;
         const confirmed = await confirmDialog({
           title: `Descartar ${skin.name}?`,
           message: 'Esta ação é permanente. A skin sairá do inventário e você receberá 30 KX Coins.',
@@ -475,7 +481,7 @@ export const marketController = {
           danger: true
         });
         if (!confirmed) return;
-        const button = event.currentTarget;
+        if (!(button instanceof HTMLButtonElement)) return;
         button.disabled = true;
         try {
           const updated = await firebaseService.discardSkin(this.user.uid, skin.id, 30);
