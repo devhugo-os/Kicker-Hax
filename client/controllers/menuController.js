@@ -720,19 +720,30 @@ export const menuController = {
   },
 
   async openPublicInventory() {
-    const profile = this.publicProfileData;
     const inventory = document.getElementById('public-profile-inventory');
     const modal = document.getElementById('public-profile-inventory-modal');
-    if (!profile || !inventory || !modal) return;
+    if (!this.publicProfileUid || !inventory || !modal) return;
     modal.classList.remove('hidden');
     this.bringModalToFront(modal);
     inventory.textContent = 'Carregando inventário...';
     try {
-      const skins = (await Promise.all((profile.ownedSkins || ['rookie']).map(async id => {
+      // Reload the owner so gifts made while this profile was open appear
+      // immediately. A broken legacy asset must not hide the whole inventory.
+      const profile = await firebaseService.getUserProfile(this.publicProfileUid);
+      if (!profile) throw new Error('Perfil não encontrado.');
+      this.publicProfileData = profile;
+      const ownedSkinIds = [...new Set(
+        (Array.isArray(profile.ownedSkins) && profile.ownedSkins.length
+          ? profile.ownedSkins
+          : ['rookie'])
+          .map(id => String(id || '').trim())
+          .filter(Boolean)
+      )];
+      const skins = (await Promise.all(ownedSkinIds.map(async id => {
         const builtIn = getSkinById(id);
         if (builtIn?.id === id) return builtIn;
         // Older community submissions may not use the current ID prefix.
-        return firebaseService.getSkinAsset(id);
+        return firebaseService.getSkinAsset(id).catch(() => null);
       }))).filter(Boolean);
       inventory.replaceChildren();
       skins.forEach(skin => {

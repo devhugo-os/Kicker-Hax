@@ -50,11 +50,15 @@ function resolveCustomSkinsInLobbyInfo(lobbyInfo, triggerRedraw) {
       player.skin = cached.image;
       return;
     }
-    firebaseService.getUserProfile(player.uid).then(profile => {
-      const image = profile?.equippedSkinImage;
+    Promise.all([
+      player.skinId ? firebaseService.getSkinAsset(player.skinId).catch(() => null) : Promise.resolve(null),
+      firebaseService.getUserProfile(player.uid).catch(() => null)
+    ]).then(([asset, profile]) => {
+      // Older profiles may keep the community image only in skinAssets.
+      const image = asset?.image || profile?.equippedSkinImage;
       if (!image) return;
       customSkinCache.set(player.uid, {
-        skinId: profile.equippedSkinId || player.skinId || 'custom',
+        skinId: player.skinId || profile?.equippedSkinId || 'custom',
         image
       });
       if (customSkinCache.size > 64) customSkinCache.delete(customSkinCache.keys().next().value);
@@ -1598,6 +1602,14 @@ export class P2PSocketService {
     else if (event === 'returnToLobby') {
       const player = this.serverRoom.players.find(item => item.id === socketId);
       if (!player) return;
+      const returnedProfile = sanitizeMultiplayerProfile(data);
+      if (returnedProfile) {
+        player.username = returnedProfile.username || player.username;
+        player.badge = returnedProfile.badge || player.badge;
+        player.skin = returnedProfile.skin ?? player.skin;
+        player.skinId = returnedProfile.skinId || returnedProfile.equippedSkinId || player.skinId;
+        player.staffRole = returnedProfile.staffRole || player.staffRole;
+      }
       // Do not rebuild the whole room before everyone returns from results.
       player.status = 'lobby';
       player.ready = false;
@@ -2171,8 +2183,8 @@ export class P2PSocketService {
     this.emit('hostEndMatchToLobby');
   }
 
-  returnToLobby() {
-    this.emit('returnToLobby');
+  returnToLobby(profile = null) {
+    this.emit('returnToLobby', profile ? sanitizeMultiplayerProfile(profile) : null);
   }
 
   voteContinueWithoutDisconnected() {

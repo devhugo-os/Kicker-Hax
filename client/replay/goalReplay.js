@@ -6,6 +6,12 @@ export function getSynchronizedReplayStart(replayStartAt, serverClockOffsetMs = 
     : fallbackNow;
 }
 
+export function hasReachedGoalLimit(score, goalLimit) {
+  const limit = Number(goalLimit) || 0;
+  return limit > 0
+    && (Number(score?.red || 0) >= limit || Number(score?.blue || 0) >= limit);
+}
+
 /** Estimates host clock skew without adding the one-way network delay. */
 export function estimateServerClockOffset(sentAt, receivedAt, serverTime) {
   const sent = Number(sentAt);
@@ -57,4 +63,24 @@ export function interpolateReplayFrame(first, second, ratio = 0) {
       } : player;
     })
   };
+}
+
+/**
+ * Collects every sound crossed by replay playback. Slow frames and resumed
+ * tabs can advance more than one capture index at once, so reading only the
+ * visible frame silently drops kicks and other short effects.
+ */
+export function getReplaySoundsBetween(frames, previousIndex, currentIndex) {
+  if (!Array.isArray(frames) || frames.length === 0) return [];
+  const end = Math.min(frames.length - 1, Math.max(0, Number(currentIndex) || 0));
+  const previous = Number.isFinite(Number(previousIndex)) ? Number(previousIndex) : -1;
+  const start = previous < 0 || end < previous
+    ? 0
+    : Math.min(end, previous + 1);
+  const sounds = [];
+  for (let index = start; index <= end; index++) {
+    const frameSounds = frames[index]?.sfx;
+    if (Array.isArray(frameSounds)) sounds.push(...frameSounds);
+  }
+  return sounds;
 }

@@ -26,7 +26,9 @@ import { buildLiveMatchReport } from '../replay/liveMatchReport.js';
 import {
   estimateServerClockOffset,
   getReplayPosition,
+  getReplaySoundsBetween,
   getSynchronizedReplayStart,
+  hasReachedGoalLimit,
   interpolateReplayFrame
 } from '../replay/goalReplay.js';
 import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
@@ -307,13 +309,10 @@ export const gameController = {
     const matchIsPlaying = renderedStatus === 'playing';
     const statusChanged = this.lastRenderedMatchStatus !== renderedStatus;
     const powerKickNeedsFullClear = isPowerKickActive(this.ball);
-    const shotGuideNeedsFullClear = !!input?.shoot
-      || !!this.shotPreviewState
-      || (Array.isArray(this.currentShotPreviewRegions) && this.currentShotPreviewRegions.length > 0);
-    // Rotating dashed guides and the super-shot camera touch many distant
-    // pixels. A complete transparent-layer clear prevents Android WebView from
-    // retaining antialiased fragments between dirty rectangles.
-    const hasTransientFx = powerKickNeedsFullClear || shotGuideNeedsFullClear;
+    // The shot guide registers one padded continuous dirty region, so it does
+    // not need a full 1024x640 canvas clear on every charged frame. Only the
+    // super-shot camera transform touches the whole surface.
+    const hasTransientFx = powerKickNeedsFullClear;
     const canUseDirtyRegions = this.performanceProfile?.nativeApp
       && matchIsPlaying
       && !this.inReplay
@@ -1102,7 +1101,7 @@ export const gameController = {
     // Post Game Screen Continue button
     const btnPostContinue = document.getElementById('post-btn-continue');
     if (btnPostContinue) {
-      btnPostContinue.onclick = () => {
+      btnPostContinue.onclick = async () => {
         if (this.mode === 'multiplayer') {
           const roomCode = this.activeRoom?.code;
           if (!roomCode || !socketService.hasLiveHostConnection()) {
@@ -1118,13 +1117,14 @@ export const gameController = {
             // Discovery temporarily reports zero players after results. The
             // authoritative host still owns the room and recreates its lobby
             // immediately with the previous settings.
-            socketService.returnToLobby();
+            const returnProfile = await this.buildMultiplayerProfile().catch(() => null);
+            socketService.returnToLobby(returnProfile);
             this.activeRoom = socketService.serverRoom.getLobbyInfo();
             this.updateLobbyView(this.activeRoom);
             router.show('lobby-screen');
             return;
           }
-          socketService.getPublicRoomMeta(this.activeRoom?.code).then(room => {
+          socketService.getPublicRoomMeta(this.activeRoom?.code).then(async room => {
             if (room?.status === 'lobby' && room.hostPresent !== false) {
               btnPostContinue.disabled = true;
               socketService.off('returnedToLobby');
@@ -1141,7 +1141,8 @@ export const gameController = {
                 router.show('lobby-screen');
               };
               socketService.on('returnedToLobby', handleReturned);
-              socketService.returnToLobby();
+              const returnProfile = await this.buildMultiplayerProfile().catch(() => null);
+              socketService.returnToLobby(returnProfile);
             } else {
               btnPostContinue.disabled = false;
               this.activeRoom = null;
@@ -1759,6 +1760,13 @@ export const gameController = {
           if (!this.isPaused) {
           if (MatchSim.skipReplayRequested) {
             MatchSim.skipReplayRequested = false;
+            this.endReplayPlayback();
+            const reachedGoalLimit = hasReachedGoalLimit(MatchSim.score, this.goalLimit);
+            if (reachedGoalLimit) {
+              MatchSim.status = 'ended';
+              this.localMatchEnd(MatchSim.score);
+              return;
+            }
             MatchSim.replayBuffer = new Array(C.REPLAY_CAPTURE_FRAMES);
             MatchSim.replayBufferIndex = 0;
             MatchSim.replayBufferCount = 0;
@@ -1809,8 +1817,7 @@ export const gameController = {
             MatchSim.countdownTimer = Math.max(0, Math.ceil((replayTotalMs - Number(position.elapsedMs || 0)) / (1000 / 60)));
             if (position.ended) {
               this.endReplayPlayback();
-              const goalsTotal = MatchSim.score.red >= this.goalLimit || MatchSim.score.blue >= this.goalLimit;
-              if (goalsTotal && this.goalLimit > 0) {
+              if (hasReachedGoalLimit(MatchSim.score, this.goalLimit)) {
                 MatchSim.status = 'ended';
                 this.localMatchEnd(MatchSim.score);
               } else {
@@ -4261,9 +4268,14 @@ export const gameController = {
     );
     if (!frame) return;
 
-    // Trigger local audio triggers synced with frames
+    // Replay playback can cross multiple captured frames between paints.
+    // Consume the whole interval so power shots and impacts are never lost.
     if (this.replayFrameIdx !== this.lastReplaySfxIdx) {
-      (frame.sfx || []).forEach(sfx => soundFx.play(sfx));
+      getReplaySoundsBetween(
+        this.replayFrames,
+        this.lastReplaySfxIdx,
+        this.replayFrameIdx
+      ).forEach(sfx => soundFx.play(sfx));
       this.lastReplaySfxIdx = this.replayFrameIdx;
     }
 

@@ -264,7 +264,7 @@ export class ClientPlayer {
     return [this.name, this.badge, this.skinId, this.skin, this.team, this.staffRole].join('|');
   }
 
-  paintIdentity(ctx, x, y) {
+  paintIdentity(ctx, x, y, includeStaffTag = true) {
     ctx.beginPath();
     ctx.arc(x, y, this.r, 0, Math.PI * 2);
     ctx.fillStyle = this.team === C.Team.RED ? '#ef4444' : '#3b82f6';
@@ -299,7 +299,7 @@ export class ClientPlayer {
       ctx.fillStyle = C.TEAM_NAME_COLORS[this.team] || '#e2e8f0';
       ctx.fillText(this.name, x, y - this.r - 14);
     }
-    drawStaffTagOnCanvas(ctx, x, y - this.r - 39, this.staffRole);
+    if (includeStaffTag) drawStaffTagOnCanvas(ctx, x, y - this.r - 35, this.staffRole);
     return !this.skin || skinDrawn;
   }
 
@@ -311,14 +311,13 @@ export class ClientPlayer {
     // while cutting each cached texture to 44% of the former Android size.
     const resolutionScale = 2;
     const width = 176;
-    const height = 104;
+    const height = 92;
     const key = `${this.getIdentityCacheKey()}|${resolutionScale}x|${width}x${height}`;
     const centerX = width / 2;
-    // Reserve enough pixels above the avatar for the staff tag. The previous
-    // 92px surface clipped the tag and made it look displaced on Android.
-    const centerY = 68;
+    const centerY = 58;
     if (this.identityCacheCanvas && this.identityCacheKey === key) {
       ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY, width, height);
+      drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 35, this.staffRole);
       return;
     }
 
@@ -331,11 +330,14 @@ export class ClientPlayer {
       spriteCtx.imageSmoothingQuality = 'high';
       spriteCtx.scale(resolutionScale, resolutionScale);
     }
-    const cacheReady = spriteCtx && this.paintIdentity(spriteCtx, centerX, centerY);
+    // Staff tags sit above the compact sprite and are drawn separately. This
+    // keeps the fast Update 79 texture size without clipping official roles.
+    const cacheReady = spriteCtx && this.paintIdentity(spriteCtx, centerX, centerY, false);
     if (cacheReady) {
       this.identityCacheCanvas = sprite;
       this.identityCacheKey = key;
       ctx.drawImage(sprite, this.x - centerX, this.y - centerY, width, height);
+      drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 35, this.staffRole);
       return;
     }
 
