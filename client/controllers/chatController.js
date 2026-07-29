@@ -95,7 +95,10 @@ export const chatController = {
       if (msg.uid) {
         try {
           const cached = this.identityCache.get(msg.uid);
-          if (!cached || Date.now() - cached.loadedAt > 5000) {
+          const identityChanged = !!msg.skinId
+            && cached?.profile?.equippedSkinId
+            && msg.skinId !== cached.profile.equippedSkinId;
+          if (!cached || identityChanged || Date.now() - cached.loadedAt > 300000) {
             profile = await firebaseService.getUserProfile(msg.uid);
             this.identityCache.set(msg.uid, { profile, loadedAt: Date.now() });
           } else {
@@ -119,7 +122,10 @@ export const chatController = {
       const badgeEl = document.createElement(msg.uid ? 'button' : 'span');
       badgeEl.className = 'msg-badge';
       if (msg.uid) badgeEl.type = 'button';
-      const equippedSkin = getEquippedSkin(profile || {});
+      const equippedSkin = getEquippedSkin(profile || {
+        equippedSkinId: msg.skinId || 'rookie',
+        equippedSkinImage: msg.skin && msg.skin !== 'custom' ? msg.skin : ''
+      });
       menuController.renderSkin(badgeEl, equippedSkin, badge);
       const author = document.createElement(msg.uid ? 'button' : 'span');
       author.className = 'msg-author';

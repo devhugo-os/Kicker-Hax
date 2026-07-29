@@ -46,14 +46,17 @@ function resolveCustomSkinsInLobbyInfo(lobbyInfo, triggerRedraw) {
   target.players.forEach(player => {
     if (player.skin !== 'custom' || !player.uid) return;
     const cached = customSkinCache.get(player.uid);
-    if (cached) {
-      player.skin = cached;
+    if (cached?.skinId === player.skinId && cached.image) {
+      player.skin = cached.image;
       return;
     }
     firebaseService.getUserProfile(player.uid).then(profile => {
       const image = profile?.equippedSkinImage;
       if (!image) return;
-      customSkinCache.set(player.uid, image);
+      customSkinCache.set(player.uid, {
+        skinId: profile.equippedSkinId || player.skinId || 'custom',
+        image
+      });
       if (customSkinCache.size > 64) customSkinCache.delete(customSkinCache.keys().next().value);
       player.skin = image;
       triggerRedraw?.();
@@ -1040,6 +1043,7 @@ export class P2PSocketService {
       if (this.serverRoom && this.serverRoom.match) {
         const activeMatch = this.serverRoom.match;
         const hostPlayer = this.serverRoom.players.find(player => player.id === this.clientId);
+        if (hostPlayer) activeMatch.markParticipantStatus(hostPlayer.id, 'abandoned');
         matchEndedByHostExit = activeMatch.forfeitAgainstTeam(hostPlayer?.team, {
           code: 'host_left',
           players: [hostPlayer?.username || 'Host'],
@@ -1435,6 +1439,8 @@ export class P2PSocketService {
         uid: player?.uid || '',
         username: player ? player.username : 'Jogador',
         badge: player ? player.badge : '',
+        skinId: player?.skinId || 'rookie',
+        skin: player?.skin || '',
         staffRole: player?.staffRole || '',
         text: data
       });
@@ -1794,6 +1800,8 @@ export class P2PSocketService {
         uid: player?.uid || '',
         username: player?.username || 'Jogador',
         badge: player?.badge || '',
+        skinId: player?.skinId || 'rookie',
+        skin: player?.skin || '',
         staffRole: player?.staffRole || '',
         text
       });
@@ -1913,6 +1921,7 @@ export class P2PSocketService {
       goalLimit: this.serverRoom.goalLimit,
       fieldSize: this.serverRoom.fieldSize,
       competitive: this.serverRoom.competitive,
+      hasPassword: !!this.serverRoom.password,
       updatedAt: Date.now()
     });
   }
@@ -2042,10 +2051,10 @@ export class P2PSocketService {
     const normalized = {
       ...inputData,
       _seq: sequence,
-      // Five-percent direction steps are visually indistinguishable on an
-      // analog stick and prevent pointer noise from flooding the DataChannel.
-      x: Math.round(Number(inputData.x || 0) * 20) / 20,
-      y: Math.round(Number(inputData.y || 0) * 20) / 20
+      // Keep enough angular precision for a smooth direction guide while the
+      // compact packet still quantizes to one signed byte on the wire.
+      x: Math.round(Number(inputData.x || 0) * 64) / 64,
+      y: Math.round(Number(inputData.y || 0) * 64) / 64
     };
     const actionSignature = `${+!!normalized.shoot}|${+!!normalized.sprint}|${+!!normalized.dribble}|${+!!normalized.tackle}|${+!!normalized.power}|${+!!normalized.requestPass}|${+!!normalized.mobileTackleAssist}`;
     const signature = `${normalized.x}|${normalized.y}|${actionSignature}`;
@@ -2411,6 +2420,9 @@ export class P2PSocketService {
       uid: message.uid || '',
       username: message.username || 'Jogador',
       badge: message.badge || '',
+      skinId: message.skinId || 'rookie',
+      // Community images are hydrated by UID; Base64 does not belong in chat.
+      skin: String(message.skin || '').startsWith('data:image/') ? 'custom' : (message.skin || ''),
       staffRole: message.staffRole || '',
       instanceId: this.roomInstanceId || '',
       text: String(message.text || '').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH),

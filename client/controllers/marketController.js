@@ -280,8 +280,25 @@ export const marketController = {
       const loopLabel = cadence === 'hourly' ? ' • fila rotativa' : '';
       const carriedLabel = skin.carried && cadence !== 'hourly' ? ' • mantida por falta de nova candidata' : '';
       card.innerHTML = `<img src="${safeImageSource(skin.image)}" alt="${escapeHtml(skin.name || config.label)}"><div><span class="market-eyebrow">${escapeHtml(config.label)} • ${escapeHtml(resetLabel)}${loopLabel}${carriedLabel}</span><h3>${escapeHtml(skin.name || 'Skin da comunidade')}</h3><p>Enviada por ${escapeHtml(skin.username || 'Jogador')}</p><strong>${config.price} KX Coins</strong><button class="btn btn-primary" type="button" ${owned ? 'disabled' : ''}>${owned ? 'Já adquirida' : 'Comprar'}</button></div>`;
-      card.querySelector('button')?.addEventListener('click', async () => {
-        const purchaseButton = card.querySelector('button');
+      const creatorLine = card.querySelector('p');
+      if (creatorLine) {
+        const creatorButton = document.createElement('button');
+        creatorButton.type = 'button';
+        creatorButton.className = 'featured-creator profile-trigger';
+        creatorButton.textContent = skin.username || 'Jogador';
+        creatorButton.disabled = !skin.creatorUid;
+        creatorButton.addEventListener('click', () => {
+          if (skin.creatorUid) menuController.openPublicProfile(skin.creatorUid);
+        });
+        creatorLine.replaceChildren(document.createTextNode('Enviada por '), creatorButton);
+        if (skin.creatorUid) {
+          firebaseService.getUserProfile(skin.creatorUid).then(profile => {
+            if (profile) creatorButton.textContent = profile.displayName || profile.username || creatorButton.textContent;
+          }).catch(() => {});
+        }
+      }
+      card.querySelector('.btn-primary')?.addEventListener('click', async () => {
+        const purchaseButton = card.querySelector('.btn-primary');
         if (purchaseButton?.disabled) return;
         const balance = Number(menuController.profileData?.coins || 0);
         if (balance < config.price) {

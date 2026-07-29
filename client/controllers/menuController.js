@@ -51,6 +51,7 @@ export const menuController = {
     if (!this.profileData) {
       throw new Error('Perfil autenticado nao foi criado ou carregado.');
     }
+    await this.hydrateProfileSkinMetadata(this.profileData);
     this.profileDraft = null;
     this.profileDirty = false;
 
@@ -257,6 +258,7 @@ export const menuController = {
       const gifts = await firebaseService.claimPendingSkinGifts(this.currentUser.uid).catch(() => []);
       this.profileData = await firebaseService.getUserProfile(this.currentUser.uid);
       if (!this.profileData) return;
+      await this.hydrateProfileSkinMetadata(this.profileData);
       gifts.forEach(gift => showToast(`${gift.senderUsername || 'Um jogador'} doou uma skin para você.`, 'success'));
 
       // Update Quick Profile HTML Elements
@@ -292,7 +294,10 @@ export const menuController = {
     // Returning from the inventory must preserve unsaved skin/name changes.
     if (!this.profileDraft) {
       this.profileData = await firebaseService.getUserProfile(this.currentUser.uid);
+      await this.hydrateProfileSkinMetadata(this.profileData);
       this.profileDraft = createProfileDraft(this.profileData);
+    } else {
+      await this.hydrateProfileSkinMetadata(this.profileDraft);
     }
 
     const ownStaffTag = document.getElementById('profile-staff-tag');
@@ -592,6 +597,23 @@ export const menuController = {
     if (rarity) rarity.textContent = rarityLabels[skin?.rarity || (profile?.equippedSkinImage ? 'custom' : 'none')] || 'Especial';
   },
 
+  /**
+   * Older community profiles can contain the correct image but only a generic
+   * label. Resolve the canonical asset once without requiring a re-equip.
+   */
+  async hydrateProfileSkinMetadata(profile) {
+    const skinId = String(profile?.equippedSkinId || '');
+    const genericName = !profile?.equippedSkinName
+      || /^skin (personalizada|da comunidade)$/i.test(String(profile.equippedSkinName).trim());
+    if (!profile || !skinId || ['rookie', 'none'].includes(skinId) || !genericName) return profile;
+    const asset = await firebaseService.getSkinAsset(skinId).catch(() => null);
+    if (!asset) return profile;
+    profile.equippedSkinName = asset.name || profile.equippedSkinName || 'Skin da comunidade';
+    profile.equippedSkinRarity = asset.rarity || profile.equippedSkinRarity || 'custom';
+    if (!profile.equippedSkinImage && asset.image) profile.equippedSkinImage = asset.image;
+    return profile;
+  },
+
   updateProfileDirtyState() {
     this.profileDirty = !!this.profileDraft && profilesDiffer(this.profileData, this.profileDraft);
     const save = document.getElementById('profile-btn-save');
@@ -658,6 +680,7 @@ export const menuController = {
         firebaseService.getUserStats(uid)
       ]);
       if (!profile) throw new Error('Perfil não encontrado.');
+      await this.hydrateProfileSkinMetadata(profile);
       this.publicProfileData = profile;
       const publicTitle = document.getElementById('public-profile-title');
       publicTitle.textContent = profile.displayName || profile.username || 'Jogador';
@@ -706,13 +729,18 @@ export const menuController = {
     inventory.textContent = 'Carregando inventário...';
     try {
       const skins = (await Promise.all((profile.ownedSkins || ['rookie']).map(async id => {
-        if (String(id).startsWith('community_')) return firebaseService.getSkinAsset(id);
-        return getSkinById(id);
+        const builtIn = getSkinById(id);
+        if (builtIn?.id === id) return builtIn;
+        // Older community submissions may not use the current ID prefix.
+        return firebaseService.getSkinAsset(id);
       }))).filter(Boolean);
       inventory.replaceChildren();
       skins.forEach(skin => {
         const item = document.createElement('article');
         item.className = `public-skin-item rarity-border-${skin.rarity || 'custom'}`;
+        item.dataset.rarity = skin.rarity || 'custom';
+        item.dataset.value = String(getSkinValue(skin));
+        item.dataset.skinName = String(skin.name || '');
         if ((profile.equippedSkinId || 'rookie') === skin.id) item.classList.add('equipped');
         const image = document.createElement('img');
         image.src = skin.image;
@@ -729,10 +757,36 @@ export const menuController = {
         if (giftedBy.textContent) item.appendChild(giftedBy);
         inventory.appendChild(item);
       });
+      document.querySelectorAll('[data-public-inventory-rarity]').forEach(button => {
+        button.onclick = () => {
+          document.querySelectorAll('[data-public-inventory-rarity]').forEach(item => item.classList.toggle('active', item === button));
+          this.applyPublicInventoryFilters();
+        };
+      });
+      const sort = document.getElementById('public-inventory-sort');
+      if (sort) sort.onchange = () => this.applyPublicInventoryFilters();
+      this.applyPublicInventoryFilters();
       if (!skins.length) inventory.textContent = 'Nenhuma skin na coleção.';
     } catch (error) {
       inventory.textContent = 'Não foi possível carregar este inventário.';
     }
+  },
+
+  applyPublicInventoryFilters() {
+    const inventory = document.getElementById('public-profile-inventory');
+    if (!inventory) return;
+    const active = document.querySelector('[data-public-inventory-rarity].active')?.dataset.publicInventoryRarity || 'all';
+    const sort = document.getElementById('public-inventory-sort')?.value || 'rarity';
+    const rarityOrder = { mythic: 6, legendary: 5, epic: 4, rare: 3, custom: 2, common: 1 };
+    const items = [...inventory.querySelectorAll('.public-skin-item')];
+    items.forEach(item => item.classList.toggle('hidden', active !== 'all' && item.dataset.rarity !== active));
+    items.sort((a, b) => {
+      if (sort === 'price-asc') return Number(a.dataset.value) - Number(b.dataset.value);
+      if (sort === 'price-desc') return Number(b.dataset.value) - Number(a.dataset.value);
+      if (sort === 'name') return a.dataset.skinName.localeCompare(b.dataset.skinName, 'pt-BR');
+      return (rarityOrder[b.dataset.rarity] || 0) - (rarityOrder[a.dataset.rarity] || 0)
+        || a.dataset.skinName.localeCompare(b.dataset.skinName, 'pt-BR');
+    }).forEach(item => inventory.appendChild(item));
   },
 
   async openPublicHistory() {

@@ -256,7 +256,12 @@ export class ServerMatch {
       tackleImpactReady: false,
       shootHalo: 0,
       aiShootLock: 0,
+      aiShootHold: 0,
       aiFeintLock: 0,
+      aiStuckFrames: 0,
+      aiEscapeFrames: 0,
+      aiLastX: startX,
+      aiLastY: startY,
       passRequestTimer: 0,
       passRequestCooldown: 0,
       lastPassRequestPressed: false,
@@ -365,6 +370,11 @@ export class ServerMatch {
         p.passRequestTimer = 0;
         p.lastPassRequestPressed = false;
         p.aiShootLock = p.cpu ? 45 : 0;
+        p.aiShootHold = 0;
+        p.aiStuckFrames = 0;
+        p.aiEscapeFrames = 0;
+        p.aiLastX = p.x;
+        p.aiLastY = p.y;
         p.aiFeintLock = 0;
         if (p.frontSpawnBoost > 0) p.frontSpawnBoost -= 1;
       });
@@ -503,6 +513,23 @@ export class ServerMatch {
 
   processBotAI(p) {
     if (p.stun > 0) return;
+    p.aiShootLock = Math.max(0, Number(p.aiShootLock || 0) - 1);
+    p.aiEscapeFrames = Math.max(0, Number(p.aiEscapeFrames || 0) - 1);
+
+    const movedSinceDecision = Math.hypot(
+      p.x - Number(p.aiLastX ?? p.x),
+      p.y - Number(p.aiLastY ?? p.y)
+    );
+    p.aiStuckFrames = movedSinceDecision < 0.22 && Math.hypot(p.vx || 0, p.vy || 0) < 0.7
+      ? Number(p.aiStuckFrames || 0) + 1
+      : Math.max(0, Number(p.aiStuckFrames || 0) - 3);
+    p.aiLastX = p.x;
+    p.aiLastY = p.y;
+    if (p.aiStuckFrames >= 24) {
+      p.aiStuckFrames = 0;
+      p.aiEscapeFrames = 54;
+      p.aiStyle.escapeSide = (p.aiStyle?.escapeSide || 1) * -1;
+    }
 
     const ours = this.players.filter(x => x.team === p.team);
     const their = this.players.filter(x => x.team !== p.team);
@@ -545,7 +572,13 @@ export class ServerMatch {
 
     if (this.ball.owner === p.id) {
       targetX = goalX;
-      targetY = ServerPhysics.clamp(p.y, gTop + 20, gBot - 20);
+      // Aim at alternating open sections of the mouth instead of dribbling
+      // straight into a defender or shooting along the nearest post.
+      targetY = ServerPhysics.clamp(
+        this.h / 2 + (p.aiStyle?.lane || 1) * C.GOAL_W_INIT * 0.16,
+        gTop + 28,
+        gBot - 28
+      );
       const nearestOpp = their.reduce((best, curr) => {
         const d = Math.hypot(curr.x - p.x, curr.y - p.y);
         return d < best.d ? { p: curr, d } : best;
@@ -585,6 +618,19 @@ export class ServerMatch {
         : (p.y > this.h - escapeMargin ? this.h * (1 - (p.aiStyle?.escapeBias || 0.72)) : p.y);
       // A bot holding the ball also uses dribble later in this frame to break
       // a body block instead of repeatedly walking into the same wall.
+    }
+    if (p.aiEscapeFrames > 0) {
+      const attackingDirection = p.team === C.Team.RED ? 1 : -1;
+      targetX = ServerPhysics.clamp(
+        p.x + attackingDirection * 180,
+        C.BORDER + 120,
+        this.w - C.BORDER - 120
+      );
+      targetY = ServerPhysics.clamp(
+        p.y + (p.aiStyle?.escapeSide || 1) * 190,
+        C.BORDER + 90,
+        this.h - C.BORDER - 90
+      );
     }
 
     // Calculate vectors
@@ -644,8 +690,17 @@ export class ServerMatch {
       const mouth = p.y > gTop && p.y < gBot;
 
       const facingGoal = Math.abs(ServerPhysics.normalizedAngle((p.team === C.Team.RED ? 0 : Math.PI) - (p.dir || 0))) < 1.35;
-      if (p.aiShootLock <= 0 && mouth && facingGoal && distToGoal < 230) {
+      if (p.aiShootHold > 0) {
+        p.aiShootHold--;
         shoot = true;
+      } else if (p.aiShootHold === 0 && p.aiShootLock <= 0 && mouth && facingGoal && distToGoal < 250) {
+        // Hold for a short deterministic burst, then release on the next
+        // frame. A permanently true input never released the charged shot.
+        p.aiShootHold = p.difficulty === C.Difficulty.HARD ? 26 : 18;
+        p.aiShootLock = 72;
+        shoot = true;
+      } else if (p.aiShootHold === 0) {
+        shoot = false;
       }
 
       const nearestOpp = their.reduce((best, curr) => {
@@ -654,7 +709,8 @@ export class ServerMatch {
       }, { p: null, d: 1e9 });
       const trappedNearWall = p.x < C.BORDER + 65 || p.x > this.w - C.BORDER - 65 || p.y < C.BORDER + 65 || p.y > this.h - C.BORDER - 65;
 
-      if ((p.difficulty !== C.Difficulty.EASY || trappedNearWall) && nearestOpp.d < 118 && p.dribble_cd <= 0 && p.stamina >= C.DRIBBLE_STAM_COST) {
+      if ((p.difficulty !== C.Difficulty.EASY || trappedNearWall || p.aiEscapeFrames > 0)
+        && nearestOpp.d < 132 && p.dribble_cd <= 0 && p.stamina >= C.DRIBBLE_STAM_COST) {
         dribble = true;
       }
       if (p.aiShootLock <= 0 && p.power_cd <= 0 && p.stamina > 0.65 && trappedNearWall && nearestOpp.d < 110) {
@@ -733,45 +789,17 @@ export class ServerMatch {
         this.isHostPaused = false;
         this.pauseTicks = 0;
       }
-      // Just broadcast state with isHostPaused=true, do not simulate physics
-      const snap = {
-        matchId: this.matchId,
-        ball: {
-          x: this.ball.x,
-          y: this.ball.y,
-          vx: this.ball.vx,
-          vy: this.ball.vy,
-          owner: this.ball.owner,
-          lastTouch: this.ball.lastTouch
-        },
-        players: this.players.map(p => ({
-          id: p.id,
-          uid: p.uid || '',
-          team: p.team,
-          x: p.x,
-          y: p.y,
-          vx: 0,
-          vy: 0,
-          dir: p.dir,
-          stamina: p.stamina,
-          staminaLock: p.staminaLock,
-          stun: p.stun,
-          shootHalo: p.shootHalo,
-          kickCharge: p.kickCharge || 0,
-          invuln: p.invuln,
-          tackle_cd: p.tackle_cd,
-          dribble_cd: p.dribble_cd,
-          power_cd: p.power_cd
-        })),
-        score: this.score,
-        matchTime: this.matchTime,
-        status: this.status,
-        countdown: Math.max(0, Math.ceil(this.countdownTimer / 60)),
-        phaseEndsAt: this.phaseEndsAt,
-        goalInfo: this.lastGoal,
-        soundEffects: [],
-        isHostPaused: true
-      };
+      // Pause only freezes physics. Reuse the complete bootstrap so identity,
+      // skins and live statistics never disappear behind the pause overlay.
+      const snap = this.getCurrentState();
+      snap.ball.vx = 0;
+      snap.ball.vy = 0;
+      snap.players.forEach(player => {
+        player.vx = 0;
+        player.vy = 0;
+      });
+      snap.soundEffects = [];
+      snap.isHostPaused = true;
       this.io.to(this.roomCode).emit('gameState', snap);
       return;
     }
@@ -975,7 +1003,7 @@ export class ServerMatch {
 
     // Broadcast current snapshot to all users in room
     const sequence = ++this.snapshotSequence;
-    const includeExtendedState = sequence === 1 || sequence % 30 === 0;
+    const includeExtendedState = sequence === 1 || sequence % 12 === 0;
     const snap = {
       matchId: this.matchId,
       sequence,
@@ -1128,7 +1156,10 @@ export class ServerMatch {
     // A suspended host tab can report a large elapsed interval at once. Never
     // replay that backlog in a burst: it causes remote players to teleport and
     // floods the WebRTC state channel. The worker normally keeps this at 1.
-    const frames = Math.min(6, Math.max(1, Math.round(elapsed / (1000 / 60))));
+    // The worker normally invokes exactly one 60 Hz step. If the host WebView
+    // briefly stalls, at most three catch-up steps are useful; a six-frame
+    // burst only congests the raw state channel and raises remote latency.
+    const frames = Math.min(3, Math.max(1, Math.round(elapsed / (1000 / 60))));
     this.lastScheduledTickAt = now;
     for (let frame = 0; frame < frames; frame++) {
       // Physics and compact network snapshots both remain at 60 Hz. The raw

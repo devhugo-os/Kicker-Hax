@@ -56,7 +56,9 @@ export function calculateMatchRating(stats = {}, winnerTeam = 'draw', score = {}
     + (Math.min(10, Number(stats.tackles || 0)) * 0.14)
     + (Math.min(12, Number(stats.dribbles || 0)) * 0.08)
     - wastePenalty
-    - (Number(stats.ownGoals || 0) * 1.2)
+    // An own goal directly changes the score against the player's team, so it
+    // must outweigh ordinary accumulated actions in both live and final grades.
+    - (Number(stats.ownGoals || 0) * 2.6)
     - leftPenalty
     - inactivityPenalty
     + possessionImpact;

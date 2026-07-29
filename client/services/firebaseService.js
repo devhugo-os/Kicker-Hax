@@ -116,7 +116,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '78.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '79.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -443,7 +443,8 @@ export const firebaseService = {
         transaction.update(statsRef, {
           ratingTotal: (seasonStats.ratingTotal || 0) + safeRating,
           ratingMatches: (seasonStats.ratingMatches || 0) + 1,
-          processedRatingMatchIds: { ...processedRatingMatchIds, [safeMatchId]: true }
+          processedRatingMatchIds: { ...processedRatingMatchIds, [safeMatchId]: true },
+          lastMatchId: safeMatchId
         });
         return;
       }
@@ -472,7 +473,8 @@ export const firebaseService = {
           : processedMatchIds,
         processedRatingMatchIds: safeMatchId
           ? { ...processedRatingMatchIds, [safeMatchId]: true }
-          : processedRatingMatchIds
+          : processedRatingMatchIds,
+        lastMatchId: safeMatchId || ''
       };
 
       // Update XP & level calculations
@@ -492,7 +494,8 @@ export const firebaseService = {
         level: currentLevel,
         coins: Math.max(0, (seasonUser.coins || 0) + Math.max(0, coinReward || 0)),
         seasonId: CURRENT_SEASON_ID,
-        lastLogin: new Date().toISOString()
+        lastLogin: new Date().toISOString(),
+        lastProgressMatchId: safeMatchId || ''
       });
     });
   },
@@ -775,6 +778,7 @@ export const firebaseService = {
         level: currentLevel,
         seasonId: CURRENT_SEASON_ID,
         lastLogin: new Date().toISOString(),
+        lastProgressMatchId: safeMatchId || '',
         ...(safeMatchId ? { [`processedXpMatchIds.${safeMatchId}`]: true } : {})
       });
     });
@@ -1425,6 +1429,10 @@ export const firebaseService = {
       uid: profile.uid,
       username: profile.username, // Only username goes to RTDB chat
       badge: profile.badge || '👤',
+      skinId: profile.equippedSkinId || 'rookie',
+      skin: String(profile.equippedSkinImage || '').startsWith('data:image/')
+        ? 'custom'
+        : (profile.equippedSkinImage || ''),
       staffRole: profile.staffRole || '',
       text: String(text || '').trim().slice(0, CHAT_MESSAGE_MAX_LENGTH),
       timestamp: now,

@@ -34,7 +34,8 @@ function renderTeamSummary(report, team) {
   stats.className = 'match-report-team-stats';
   [
     ['Posse', `${data.possessionPct || 0}%`], ['Chutes', data.shots || 0],
-    ['Assistências', data.assists || 0], ['Dribles', data.dribbles || 0], ['Desarmes', data.tackles || 0]
+    ['Assistências', data.assists || 0], ['Dribles', data.dribbles || 0],
+    ['Desarmes', data.tackles || 0], ['Gols contra', data.ownGoals || 0]
   ].forEach(([label, value]) => {
     const row = document.createElement('div');
     row.append(cell(label), cell(String(value), 'match-report-value'));
@@ -53,7 +54,8 @@ function renderPlayers(report, mvp) {
   table.className = 'match-report-table';
   const header = document.createElement('div');
   header.className = 'match-report-row match-report-header';
-  ['Jogador', 'Nota', 'Gols', 'Assistências', 'Chutes', 'Dribles', 'Desarmes', 'Posse'].forEach(label => header.appendChild(cell(label)));
+  ['Jogador', 'Nota', 'Gols', 'Gols contra', 'Assistências', 'Chutes', 'Dribles', 'Desarmes', 'Posse']
+    .forEach(label => header.appendChild(cell(label)));
   table.appendChild(header);
 
   report.playerStats
@@ -94,7 +96,8 @@ function renderPlayers(report, mvp) {
       row.append(
         playerReference,
         cell(Number(player.rating || 0).toFixed(1), 'match-report-rating'),
-        cell(String(player.goals || 0)), cell(String(player.assists || 0)),
+        cell(String(player.goals || 0)), cell(String(player.ownGoals || 0)),
+        cell(String(player.assists || 0)),
         cell(String(player.shots || 0)), cell(String(player.dribbles || 0)),
         cell(String(player.tackles || 0)), cell(`${player.possessionPct || 0}%`)
       );

@@ -25,6 +25,7 @@ export class ClientPlayer {
     this.vx = Number(serverPlayer.vx || 0);
     this.vy = Number(serverPlayer.vy || 0);
     this.lastMoveAngle = this.dir;
+    this.lastMoveAngleTarget = this.dir;
     this.lastMoveSpeed = Math.hypot(this.vx, this.vy);
     this.staffRole = serverPlayer.staffRole || '';
     this.extrapolateMotion = true;
@@ -134,9 +135,10 @@ export class ClientPlayer {
     this.y = reconciled.y;
     const renderDx = this.x - previousX;
     const renderDy = this.y - previousY;
-    // Network snapshots can briefly report zero velocity while the rendered
-    // player is moving, so the visible displacement drives the guide arrow.
-    this.trackMovement(renderDx / elapsedFrames, renderDy / elapsedFrames, 0.03);
+    // The arrow describes what the player actually sees on screen. Snapshot
+    // velocity can point at the previous input during reconciliation and made
+    // the marker tremble or briefly face the opposite direction.
+    this.trackMovement(renderDx / elapsedFrames, renderDy / elapsedFrames, 0.015);
     
     // Interpolate direction angles smoothly
     let diff = this.targetDir - this.dir;
@@ -152,7 +154,14 @@ export class ClientPlayer {
     const safeVy = Number(vy || 0);
     const speed = Math.hypot(safeVx, safeVy);
     if (speed > threshold) {
-      this.lastMoveAngle = Math.atan2(safeVy, safeVx);
+      this.lastMoveAngleTarget = Math.atan2(safeVy, safeVx);
+      const angleDelta = Math.atan2(
+        Math.sin(this.lastMoveAngleTarget - this.lastMoveAngle),
+        Math.cos(this.lastMoveAngleTarget - this.lastMoveAngle)
+      );
+      // Circular smoothing prevents the guide from trembling around -PI/PI
+      // while keeping it in front of the real movement vector.
+      this.lastMoveAngle += angleDelta * Math.min(0.72, 0.22 + speed * 0.09);
       this.lastMoveSpeed = speed;
     } else {
       this.lastMoveSpeed *= 0.78;
@@ -213,9 +222,11 @@ export class ClientPlayer {
     if (ballOwnerId === this.id) {
       ctx.fillStyle = 'rgba(255,255,255,.85)';
       ctx.beginPath();
-      ctx.moveTo(this.x, this.y - this.r - 10);
-      ctx.lineTo(this.x - 6, this.y - this.r - 2);
-      ctx.lineTo(this.x + 6, this.y - this.r - 2);
+      // Keep possession below the avatar. Above it, the triangle overlapped
+      // short usernames and staff tags in Android WebView.
+      ctx.moveTo(this.x, this.y + this.r + 10);
+      ctx.lineTo(this.x - 6, this.y + this.r + 2);
+      ctx.lineTo(this.x + 6, this.y + this.r + 2);
       ctx.closePath();
       ctx.fill();
     }
@@ -278,9 +289,14 @@ export class ClientPlayer {
     if (this.name) {
       ctx.font = '700 12px system-ui';
       ctx.textAlign = 'center';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(4, 9, 24, 0.9)';
-      ctx.strokeText(this.name, x, y - this.r - 14);
+      ctx.textBaseline = 'alphabetic';
+      // Android WebView can leave triangular artifacts around stroked glyphs.
+      // A translucent rounded plate is cheaper, stable and keeps team color.
+      const labelWidth = Math.ceil(ctx.measureText(this.name).width) + 10;
+      ctx.fillStyle = 'rgba(2, 6, 23, .54)';
+      ctx.beginPath();
+      ctx.roundRect(x - labelWidth / 2, y - this.r - 28, labelWidth, 17, 5);
+      ctx.fill();
       ctx.fillStyle = C.TEAM_NAME_COLORS[this.team] || '#e2e8f0';
       ctx.fillText(this.name, x, y - this.r - 14);
     }
@@ -292,7 +308,9 @@ export class ClientPlayer {
     // Mobile stretches the logical pitch over many physical pixels. Cache the
     // identity at 2x and downsample once so detailed skins remain recognizable
     // without decoding or clipping the source image every gameplay frame.
-    const resolutionScale = this.lowEffects ? 3 : 2;
+    // Two physical pixels per logical pixel preserve the 40px avatar detail
+    // while cutting each cached texture to 44% of the former Android size.
+    const resolutionScale = 2;
     const width = 176;
     const height = 92;
     const key = `${this.getIdentityCacheKey()}|${resolutionScale}x|${width}x${height}`;

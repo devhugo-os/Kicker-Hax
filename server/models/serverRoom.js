@@ -128,12 +128,31 @@ export class ServerRoom {
 
   updateSettings(settings) {
     if (settings.name) this.name = String(settings.name).trim().slice(0, ROOM_NAME_MAX_LENGTH);
-    if (settings.maxPlayers) this.maxPlayers = parseInt(settings.maxPlayers, 10);
-    if (settings.duration !== undefined) this.duration = parseInt(settings.duration, 10);
-    if (settings.goalLimit !== undefined) this.goalLimit = parseInt(settings.goalLimit, 10);
-    if (settings.password !== undefined) this.password = String(settings.password || '').slice(0, ROOM_PASSWORD_MAX_LENGTH) || null;
-    if (settings.competitive !== undefined) this.competitive = !!settings.competitive && !this.password;
-    if (settings.fieldSize) this.fieldSize = settings.fieldSize;
+    if (settings.maxPlayers) {
+      this.maxPlayers = Math.max(2, Math.min(10, parseInt(settings.maxPlayers, 10) || this.maxPlayers));
+    }
+    if (settings.password !== undefined) {
+      this.password = String(settings.password || '').slice(0, ROOM_PASSWORD_MAX_LENGTH) || null;
+    }
+    // Resolve the target mode before applying dependent fields. Otherwise,
+    // changing competitive -> casual ignored duration/field until a second save.
+    const nextCompetitive = settings.competitive === undefined
+      ? this.competitive
+      : !!settings.competitive && !this.password;
+    this.competitive = nextCompetitive;
+    if (settings.duration !== undefined && !nextCompetitive) {
+      this.duration = Math.max(1, Math.min(15, parseInt(settings.duration, 10) || 3));
+    }
+    if (settings.goalLimit !== undefined && !nextCompetitive) {
+      this.goalLimit = Math.max(0, Math.min(20, parseInt(settings.goalLimit, 10) || 0));
+    }
+    if (settings.fieldSize && !nextCompetitive && ['small', 'medium', 'large'].includes(settings.fieldSize)) {
+      this.fieldSize = settings.fieldSize;
+    }
+    if (nextCompetitive) {
+      this.duration = 5;
+      this.goalLimit = 0;
+    }
     this.showReplay = true;
   }
 

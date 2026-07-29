@@ -148,7 +148,10 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
   }
   if (state.hasBall) {
     ctx.fillStyle = '#fff'; ctx.beginPath();
-    ctx.moveTo(state.x, state.y - radius - 10); ctx.lineTo(state.x - 6, state.y - radius - 2); ctx.lineTo(state.x + 6, state.y - radius - 2); ctx.fill();
+    ctx.moveTo(state.x, state.y + radius + 10);
+    ctx.lineTo(state.x - 6, state.y + radius + 2);
+    ctx.lineTo(state.x + 6, state.y + radius + 2);
+    ctx.fill();
   }
   if (Number(state.passRequestTimer || 0) > 0) {
     ctx.save();
@@ -204,7 +207,7 @@ function drawPlayer(ctx, state, player, showActionEffects = true, lowEffects = f
   // avoids the black glyph artifacts produced by repeated text shadows.
   const label = player.name || 'Jogador';
   const labelWidth = Math.ceil(ctx.measureText(label).width) + 10;
-  ctx.fillStyle = 'rgba(2, 6, 23, .78)';
+  ctx.fillStyle = 'rgba(2, 6, 23, .48)';
   ctx.beginPath();
   ctx.roundRect(state.x - labelWidth / 2, state.y - radius - 29, labelWidth, 18, 6);
   ctx.fill();

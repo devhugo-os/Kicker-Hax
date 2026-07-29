@@ -89,6 +89,7 @@ export const gameController = {
   lastRenderedMatchStatus: '',
   previousFrameHadTransientFx: false,
   lastDynamicFrameRegions: [],
+  dynamicFrameRegionPool: [],
 
   // Local Stats Track
   goalsScored: 0,
@@ -304,9 +305,14 @@ export const gameController = {
       : this.localMatchSim?.status;
     const matchIsPlaying = renderedStatus === 'playing';
     const statusChanged = this.lastRenderedMatchStatus !== renderedStatus;
-    const powerKickNeedsFullClear = !this.performanceProfile?.lowEffects
-      && isPowerKickActive(this.ball);
-    const hasTransientFx = powerKickNeedsFullClear;
+    const powerKickNeedsFullClear = isPowerKickActive(this.ball);
+    const shotGuideNeedsFullClear = !!input?.shoot
+      || !!this.shotPreviewState
+      || (Array.isArray(this.currentShotPreviewRegions) && this.currentShotPreviewRegions.length > 0);
+    // Rotating dashed guides and the super-shot camera touch many distant
+    // pixels. A complete transparent-layer clear prevents Android WebView from
+    // retaining antialiased fragments between dirty rectangles.
+    const hasTransientFx = powerKickNeedsFullClear || shotGuideNeedsFullClear;
     const canUseDirtyRegions = this.performanceProfile?.nativeApp
       && matchIsPlaying
       && !this.inReplay
@@ -326,7 +332,13 @@ export const gameController = {
       ? this.lastDynamicFrameRegions
       : this.players.map(player => ({ x: player.x - 92, y: player.y - 92, width: 184, height: 136 }));
     previousRegions.forEach(region => {
-      this.ctx.clearRect(region.x, region.y, region.width, region.height);
+      // Integer, padded bounds avoid sub-pixel remnants when a dashed guide
+      // rotates quickly on Android's accelerated canvas.
+      const x = Math.floor(region.x) - 2;
+      const y = Math.floor(region.y) - 2;
+      const width = Math.ceil(region.width) + 4;
+      const height = Math.ceil(region.height) + 4;
+      this.ctx.clearRect(x, y, width, height);
     });
     if (!this.lastDynamicFrameRegions.length && this.ball) {
       this.ctx.clearRect(this.ball.x - 20, this.ball.y - 20, 40, 40);
@@ -334,24 +346,37 @@ export const gameController = {
     const netWidth = C.BORDER + C.GOAL_DEPTH + 14;
     const netTop = Math.max(0, (this.canvas.height - C.GOAL_W_INIT) / 2 - 4);
     const netHeight = Math.min(this.canvas.height - netTop, C.GOAL_W_INIT + 8);
-    this.ctx.clearRect(0, netTop, netWidth, netHeight);
-    this.ctx.clearRect(this.canvas.width - netWidth, netTop, netWidth, netHeight);
+    if (this.renderedLeftNetOverlay) this.ctx.clearRect(0, netTop, netWidth, netHeight);
+    if (this.renderedRightNetOverlay) this.ctx.clearRect(this.canvas.width - netWidth, netTop, netWidth, netHeight);
+    this.renderedLeftNetOverlay = false;
+    this.renderedRightNetOverlay = false;
   },
 
   rememberMatchFrameRegions() {
-    const regions = this.players.map(player => ({
-      x: player.x - 92,
-      y: player.y - 92,
-      width: 184,
-      height: 136
-    }));
+    const regions = this.lastDynamicFrameRegions;
+    const pool = this.dynamicFrameRegionPool;
+    let regionIndex = 0;
+    const writeRegion = (x, y, width, height) => {
+      const region = pool[regionIndex] || (pool[regionIndex] = {});
+      region.x = x;
+      region.y = y;
+      region.width = width;
+      region.height = height;
+      regions[regionIndex] = region;
+      regionIndex += 1;
+    };
+    this.players.forEach(player => {
+      writeRegion(player.x - 92, player.y - 92, 184, 136);
+    });
     if (this.ball) {
-      regions.push({ x: this.ball.x - 20, y: this.ball.y - 20, width: 40, height: 40 });
+      writeRegion(this.ball.x - 20, this.ball.y - 20, 40, 40);
     }
     if (Array.isArray(this.currentShotPreviewRegions)) {
-      regions.push(...this.currentShotPreviewRegions);
+      this.currentShotPreviewRegions.forEach(region => {
+        writeRegion(region.x, region.y, region.width, region.height);
+      });
     }
-    this.lastDynamicFrameRegions = regions;
+    regions.length = regionIndex;
   },
 
   clearPowerKickVisualState() {
@@ -363,6 +388,8 @@ export const gameController = {
     const matchStage = this.canvas?.closest('.match-stage');
     if (matchStage?.style.transform) matchStage.style.transform = '';
     this.lastPowerKickTransform = '';
+    this.shotPreviewState = null;
+    this.currentShotPreviewRegions = [];
     this.previousFrameHadTransientFx = false;
   },
 
@@ -1142,18 +1169,23 @@ export const gameController = {
       btnSaveLobbySettings.onclick = () => {
         const pass = document.getElementById('lobby-password-input')?.value || '';
         if (pass.length > C.ROOM_PASSWORD_MAX_LENGTH) return showToast(`A senha pode ter no máximo ${C.ROOM_PASSWORD_MAX_LENGTH} caracteres.`, 'error');
-        socketService.hostSetPassword(pass);
-        socketService.hostSetCompetitive(false);
+        const competitive = document.getElementById('lobby-type-input')?.value === 'competitive';
+        if (competitive && pass) return showToast('Uma sala competitiva precisa ser pública.', 'error');
+        socketService.updateRoomSettings({
+          duration: Number(document.getElementById('lobby-duration-input')?.value || 3),
+          goalLimit: Number(document.getElementById('lobby-goals-input')?.value || 0),
+          fieldSize: document.getElementById('lobby-field-input')?.value || 'medium',
+          competitive,
+          password: pass
+        });
         showToast('Configurações da sala atualizadas.', 'success');
       };
     }
-    const lobbyPasswordInputLive = document.getElementById('lobby-password-input');
-    if (lobbyPasswordInputLive) {
-      lobbyPasswordInputLive.addEventListener('input', () => {
+    ['lobby-password-input', 'lobby-duration-input', 'lobby-goals-input', 'lobby-field-input', 'lobby-type-input']
+      .forEach(id => document.getElementById(id)?.addEventListener('input', () => {
         const btn = document.getElementById('lobby-btn-save-settings');
         if (btn) btn.disabled = false;
-      });
-    }
+      }));
 
     window.addEventListener('kicker:openMobileHudEditor', () => this.startMobileHudEditor());
     window.addEventListener('kicker:mobileHudUpdated', () => this.applyMobileHudSettings());
@@ -1566,7 +1598,9 @@ export const gameController = {
       status: 'countdown',
       countdownTimer: 300,
       goalFreezeTimer: 0,
-      replayBuffer: [],
+      replayBuffer: new Array(C.REPLAY_CAPTURE_FRAMES),
+      replayBufferIndex: 0,
+      replayBufferCount: 0,
       replayIndex: 0,
       skipReplayRequested: false
     };
@@ -1646,6 +1680,12 @@ export const gameController = {
       let lastTime = performance.now();
       const timeStep = 1000 / 60; // 16.67ms per physical tick
       let accumulator = 0;
+      const touchInputActive = this.isTouchDevice();
+      const inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
+      const inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
+      const idleInput = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
+      const ballFuture = { x: 0, y: 0 };
+      const activeLocalPlayers = [];
 
       const tickLocalGame = (timestamp) => {
         if (router.currentScreenId !== 'match-screen') return;
@@ -1654,7 +1694,12 @@ export const gameController = {
         if (typeof timestamp !== 'number') timestamp = performance.now();
         this.trackRenderedFrame(timestamp);
         let dt = timestamp - lastTime;
-        if (dt > 100) dt = 100; // Cap to avoid freeze spirals
+        // Never repay a long Android WebView stall with six physics passes in
+        // one paint. Two app steps (three on desktop) preserve normal 60 Hz
+        // simulation while preventing the catch-up work from causing another
+        // dropped frame and turning movement into a sustained FPS collapse.
+        const maxCatchUpSteps = this.performanceProfile?.nativeApp ? 2 : 3;
+        if (dt > timeStep * maxCatchUpSteps) dt = timeStep * maxCatchUpSteps;
         lastTime = timestamp;
         accumulator += dt;
 
@@ -1667,10 +1712,9 @@ export const gameController = {
         const leftNetBack = leftPostX - C.GOAL_DEPTH;
         const rightNetBack = rightPostX + C.GOAL_DEPTH;
         const cornerR = 10;
-        let inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
         // A mobile frame can contain more than one physics step. Keep every
         // action sound generated in that frame instead of losing earlier ones.
-        frameSfx = [];
+        frameSfx.length = 0;
 
         while (accumulator >= timeStep) {
           if (!this.isPaused) {
@@ -1690,7 +1734,12 @@ export const gameController = {
             if (MatchSim.goalFreezeTimer <= 0) {
               // Play replay Locally
               this.inReplay = true;
-              this.replayFrames = [...MatchSim.replayBuffer];
+              this.replayFrames = [];
+              const replayStart = (MatchSim.replayBufferIndex - MatchSim.replayBufferCount + C.REPLAY_CAPTURE_FRAMES)
+                % C.REPLAY_CAPTURE_FRAMES;
+              for (let index = 0; index < MatchSim.replayBufferCount; index++) {
+                this.replayFrames.push(MatchSim.replayBuffer[(replayStart + index) % C.REPLAY_CAPTURE_FRAMES]);
+              }
               this.replayFrameIdx = 0;
               this.replayTimer = 0;
               this.replayFrameMs = (1000 / 60) * C.REPLAY_SLOWMO_FACTOR;
@@ -1739,7 +1788,14 @@ export const gameController = {
             }
 
             // 1) Read P1 keyboard Inputs
-            inputP1 = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
+            inputP1.x = 0;
+            inputP1.y = 0;
+            inputP1.shoot = false;
+            inputP1.sprint = false;
+            inputP1.dribble = false;
+            inputP1.tackle = false;
+            inputP1.power = false;
+            inputP1.requestPass = false;
             if (!this.isTypingTarget()) {
               const keysCtrl = settingsController.CTRL_P1;
               if (this.keys.get(keysCtrl.up)) inputP1.y -= 1;
@@ -1758,7 +1814,7 @@ export const gameController = {
               inputP1.power = this.keys.get(keysCtrl.power);
               inputP1.requestPass = this.keys.get(keysCtrl.requestPass);
             }
-            if (this.isTouchDevice() && this.virtualInput) {
+            if (touchInputActive && this.virtualInput) {
               inputP1.x += this.virtualInput.x || 0;
               inputP1.y += this.virtualInput.y || 0;
               inputP1.shoot = inputP1.shoot || !!this.virtualInput.shoot;
@@ -1786,11 +1842,19 @@ export const gameController = {
             bluePlayer.lastPassRequestPressed = !!inputP1.requestPass;
 
             // 2) AI bot decision making
-            let inputCPU = { x: 0, y: 0, shoot: false, sprint: false, dribble: false, tackle: false, power: false, requestPass: false };
+            inputCPU.x = 0;
+            inputCPU.y = 0;
+            inputCPU.shoot = false;
+            inputCPU.sprint = false;
+            inputCPU.dribble = false;
+            inputCPU.tackle = false;
+            inputCPU.power = false;
+            inputCPU.requestPass = false;
             const tutorialEnemyActive = this.tutorialMode && !!this.tutorialSession?.enemyActive;
             if ((!this.practiceMode || tutorialEnemyActive) && redPlayer.stun <= 0) {
               if (redPlayer.aiDecisionTimer > 0) redPlayer.aiDecisionTimer--;
-              const ballFuture = { x: localBallSim.x, y: localBallSim.y };
+              ballFuture.x = localBallSim.x;
+              ballFuture.y = localBallSim.y;
               if (!localBallSim.owner) {
                 let vx = localBallSim.vx;
                 let vy = localBallSim.vy;
@@ -2029,13 +2093,16 @@ export const gameController = {
 
             Physics.updatePlayerPhysics(bluePlayer, inputP1, localBallSim, (sfx) => frameSfx.push(sfx));
             if (!this.practiceMode || this.tutorialMode) Physics.updatePlayerPhysics(redPlayer, inputCPU, localBallSim, (sfx) => frameSfx.push(sfx));
-            if (this.tutorialMode && !allyPlayer.tutorialHidden) Physics.updatePlayerPhysics(allyPlayer, { x: 0, y: 0 }, localBallSim, (sfx) => frameSfx.push(sfx));
+            if (this.tutorialMode && !allyPlayer.tutorialHidden) Physics.updatePlayerPhysics(allyPlayer, idleInput, localBallSim, (sfx) => frameSfx.push(sfx));
 
             Physics.applyLimits(bluePlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
             if (!this.practiceMode || this.tutorialMode) Physics.applyLimits(redPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
             if (this.tutorialMode && !allyPlayer.tutorialHidden) Physics.applyLimits(allyPlayer, gTop, gBot, leftNetBack, rightNetBack, leftPostX, rightPostX, cornerR, w, h);
 
-            const activeLocalPlayers = localPlayers.filter(player => !player.tutorialHidden);
+            activeLocalPlayers.length = 0;
+            localPlayers.forEach(player => {
+              if (!player.tutorialHidden) activeLocalPlayers.push(player);
+            });
 
             // Resolve the tackle at the final dash frame before normal bodies
             // are separated, mirroring the authoritative multiplayer server.
@@ -2379,6 +2446,44 @@ export const gameController = {
       };
 
       const recordLocalFrame = () => {
+        const frameIndex = MatchSim.replayBufferIndex;
+        const reusableFrame = MatchSim.replayBuffer[frameIndex];
+        if (reusableFrame) {
+          let visibleIndex = 0;
+          localPlayers.forEach(player => {
+            if (player.tutorialHidden) return;
+            const snap = reusableFrame.players[visibleIndex] || (reusableFrame.players[visibleIndex] = {});
+            snap.id = player.id;
+            snap.x = player.x;
+            snap.y = player.y;
+            snap.dir = player.dir;
+            snap.team = player.team;
+            snap.vx = player.vx;
+            snap.vy = player.vy;
+            snap.has = localBallSim.owner === player.id;
+            snap.name = player.id === 'p1' ? username : 'CPU Bot';
+            snap.badge = player.id === 'p1' ? badge : '';
+            snap.skin = player.id === 'p1' ? equippedSkin : '';
+            snap.staffRole = player.id === 'p1' ? (menuController.profileData?.staffRole || '') : '';
+            snap.inv = player.invuln || 0;
+            snap.stun = player.stun || 0;
+            snap.halo = player.shootHalo || 0;
+            visibleIndex += 1;
+          });
+          reusableFrame.players.length = visibleIndex;
+          reusableFrame.ball.x = localBallSim.x;
+          reusableFrame.ball.y = localBallSim.y;
+          reusableFrame.ball.vx = localBallSim.vx;
+          reusableFrame.ball.vy = localBallSim.vy;
+          reusableFrame.ball.lastStrikeType = localBallSim.lastStrikeType;
+          reusableFrame.ball.strikeTimer = localBallSim.strikeTimer;
+          reusableFrame.score.red = MatchSim.score.red;
+          reusableFrame.score.blue = MatchSim.score.blue;
+          reusableFrame.sfx.length = 0;
+          reusableFrame.sfx.push(...frameSfx);
+          MatchSim.replayBufferIndex = (frameIndex + 1) % C.REPLAY_CAPTURE_FRAMES;
+          return;
+        }
         const snap = localPlayers.filter(p => !p.tutorialHidden).map(p => ({
           id: p.id,
           x: p.x,
@@ -2389,6 +2494,7 @@ export const gameController = {
           vy: p.vy,
           has: (localBallSim.owner === p.id),
           name: p.id === 'p1' ?username : 'CPU Bot',
+          skin: p.id === 'p1' ? equippedSkin : '',
           badge: p.id === 'p1' ? badge : '⚙️',
           staffRole: p.id === 'p1' ? (menuController.profileData?.staffRole || '') : '',
           inv: p.invuln || 0,
@@ -2410,10 +2516,9 @@ export const gameController = {
           sfx: [...frameSfx]
         };
 
-        MatchSim.replayBuffer.push(frame);
-        if (MatchSim.replayBuffer.length > C.REPLAY_CAPTURE_FRAMES) {
-          MatchSim.replayBuffer.shift();
-        }
+        MatchSim.replayBuffer[MatchSim.replayBufferIndex] = frame;
+        MatchSim.replayBufferIndex = (MatchSim.replayBufferIndex + 1) % C.REPLAY_CAPTURE_FRAMES;
+        MatchSim.replayBufferCount = Math.min(C.REPLAY_CAPTURE_FRAMES, MatchSim.replayBufferCount + 1);
       };
 
       // Browsers suspend requestAnimationFrame while hidden. Restart exactly
@@ -2653,11 +2758,12 @@ export const gameController = {
         : firebaseService.saveXpOnly(this.currentUser.uid, xpGained, matchId);
       // History and progress form one retryable unit. If either write fails,
       // idempotent match IDs allow the complete result to be retried later.
-      Promise.all([
-        firebaseService.addMatchToHistory(matchDoc),
+      // Persist the immutable receipt first. Firestore rules use it as the
+      // prerequisite for XP, coin and ranking mutations tied to this match.
+      firebaseService.addMatchToHistory(matchDoc).then(() => Promise.all([
         saveProgress(),
         this.finalizeMatchRecording(matchId, result, recordingId)
-      ]).then(() => {
+      ])).then(() => {
         localStorage.setItem(resultKey, '1');
       }).catch(err => {
         localStorage.removeItem(resultKey);
@@ -2795,8 +2901,10 @@ export const gameController = {
     if (winnerTeam === C.Team.RED && score.red <= score.blue) score.red = score.blue + 1;
     if (winnerTeam === C.Team.BLUE && score.blue <= score.red) score.blue = score.red + 1;
 
+    const hostPlayerId = this.activeRoom?.hostId;
     const playerStats = this.players.map(player => {
       const lobbyPlayer = this.activeRoom?.players?.find(item => item.id === player.id);
+      const hostAbandoned = player.id === hostPlayerId;
       return {
         playerId: player.id,
         uid: lobbyPlayer?.uid || '',
@@ -2808,7 +2916,9 @@ export const gameController = {
         shots: player.matchStats?.shots || 0,
         dribbles: player.matchStats?.dribbles || 0,
         tackles: player.matchStats?.tackles || 0,
-        possessionPct: player.matchStats?.possessionPct || 0
+        possessionPct: player.matchStats?.possessionPct || 0,
+        leftMatch: hostAbandoned,
+        participationStatus: hostAbandoned ? 'abandoned' : 'active'
       };
     });
 
@@ -2824,7 +2934,16 @@ export const gameController = {
       competitive: !!this.activeRoom?.competitive,
       hasBots: false,
       forfeit: true,
-      mvp: report.playerStats.slice().sort((a, b) => b.rating - a.rating)[0] || null
+      forfeitReason: {
+        code: 'host_left',
+        players: [hostLobbyPlayer?.username || hostPhysicalPlayer?.name || 'Host'],
+        message: `${hostLobbyPlayer?.username || hostPhysicalPlayer?.name || 'O host'} abandonou a partida.`
+      },
+      mvp: report.playerStats
+        .filter(player => player.participationStatus !== 'abandoned')
+        .slice()
+        .sort((a, b) => (b.rating - a.rating)
+          || String(a.uid || a.playerId).localeCompare(String(b.uid || b.playerId)))[0] || null
     };
   },
 
@@ -4356,6 +4475,9 @@ export const gameController = {
   drawFieldGrid(cx) {
     const w = this.canvas.width;
     const h = this.canvas.height;
+    if (this.performanceProfile?.lowEffects && this.cssFieldCacheKey && this.fieldCacheCanvas) {
+      return;
+    }
     // This static texture is generated only when field geometry changes.
     // Keeping it at device density fixes the blurry fullscreen pitch cheaply.
     // The app always fits the logical arena inside a smaller WebView, so a
@@ -4545,11 +4667,28 @@ export const gameController = {
     cx.fillStyle = 'rgba(46, 125, 50, 0.82)';
     cx.fillRect(C.BORDER - C.POST_T - C.GOAL_DEPTH, gTop, C.GOAL_DEPTH, C.GOAL_W_INIT);
     cx.fillRect(w - C.BORDER + C.POST_T, gTop, C.GOAL_DEPTH, C.GOAL_W_INIT);
+    // Nets are part of the cached pitch on mobile. A tiny foreground slice is
+    // composited only while a moving entity is inside a goal mouth.
+    this.drawNetOverlayStatic(cx);
   },
 
   drawNetOverlay(cx) {
     const w = this.canvas.width;
     const h = this.canvas.height;
+    const gTop = (h - C.GOAL_W_INIT) / 2 - 24;
+    const gBottom = (h + C.GOAL_W_INIT) / 2 + 24;
+    const leftLimit = C.BORDER + 46;
+    const rightLimit = w - C.BORDER - 46;
+    let leftNeeded = !!this.inReplay;
+    let rightNeeded = !!this.inReplay;
+    const inspectEntity = entity => {
+      if (!entity || entity.y < gTop || entity.y > gBottom) return;
+      if (entity.x <= leftLimit) leftNeeded = true;
+      if (entity.x >= rightLimit) rightNeeded = true;
+    };
+    inspectEntity(this.ball);
+    this.players.forEach(inspectEntity);
+    if (!leftNeeded && !rightNeeded) return;
     const cacheKey = `${w}x${h}:${C.BORDER}:${C.GOAL_W_INIT}:${C.GOAL_DEPTH}`;
     if (!this.netOverlayCacheCanvas || this.netOverlayCacheKey !== cacheKey) {
       this.netOverlayCacheCanvas = document.createElement('canvas');
@@ -4564,28 +4703,34 @@ export const gameController = {
     const sliceHeight = Math.min(h - sliceTop, C.GOAL_W_INIT + 4);
     // Only composite the goal mouths. Copying two full-height transparent
     // strips every frame was a measurable fill-rate cost on Android WebView.
-    cx.drawImage(
-      this.netOverlayCacheCanvas,
-      0,
-      sliceTop,
-      sliceWidth,
-      sliceHeight,
-      0,
-      sliceTop,
-      sliceWidth,
-      sliceHeight
-    );
-    cx.drawImage(
-      this.netOverlayCacheCanvas,
-      w - sliceWidth,
-      sliceTop,
-      sliceWidth,
-      sliceHeight,
-      w - sliceWidth,
-      sliceTop,
-      sliceWidth,
-      sliceHeight
-    );
+    if (leftNeeded) {
+      cx.drawImage(
+        this.netOverlayCacheCanvas,
+        0,
+        sliceTop,
+        sliceWidth,
+        sliceHeight,
+        0,
+        sliceTop,
+        sliceWidth,
+        sliceHeight
+      );
+      this.renderedLeftNetOverlay = true;
+    }
+    if (rightNeeded) {
+      cx.drawImage(
+        this.netOverlayCacheCanvas,
+        w - sliceWidth,
+        sliceTop,
+        sliceWidth,
+        sliceHeight,
+        w - sliceWidth,
+        sliceTop,
+        sliceWidth,
+        sliceHeight
+      );
+      this.renderedRightNetOverlay = true;
+    }
   },
 
   drawNetOverlayStatic(cx) {
@@ -4637,7 +4782,11 @@ export const gameController = {
     // Local physics releases the shot between input sampling and drawing.
     // Treat an existing charge as held input so one transient false value does
     // not blink the guide in solo/training.
-    const previewActive = !!input?.shoot || normalizedInputCharge > 0.001;
+    // The authoritative kick charge can survive for one network snapshot after
+    // release. Input release wins here so the guide never follows the kicked
+    // ball across the pitch.
+    const previewActive = !!input?.shoot
+      || (this.mode !== 'multiplayer' && normalizedInputCharge > 0.001);
     if (!previewActive) {
       this.shotPreviewState = null;
       return;
@@ -4673,19 +4822,17 @@ export const gameController = {
     const travel = power * C.FRICTION_FIELD / Math.max(0.01, 1 - C.FRICTION_FIELD);
     const targetX = Math.max(C.BORDER, Math.min(this.canvas.width - C.BORDER, ball.x + Math.cos(angle) * travel));
     const targetY = Math.max(C.BORDER, Math.min(this.canvas.height - C.BORDER, ball.y + Math.sin(angle) * travel));
-    // Dirty tiles follow the guide itself. Clearing a thin chain is far
-    // cheaper than repainting the entire pitch while a mobile player charges.
+    // Clear one continuous area around the guide. Separate dirty tiles left
+    // small gaps when the player rotated quickly, producing yellow trails on
+    // Android WebViews.
     const previewLength = Math.hypot(targetX - ball.x, targetY - ball.y);
-    const segments = Math.max(2, Math.min(16, Math.ceil(previewLength / 34)));
-    for (let index = 0; index <= segments; index += 1) {
-      const ratio = index / segments;
-      this.currentShotPreviewRegions.push({
-        x: ball.x + (targetX - ball.x) * ratio - 15,
-        y: ball.y + (targetY - ball.y) * ratio - 15,
-        width: 30,
-        height: 30
-      });
-    }
+    const margin = 30 + Math.min(12, previewLength * 0.025);
+    this.currentShotPreviewRegions.push({
+      x: Math.min(ball.x, targetX) - margin,
+      y: Math.min(ball.y, targetY) - margin,
+      width: Math.abs(targetX - ball.x) + margin * 2,
+      height: Math.abs(targetY - ball.y) + margin * 2
+    });
     cx.save();
     cx.globalAlpha = 0.58 + normalizedCharge * 0.32;
     cx.strokeStyle = normalizedCharge > 0.72 ? '#facc15' : '#7dd3fc';
@@ -5172,12 +5319,24 @@ export const gameController = {
     if (randomTeamsBtn) randomTeamsBtn.classList.toggle('hidden', !isHost || room.competitive);
     if (botControls) botControls.classList.toggle('hidden', !isHost);
     const lobbyHostSettings = document.getElementById('lobby-host-settings');
-    if (lobbyHostSettings) lobbyHostSettings.classList.toggle('hidden', !isHost || !room.hasPassword || room.competitive);
+    if (lobbyHostSettings) lobbyHostSettings.classList.toggle('hidden', !isHost);
     const lobbyPasswordInput = document.getElementById('lobby-password-input');
     if (lobbyPasswordInput) {
       lobbyPasswordInput.value = '';
       lobbyPasswordInput.placeholder = room.hasPassword ? 'Senha privada ativa' : 'Vazio = pública';
     }
+    const durationInput = document.getElementById('lobby-duration-input');
+    const goalsInput = document.getElementById('lobby-goals-input');
+    const fieldInput = document.getElementById('lobby-field-input');
+    const typeInput = document.getElementById('lobby-type-input');
+    if (durationInput) durationInput.value = String(room.competitive ? 5 : room.duration);
+    if (goalsInput) goalsInput.value = String(room.competitive ? 0 : room.goalLimit);
+    if (fieldInput) fieldInput.value = room.fieldSize || 'medium';
+    if (typeInput) typeInput.value = room.competitive ? 'competitive' : 'casual';
+    [durationInput, goalsInput, fieldInput].forEach(input => {
+      if (input) input.disabled = !!room.competitive;
+    });
+    document.querySelector('#lobby-host-settings .lobby-password-setting')?.classList.toggle('hidden', !!room.competitive);
     ['lobby-btn-join-red', 'lobby-btn-join-blue', 'lobby-btn-join-spec'].forEach(id => {
       const btn = document.getElementById(id);
       if (btn) btn.classList.toggle('hidden', true);
@@ -5203,13 +5362,13 @@ export const gameController = {
       const banAction = isHost && p.id !== myId && !p.cpu ? `<button class="kick-btn ban-btn" id="ban-btn-${p.id}" title="Banir desta sala">🚫</button>` : '';
       const removeBotAction = isHost && p.cpu ? `<button class="kick-btn" id="remove-bot-btn-${p.id}">×</button>` : '';
       const hostTeamActions = isHost && !room.competitive ?`
-        <button class="team-move-btn red" id="lobby-move-red-${p.id}" title="Mover para o vermelho">R</button>
+        <button class="team-move-btn red" id="lobby-move-red-${p.id}" title="Mover para o vermelho">V</button>
         <button class="team-move-btn blue" id="lobby-move-blue-${p.id}" title="Mover para o azul">A</button>
         <button class="team-move-btn spec" id="lobby-move-spec-${p.id}" title="Mover para sem time">S</button>
       ` : '';
 
       row.innerHTML = `
-        <span class="lobby-player-name"><span>${escapeHtml(p.badge)}</span> <span>${escapeHtml(p.username)}</span></span>
+        <span class="lobby-player-name"><span class="lobby-player-avatar"></span><span>${escapeHtml(p.username)}</span></span>
         <span class="lobby-player-meta">
           ${readyBadge}
           ${hostTeamActions}
@@ -5219,6 +5378,10 @@ export const gameController = {
         </span>
       `;
       const playerName = row.querySelector('.lobby-player-name');
+      const lobbySkin = p.skin && p.skin !== 'custom'
+        ? { id: p.skinId || 'custom', image: p.skin, name: p.username }
+        : getSkinById(p.skinId || 'rookie');
+      menuController.renderSkin(row.querySelector('.lobby-player-avatar'), lobbySkin, p.badge);
       appendStaffTag(playerName, p.staffRole);
       if (p.uid && playerName) {
         playerName.classList.add('profile-trigger');
@@ -5293,7 +5456,10 @@ export const gameController = {
     let profile = null;
     if (msg.uid) {
       const cached = this.matchIdentityCache.get(msg.uid);
-      if (cached && Date.now() - cached.loadedAt < 2000) {
+      const identityChanged = !!msg.skinId
+        && cached?.profile?.equippedSkinId
+        && msg.skinId !== cached.profile.equippedSkinId;
+      if (cached?.profile && !identityChanged && Date.now() - cached.loadedAt < 300000) {
         profile = cached.profile;
       } else if (!cached?.promise) {
         // The lobby already carries the current identity. Render immediately
@@ -5311,8 +5477,8 @@ export const gameController = {
       }
     }
     const identity = profile || {
-      equippedSkinId: roomPlayer?.skin ? 'room-skin' : 'rookie',
-      equippedSkinImage: roomPlayer?.skin || null,
+      equippedSkinId: msg.skinId || roomPlayer?.skinId || (roomPlayer?.skin ? 'room-skin' : 'rookie'),
+      equippedSkinImage: msg.skin && msg.skin !== 'custom' ? msg.skin : roomPlayer?.skin || null,
       badge: msg.badge
     };
 
@@ -5742,7 +5908,9 @@ export const gameController = {
             this.localMatchSim.matchTime = this.matchTime;
             this.localMatchSim.status = 'countdown';
             this.localMatchSim.countdownTimer = 300;
-            this.localMatchSim.replayBuffer = [];
+            this.localMatchSim.replayBuffer = new Array(C.REPLAY_CAPTURE_FRAMES);
+            this.localMatchSim.replayBufferIndex = 0;
+            this.localMatchSim.replayBufferCount = 0;
             if (this.resetLocalFieldPositions) this.resetLocalFieldPositions();
           }
           showToast('Partida reiniciada!', 'success');
