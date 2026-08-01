@@ -1,5 +1,5 @@
 Kicker Hax APK
-Version: 81.0
-Built: 2026-07-29T20:16:54Z
-Commit: fd8c0ff7dedbce74053329d5228e8d56b3407daa
+Version: 82.0
+Built: 2026-08-01T01:53:30Z
+Commit: 38b0dfa85ed033173dd716845af3ac5a496ee4f5
 Native Google SHA-1: 39e8c94a4b0828f6c03ed654c6b6883e52829255
