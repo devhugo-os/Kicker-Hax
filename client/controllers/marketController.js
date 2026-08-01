@@ -426,7 +426,11 @@ export const marketController = {
       card.querySelector('[data-action="equip"]')?.addEventListener('click', () => {
         menuController.selectProfileSkinDraft(skin);
         this.renderInventory();
-        showToast(`${skin.name} selecionada. Volte ao perfil e salve as alterações.`, 'info');
+        if (menuController.profileDirty) {
+          showToast(`${skin.name} selecionada. Volte ao perfil e salve as alterações.`, 'info');
+        } else {
+          showToast(`${skin.name} continua equipada. Não há alterações para salvar.`, 'success');
+        }
       });
       card.querySelector('[data-gift-sender]')?.addEventListener('click', event => {
         event.stopPropagation();

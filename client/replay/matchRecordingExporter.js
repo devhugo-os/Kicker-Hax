@@ -1,6 +1,12 @@
 import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
 import { interpolateRecordingFrame } from './matchRecording.js';
 import { renderMatchRecordingFrame } from './matchRecordingRenderer.js';
+import {
+  encodeRecordingAudio,
+  getRecordingAudioConfig,
+  RECORDING_AUDIO_FORMAT
+} from './matchRecordingAudio.js';
+import { buildMatchRecordingFilename } from './matchRecordingFilename.js';
 
 const EXPORT_FPS = 30;
 const EXPORT_WIDTH = 1024;
@@ -59,13 +65,35 @@ export async function exportMatchRecordingMp4(recording, match = {}, onProgress 
   const support = await VideoEncoder.isConfigSupported(config);
   if (!support.supported) throw new Error('O codificador MP4 não é compatível com este aparelho.');
 
+  const audioConfig = await getRecordingAudioConfig();
+  if (!audioConfig) throw new Error('O codificador de áudio MP4 não é compatível com este aparelho.');
+
   const target = new ArrayBufferTarget();
   const frameCount = Math.max(1, Math.ceil(Number(recording.durationMs) / 1000 * EXPORT_FPS));
+  const expectedAudioChunks = Math.ceil(
+    Number(recording.durationMs) / 1000
+      * RECORDING_AUDIO_FORMAT.sampleRate
+      / RECORDING_AUDIO_FORMAT.chunkFrames
+  );
   const muxer = new Muxer({
     target,
     video: { codec: 'avc', width: EXPORT_WIDTH, height: EXPORT_HEIGHT, frameRate: EXPORT_FPS },
-    fastStart: { expectedVideoChunks: frameCount }
+    audio: {
+      codec: 'aac',
+      sampleRate: RECORDING_AUDIO_FORMAT.sampleRate,
+      numberOfChannels: RECORDING_AUDIO_FORMAT.numberOfChannels
+    },
+    fastStart: { expectedVideoChunks: frameCount, expectedAudioChunks }
   });
+  // The audio track is synthesized from the compact event timeline, so it
+  // remains synchronized without replaying the demo in real time.
+  await encodeRecordingAudio({
+    recording,
+    muxer,
+    config: audioConfig,
+    onProgress: value => onProgress(Math.round(value * 10))
+  });
+
   let encoderError = null;
   const encoder = new VideoEncoder({
     output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
@@ -110,7 +138,7 @@ export async function exportMatchRecordingMp4(recording, match = {}, onProgress 
         if (encoderError) throw encoderError;
       }
       if (index % 30 === 0 || ended) {
-        onProgress(Math.round(((index + 1) / frameCount) * 100));
+        onProgress(10 + Math.round(((index + 1) / frameCount) * 90));
         await new Promise(resolve => window.setTimeout(resolve, 0));
       }
     }
@@ -121,8 +149,7 @@ export async function exportMatchRecordingMp4(recording, match = {}, onProgress 
     if (encoder.state !== 'closed') encoder.close();
   }
 
-  const safeMatchId = String(match.matchId || recording.matchId || Date.now()).replace(/[^a-zA-Z0-9_-]/g, '_');
   const blob = new Blob([target.buffer], { type: 'video/mp4' });
-  downloadBlob(blob, `kicker-hax-${safeMatchId}.mp4`);
+  downloadBlob(blob, buildMatchRecordingFilename(recording, match));
   return blob.size;
 }

@@ -34,6 +34,7 @@ import {
 import { getMatchRecordingId, MatchRecordingSession } from '../replay/matchRecording.js';
 import { formatSeasonCountdown, getSeasonInfo } from '../utils/seasonCycle.js';
 import { copyText } from '../utils/clipboard.js';
+import { createSoloBotController } from '../ai/soloBotController.js';
 
 export const gameController = {
   currentUser: null,
@@ -1669,6 +1670,7 @@ export const gameController = {
       aiDecisionTimer: 0,
       aiChargeFrames: 0
     };
+    const soloBot = createSoloBotController({ difficulty: this.difficulty });
 
     const bluePlayer = {
       id: 'p1',
@@ -1903,7 +1905,16 @@ export const gameController = {
             inputCPU.power = false;
             inputCPU.requestPass = false;
             const tutorialEnemyActive = this.tutorialMode && !!this.tutorialSession?.enemyActive;
-            if ((!this.practiceMode || tutorialEnemyActive) && redPlayer.stun <= 0) {
+            if (!this.practiceMode && !this.tutorialMode && redPlayer.stun <= 0) {
+              Object.assign(inputCPU, soloBot.decide({
+                bot: redPlayer,
+                opponent: bluePlayer,
+                ball: localBallSim,
+                width: w,
+                height: h
+              }));
+            }
+            if (tutorialEnemyActive && redPlayer.stun <= 0) {
               if (redPlayer.aiDecisionTimer > 0) redPlayer.aiDecisionTimer--;
               ballFuture.x = localBallSim.x;
               ballFuture.y = localBallSim.y;
@@ -2373,6 +2384,7 @@ export const gameController = {
       };
 
       const resetFieldPositions = () => {
+        soloBot.reset();
         // Solo/free training have one player per side, therefore their spawn
         // is the fixed straight striker slot closest to the centre ball.
         const localLayout = this.tutorialMode

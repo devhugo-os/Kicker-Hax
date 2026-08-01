@@ -796,7 +796,8 @@ export const menuController = {
           sender.addEventListener('click', event => {
             event.stopPropagation();
             if (!giftOrigin.senderUid) return;
-            modal.classList.add('hidden');
+            // Preserve the collection underneath. The shared modal stack puts
+            // the donor profile above it and restores the inventory on close.
             this.openPublicProfile(giftOrigin.senderUid);
           });
           giftedBy.append(icon, document.createTextNode(' Doada por '), sender);
