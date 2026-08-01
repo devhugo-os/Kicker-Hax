@@ -9,6 +9,17 @@ export function getUsedSkinRequestIds(allFeatured) {
     .filter(Boolean));
 }
 
+/** IDs currently occupying another storefront cadence. */
+export function getActiveFeaturedSkinIds(allFeatured, excludedCadence, now = Date.now()) {
+  return new Set(
+    Object.entries(allFeatured || {})
+      .filter(([cadence]) => cadence !== excludedCadence)
+      .flatMap(([, periods]) => Object.values(periods || {}))
+      .filter(item => item?.id && Number(item.expiresAt || 0) > now)
+      .map(item => item.id)
+  );
+}
+
 export function normalizeCommunitySkinName(value) {
   return String(value || '')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')

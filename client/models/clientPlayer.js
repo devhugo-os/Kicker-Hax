@@ -54,6 +54,12 @@ export class ClientPlayer {
   }
 
   updateState(serverPlayer, receivedAt = performance.now(), extrapolateMotion = true) {
+    const identityChanged = (Object.hasOwn(serverPlayer, 'name') && serverPlayer.name !== this.name)
+      || (Object.hasOwn(serverPlayer, 'badge') && serverPlayer.badge !== this.badge)
+      || (serverPlayer.skin && serverPlayer.skin !== this.skin)
+      || (Object.hasOwn(serverPlayer, 'skinId') && serverPlayer.skinId !== this.skinId)
+      || (Object.hasOwn(serverPlayer, 'team') && serverPlayer.team !== this.team)
+      || (Object.hasOwn(serverPlayer, 'staffRole') && (serverPlayer.staffRole || '') !== this.staffRole);
     if (Object.hasOwn(serverPlayer, 'name')) this.name = serverPlayer.name;
     if (Object.hasOwn(serverPlayer, 'badge')) this.badge = serverPlayer.badge;
     this.skin = serverPlayer.skin || this.skin || '';
@@ -82,6 +88,10 @@ export class ClientPlayer {
     if (Object.hasOwn(serverPlayer, 'passRequestTimer')) this.passRequestTimer = Number(serverPlayer.passRequestTimer || 0);
     if (Object.hasOwn(serverPlayer, 'passRequestCooldown')) this.passRequestCooldown = Number(serverPlayer.passRequestCooldown || 0);
     if (Object.hasOwn(serverPlayer, 'matchStats')) this.matchStats = serverPlayer.matchStats || null;
+    if (identityChanged) {
+      this.identityCacheCanvas = null;
+      this.identityCacheKey = '';
+    }
 
     // Trails are opt-in only. Persistent silhouettes caused visible ghosting
     // and texture tearing on lower-end Android WebViews.
@@ -260,10 +270,6 @@ export class ClientPlayer {
     }
   }
 
-  getIdentityCacheKey() {
-    return [this.name, this.badge, this.skinId, this.skin, this.team, this.staffRole].join('|');
-  }
-
   paintIdentity(ctx, x, y, includeStaffTag = true) {
     ctx.beginPath();
     ctx.arc(x, y, this.r, 0, Math.PI * 2);
@@ -311,13 +317,15 @@ export class ClientPlayer {
     // while cutting each cached texture to 44% of the former Android size.
     const resolutionScale = 2;
     const width = 176;
-    const height = 92;
-    const key = `${this.getIdentityCacheKey()}|${resolutionScale}x|${width}x${height}`;
+    const height = 104;
+    // The image can contain hundreds of kilobytes of base64. Never rebuild a
+    // key containing it every display frame; updateState invalidates the cache
+    // only when identity fields actually change.
+    const key = this.identityCacheKey || `${this.name}|${this.skinId}|${this.team}|${this.staffRole}|${resolutionScale}x`;
     const centerX = width / 2;
-    const centerY = 58;
-    if (this.identityCacheCanvas && this.identityCacheKey === key) {
+    const centerY = 70;
+    if (this.identityCacheCanvas) {
       ctx.drawImage(this.identityCacheCanvas, this.x - centerX, this.y - centerY, width, height);
-      drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 35, this.staffRole);
       return;
     }
 
@@ -330,14 +338,11 @@ export class ClientPlayer {
       spriteCtx.imageSmoothingQuality = 'high';
       spriteCtx.scale(resolutionScale, resolutionScale);
     }
-    // Staff tags sit above the compact sprite and are drawn separately. This
-    // keeps the fast Update 79 texture size without clipping official roles.
-    const cacheReady = spriteCtx && this.paintIdentity(spriteCtx, centerX, centerY, false);
+    const cacheReady = spriteCtx && this.paintIdentity(spriteCtx, centerX, centerY, true);
     if (cacheReady) {
       this.identityCacheCanvas = sprite;
       this.identityCacheKey = key;
       ctx.drawImage(sprite, this.x - centerX, this.y - centerY, width, height);
-      drawStaffTagOnCanvas(ctx, this.x, this.y - this.r - 35, this.staffRole);
       return;
     }
 

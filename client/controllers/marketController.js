@@ -1,7 +1,7 @@
 import { router } from '../router.js';
 import { firebaseService } from '../services/firebaseService.js';
 import { menuController } from './menuController.js';
-import { CHESTS, NO_PRIZE, SKINS, getChestRarityChances, getSkinById, getSkinValue, rollChest } from '../data/skins.js';
+import { CHESTS, NO_PRIZE, SKINS, getChestRarityChances, getSkinById, getSkinDiscardValue, getSkinValue, rollChest } from '../data/skins.js';
 import { showToast } from '../utils/toast.js';
 import { buildChestReel, getReelTargetOffset } from '../utils/chestReel.js';
 import { escapeHtml, safeImageSource } from '../utils/safeHtml.js';
@@ -413,6 +413,7 @@ export const marketController = {
       const equippedLabel = skinPending ? 'Selecionada, salve o perfil' : 'Em uso';
       const canTransfer = skin.id !== 'rookie' && !equipped;
       const wasGifted = !!skin.giftOrigin?.senderUid;
+      const discardReward = getSkinDiscardValue(skin);
       const giftLabel = skin.giftOrigin?.senderUsername
         ? `<p class="skin-gift-origin">Doada por <b>${escapeHtml(skin.giftOrigin.senderUsername)}</b></p>`
         : '';
@@ -420,7 +421,7 @@ export const marketController = {
         ? ''
         : wasGifted
           ? '<button class="btn btn-secondary" data-action="return" type="button">Devolver</button>'
-          : '<button class="btn btn-secondary" data-action="donate" type="button">Doar</button><button class="btn btn-danger" data-action="discard" type="button">Descartar +30</button>';
+          : `<button class="btn btn-secondary" data-action="donate" type="button">Doar</button><button class="btn btn-danger" data-action="discard" type="button">Descartar +${discardReward}</button>`;
       card.innerHTML = `<div class="inventory-skin-image">${visual}<span>${equipped ? 'Selecionada' : escapeHtml(rarityLabel[skin.rarity])}</span></div><div class="inventory-skin-info"><h3>${escapeHtml(skin.name)}</h3><p>Valor de coleção</p><strong>${valueLabel}</strong>${giftLabel}<div class="inventory-skin-actions"><button class="btn ${equipped ? 'btn-secondary' : 'btn-primary'}" data-action="equip" type="button" ${equipped ? 'disabled' : ''}>${equipped ? equippedLabel : 'Selecionar'}</button>${transferActions}</div></div>`;
       card.querySelector('[data-action="equip"]')?.addEventListener('click', () => {
         menuController.selectProfileSkinDraft(skin);
@@ -465,7 +466,10 @@ export const marketController = {
         button.disabled = true;
         try {
           const returnedTo = await firebaseService.returnDonatedSkin(this.user.uid, skin.id);
-          showToast(`${skin.name} foi devolvida para ${returnedTo.username}.`, 'success');
+          const returnMessage = returnedTo.refunded
+            ? `${returnedTo.username} já tinha ${skin.name}; recebeu ${returnedTo.refund} KX Coins no lugar.`
+            : `${skin.name} foi devolvida para ${returnedTo.username}.`;
+          showToast(returnMessage, 'success');
           await this.loadInventory();
         } catch (error) {
           button.disabled = false;
@@ -476,18 +480,18 @@ export const marketController = {
         const button = event.currentTarget;
         const confirmed = await confirmDialog({
           title: `Descartar ${skin.name}?`,
-          message: 'Esta ação é permanente. A skin sairá do inventário e você receberá 30 KX Coins.',
-          confirmLabel: 'Descartar por 30',
+          message: `Esta ação é permanente. A skin sairá do inventário e você receberá ${discardReward} KX Coins.`,
+          confirmLabel: `Descartar por ${discardReward}`,
           danger: true
         });
         if (!confirmed) return;
         if (!(button instanceof HTMLButtonElement)) return;
         button.disabled = true;
         try {
-          const updated = await firebaseService.discardSkin(this.user.uid, skin.id, 30);
+          const updated = await firebaseService.discardSkin(this.user.uid, skin.id, discardReward);
           menuController.profileData = { ...menuController.profileData, ...updated };
           soundFx.play('reward');
-          showToast(`${skin.name} foi descartada. Você recebeu 30 KX Coins.`, 'success');
+          showToast(`${skin.name} foi descartada. Você recebeu ${discardReward} KX Coins.`, 'success');
           await this.loadInventory();
         } catch (error) {
           button.disabled = false;

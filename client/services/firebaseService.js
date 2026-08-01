@@ -28,6 +28,7 @@ import {
 import { getDatabase, ref, push, onChildAdded, onChildRemoved, onValue, serverTimestamp, query as rtdbQuery, orderByChild, endAt, get, update, set, remove, onDisconnect, runTransaction as runRtdbTransaction } from 'firebase/database';
 import { groupSeasonHistoryByUid, mergeCompetitiveHistoryStats } from '../utils/statReconciliation.js';
 import {
+  getActiveFeaturedSkinIds,
   getHourlySkinQueue,
   getPendingSkinRequests,
   getSkinQueueCleanup,
@@ -116,7 +117,7 @@ const emptySeasonStats = uid => ({
 const getLaunchParams = () => new URLSearchParams(window.location.search);
 const NATIVE_AUTH_MESSAGE = 'KICKER_HAX_NATIVE_GOOGLE';
 const NATIVE_LOGIN_REQUEST = 'KICKER_HAX_NATIVE_LOGIN_REQUEST';
-const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '81.0.0';
+const SESSION_LEASE_VERSION = typeof __KICKER_HAX_VERSION__ !== 'undefined' ? __KICKER_HAX_VERSION__ : '82.0.0';
 const isPermissionError = error => String(error?.code || error?.message || '').toLowerCase().includes('permission');
 
 function isNativeCompanionFrame() {
@@ -630,7 +631,9 @@ export const firebaseService = {
   },
 
   skinPeriodKey(cadence, date = new Date()) {
-    return `${CURRENT_SEASON_ID}_${getFeaturedCycle(cadence, date).period}`;
+    // Bump the storefront revision when selection invariants change so active
+    // duplicate showcases are rotated immediately without deleting the queue.
+    return `${CURRENT_SEASON_ID}_${getFeaturedCycle(cadence, date).period}_v82`;
   },
 
   async getFeaturedSkin(cadence) {
@@ -649,8 +652,12 @@ export const firebaseService = {
     // submissions. Previously featured requests remain excluded by queue logic.
     const currentRequests = requestsByDay;
     const allFeatured = allFeaturedSnapshot.val() || {};
+    // Active showcases must never repeat the same skin. Historical entries may
+    // be reused only after their old cadence has expired.
+    const activeFeaturedIds = getActiveFeaturedSkinIds(allFeatured, cadence);
     if (cadence === 'hourly') {
-      const queue = getHourlySkinQueue(currentRequests, allFeatured, this.skinDayKey());
+      const queue = getHourlySkinQueue(currentRequests, allFeatured, this.skinDayKey())
+        .filter(item => !activeFeaturedIds.has(item.id || `community_${String(item.requestId || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`));
       const winner = pickHourlySkin(queue, cycle.cycleIndex);
       if (!winner) return null;
       const requestId = winner.requestId || `${winner.requestDay}_${winner.uid}`;
@@ -679,11 +686,12 @@ export const firebaseService = {
       );
       return committed.snapshot.val();
     }
-    const candidates = getPendingSkinRequests(currentRequests, allFeatured, this.skinDayKey());
+    const candidates = getPendingSkinRequests(currentRequests, allFeatured, this.skinDayKey())
+      .filter(item => !activeFeaturedIds.has(item.id || `community_${String(item.requestId || '').replace(/[^a-zA-Z0-9_-]/g, '_')}`));
     if (!candidates.length) {
       const previousEntries = Object.entries(allFeatured).flatMap(([sourceCadence, periods]) =>
         Object.entries(periods || {}).map(([sourcePeriod, item]) => ({ sourceCadence, sourcePeriod, item }))
-      ).filter(entry => entry.item?.image)
+      ).filter(entry => entry.item?.image && !activeFeaturedIds.has(entry.item.id))
         .sort((a, b) => Number(a.item.createdAt || a.item.startsAt || 0) - Number(b.item.createdAt || b.item.startsAt || 0));
       const previousEntry = previousEntries.at(-1) || null;
       const previous = previousEntry?.item || null;
@@ -820,11 +828,11 @@ export const firebaseService = {
   },
 
   /** Permanently removes one unequipped collectible and credits its recycle reward. */
-  async discardSkin(uid, skinId, reward = 30) {
+  async discardSkin(uid, skinId, reward = 20) {
     if (!uid || !skinId || skinId === 'rookie' || skinId === 'none') {
       throw new Error('Esta skin não pode ser descartada.');
     }
-    const safeReward = Math.max(0, Math.min(30, Number(reward) || 0));
+    const safeReward = Math.max(0, Math.min(90, Number(reward) || 0));
     const userRef = doc(db, 'users', uid);
     return runTransaction(db, async transaction => {
       const snapshot = await transaction.get(userRef);
@@ -951,7 +959,6 @@ export const firebaseService = {
       const holderOwned = Array.isArray(holder.ownedSkins) ? [...holder.ownedSkins] : ['rookie'];
       if (!holderOwned.includes(skinId)) throw new Error('Esta skin não está mais no seu inventário.');
       const originalOwned = Array.isArray(originalOwner.ownedSkins) ? [...originalOwner.ownedSkins] : ['rookie'];
-      if (getSkinCopyCount(originalOwner, skinId) > 0) throw new Error('O remetente já possui esta skin.');
 
       const holderValues = { ...(holder.skinPurchaseValues || {}) };
       const holderOrigins = { ...(holder.skinGiftOrigins || {}) };
@@ -963,8 +970,11 @@ export const firebaseService = {
       const originalValues = { ...(originalOwner.skinPurchaseValues || {}), [skinId]: restoredValue };
       const originalOrigins = { ...(originalOwner.skinGiftOrigins || {}) };
       delete originalOrigins[skinId];
-      originalOwned.push(skinId);
-      const originalCopies = { ...(originalOwner.skinOwnedCopies || {}), [skinId]: 1 };
+      const originalHasSkin = getSkinCopyCount(originalOwner, skinId) > 0;
+      if (!originalHasSkin) originalOwned.push(skinId);
+      const originalCopies = originalHasSkin
+        ? { ...(originalOwner.skinOwnedCopies || {}) }
+        : { ...(originalOwner.skinOwnedCopies || {}), [skinId]: 1 };
       const returnedAt = Date.now();
 
       transaction.update(holderRef, {
@@ -973,15 +983,20 @@ export const firebaseService = {
         skinGiftOrigins: holderOrigins,
         lastSentGiftId: giftRef.id
       });
-      transaction.update(originalOwnerRef, {
-        ownedSkins: originalOwned,
-        skinOwnedCopies: originalCopies,
-        skinPurchaseValues: originalValues,
-        skinGiftOrigins: originalOrigins,
-        lastReceivedGiftId: giftRef.id
-      });
+      transaction.update(originalOwnerRef, originalHasSkin
+        ? {
+          coins: Math.max(0, Number(originalOwner.coins || 0)) + restoredValue,
+          lastReceivedGiftId: giftRef.id
+        }
+        : {
+          ownedSkins: originalOwned,
+          skinOwnedCopies: originalCopies,
+          skinPurchaseValues: originalValues,
+          skinGiftOrigins: originalOrigins,
+          lastReceivedGiftId: giftRef.id
+        });
       transaction.set(giftRef, {
-        kind: 'return',
+        kind: originalHasSkin ? 'return_refund' : 'return',
         senderUid: holderUid,
         senderUsername: holder.username || '',
         recipientUid: origin.senderUid,
@@ -989,11 +1004,15 @@ export const firebaseService = {
         originalSenderUid: origin.senderUid,
         skinId,
         skinValue: restoredValue,
-        status: 'returned',
+        status: originalHasSkin ? 'refunded' : 'returned',
         createdAt: returnedAt,
         claimedAt: returnedAt
       });
-      return { username: originalOwner.username || origin.senderUsername || 'remetente' };
+      return {
+        username: originalOwner.username || origin.senderUsername || 'remetente',
+        refunded: originalHasSkin,
+        refund: originalHasSkin ? restoredValue : 0
+      };
     });
   },
 

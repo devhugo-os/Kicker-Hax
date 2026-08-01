@@ -723,13 +723,16 @@ export const menuController = {
     const inventory = document.getElementById('public-profile-inventory');
     const modal = document.getElementById('public-profile-inventory-modal');
     if (!this.publicProfileUid || !inventory || !modal) return;
+    const profileUid = this.publicProfileUid;
     modal.classList.remove('hidden');
     this.bringModalToFront(modal);
     inventory.textContent = 'Carregando inventário...';
     try {
-      // Reload the owner so gifts made while this profile was open appear
-      // immediately. A broken legacy asset must not hide the whole inventory.
-      const profile = await firebaseService.getUserProfile(this.publicProfileUid);
+      // Keep the profile already shown in the modal as a network fallback.
+      // A temporary read failure must not make a known inventory inaccessible.
+      const refreshed = await firebaseService.getUserProfile(profileUid).catch(() => null);
+      if (profileUid !== this.publicProfileUid) return;
+      const profile = refreshed || this.publicProfileData;
       if (!profile) throw new Error('Perfil não encontrado.');
       this.publicProfileData = profile;
       const ownedSkinIds = [...new Set(
@@ -743,7 +746,18 @@ export const menuController = {
         const builtIn = getSkinById(id);
         if (builtIn?.id === id) return builtIn;
         // Older community submissions may not use the current ID prefix.
-        return firebaseService.getSkinAsset(id).catch(() => null);
+        const asset = await firebaseService.getSkinAsset(id).catch(() => null);
+        if (asset) return asset;
+        if (id === profile.equippedSkinId && profile.equippedSkinImage) {
+          return {
+            id,
+            image: profile.equippedSkinImage,
+            name: profile.equippedSkinName || 'Skin da comunidade',
+            rarity: profile.equippedSkinRarity || 'custom',
+            custom: true
+          };
+        }
+        return null;
       }))).filter(Boolean);
       inventory.replaceChildren();
       skins.forEach(skin => {
@@ -755,10 +769,15 @@ export const menuController = {
         const giftOrigin = profile.skinGiftOrigins?.[skin.id];
         item.dataset.gifted = giftOrigin?.senderUid ? 'true' : 'false';
         if ((profile.equippedSkinId || 'rookie') === skin.id) item.classList.add('equipped');
-        const image = document.createElement('img');
-        image.src = skin.image;
-        image.alt = skin.name || 'Skin';
-        image.draggable = false;
+        const image = skin.image ? document.createElement('img') : document.createElement('span');
+        if (skin.image) {
+          image.src = skin.image;
+          image.alt = skin.name || 'Skin';
+          image.draggable = false;
+        } else {
+          image.className = 'public-skin-badge';
+          image.textContent = profile.badge || 'KX';
+        }
         const name = document.createElement('strong');
         name.textContent = `${skin.name || 'Skin da comunidade'}${(profile.equippedSkinId || 'rookie') === skin.id ? ' · Em uso' : ''}`;
         const value = document.createElement('span');
@@ -783,6 +802,7 @@ export const menuController = {
       this.applyPublicInventoryFilters();
       if (!skins.length) inventory.textContent = 'Nenhuma skin na coleção.';
     } catch (error) {
+      console.warn('[Public Inventory] Falha ao carregar inventário:', error);
       inventory.textContent = 'Não foi possível carregar este inventário.';
     }
   },

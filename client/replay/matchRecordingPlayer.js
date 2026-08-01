@@ -8,6 +8,7 @@ import { getEquippedSkin, getSkinById } from '../data/skins.js';
 import { soundFx } from '../utils/soundFx.js';
 import { findNextRecordingHighlight, findPreviousRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
 import { isNativeAppFrame } from '../utils/nativeBridge.js';
+import { showToast } from '../utils/toast.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 const HIGHLIGHT_PREROLL_MS = 2500;
@@ -39,6 +40,7 @@ export class MatchRecordingPlayer {
     this.volumeInput = root?.querySelector('#recording-volume');
     this.fullscreenButton = root?.querySelector('#recording-fullscreen');
     this.timelineToggleButton = root?.querySelector('#recording-toggle-timeline');
+    this.exportButton = root?.querySelector('#recording-export-mp4');
     this.timeLabel = root?.querySelector('#recording-time');
     this.report = root?.querySelector('#recording-live-report');
     this.markers = root?.querySelector('#recording-markers');
@@ -66,6 +68,7 @@ export class MatchRecordingPlayer {
     this.nextHighlightButton?.addEventListener('click', () => this.seekToNextHighlight());
     this.fullscreenButton?.addEventListener('click', () => this.toggleFullscreen());
     this.timelineToggleButton?.addEventListener('click', () => this.toggleTimeline());
+    this.exportButton?.addEventListener('click', () => this.exportMp4());
     this.timeline?.addEventListener('input', () => {
       soundFx.stopCrowd();
       this.currentMs = Number(this.timeline.value || 0);
@@ -191,6 +194,27 @@ export class MatchRecordingPlayer {
     this.root?.classList.remove('recording-controls-hidden', 'recording-timeline-hidden', 'recording-playback-hidden');
     this.root?.classList.add('hidden');
     if (wasVisible) soundFx.startMenuTheme();
+  }
+
+  async exportMp4() {
+    if (!this.recording || !this.exportButton || this.exportButton.disabled) return;
+    const button = this.exportButton;
+    button.disabled = true;
+    button.textContent = 'Preparando 0%';
+    try {
+      // MP4 support is intentionally lazy: normal gameplay and recording
+      // playback do not download or parse the encoder/muxer bundle.
+      const { exportMatchRecordingMp4 } = await import('./matchRecordingExporter.js');
+      const bytes = await exportMatchRecordingMp4(this.recording, this.match, progress => {
+        button.textContent = `Preparando ${progress}%`;
+      });
+      showToast(`MP4 pronto (${Math.max(1, Math.round(bytes / 1024 / 1024))} MB).`, 'success');
+    } catch (error) {
+      showToast(error.message || 'Não foi possível exportar esta gravação.', 'error');
+    } finally {
+      button.disabled = false;
+      button.textContent = 'Exportar MP4';
+    }
   }
 
   toggle() {

@@ -785,6 +785,11 @@ html.app-runtime #menu-btn-download-app {
   font-size: 40px;
   width: 72px;
   height: 72px;
+  min-width: 72px;
+  min-height: 72px;
+  flex: 0 0 72px;
+  aspect-ratio: 1;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
   display: flex;
@@ -798,6 +803,25 @@ html.app-runtime #menu-btn-download-app {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.avatar-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+.public-skin-badge {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, .16);
+  color: #fff;
+  font-weight: 900;
 }
 
 .profile-skin-info {
@@ -1925,7 +1949,14 @@ html.app-runtime #menu-btn-download-app {
 @media (max-width: 760px), (max-height: 520px) {
   .public-profile-card { width: 100vw; height: 100dvh; max-height: 100dvh; padding: 8px; gap: 7px; border-radius: 0; }
   .public-profile-header { grid-template-columns: 54px minmax(0, 1fr) 156px; gap: 7px; padding-right: 44px; }
-  .public-profile-header .avatar-preview { width: 50px; height: 50px; font-size: 25px; }
+  .public-profile-header .avatar-preview {
+    width: 50px;
+    height: 50px;
+    min-width: 50px;
+    min-height: 50px;
+    flex-basis: 50px;
+    font-size: 25px;
+  }
   .public-profile-header h2 { font-size: 17px; }
   .public-profile-header p { font-size: 9px; max-height: 28px; overflow: auto; }
   .public-profile-ratings { gap: 3px; }
@@ -3648,6 +3679,7 @@ html.app-runtime #menu-btn-download-app {
 .recording-controls { grid-column: 1; grid-row: 4; display: flex; align-items: center; flex-wrap: wrap; gap: 7px; padding: 0; }
 .recording-controls label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 12px; }
 .recording-icon-btn { width: 40px; min-width: 40px; padding-inline: 0; }
+.recording-export-btn { min-height: 40px; padding: 8px 12px; white-space: nowrap; }
 .recording-report { grid-column: 2; grid-row: 2 / 5; margin-top: 0; min-height: 0; overflow: auto; align-content: start; }
 .recording-report .match-report-teams { grid-template-columns: 1fr; }
 .recording-report .match-report-table { min-width: 640px; }
@@ -3724,6 +3756,7 @@ html.app-runtime #menu-btn-download-app {
   overflow: visible;
   font-size: 11px;
 }
+.recording-modal.recording-fullscreen-active .recording-export-btn { display: none; }
 .recording-modal.recording-fullscreen-active .recording-controls .recording-icon-btn {
   width: 32px;
   min-width: 32px;
@@ -3812,6 +3845,11 @@ html.app-runtime #menu-btn-download-app {
   .recording-controls { gap: 5px; font-size: 9px; }
   .recording-controls label { font-size: 8px; }
   .recording-controls input[type="range"] { width: 72px; }
+  .recording-export-btn {
+    min-height: 32px;
+    padding: 5px 8px;
+    font-size: 9px;
+  }
 }
 
 @media (pointer: coarse) and (orientation: landscape) {

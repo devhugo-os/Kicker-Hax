@@ -290,8 +290,10 @@ export function renderMatchRecordingFrame(canvas, recording, frame, options = {}
   const cssWidth = Math.max(1, Math.round(canvas.clientWidth || fieldWidth));
   const cssHeight = Math.max(1, Math.round(canvas.clientHeight || fieldHeight));
   const pixelRatio = Math.max(1, Math.min(2, Number(options.pixelRatio || 1)));
-  const outputWidth = Math.max(1, Math.round(cssWidth * pixelRatio));
-  const outputHeight = Math.max(1, Math.round(cssHeight * pixelRatio));
+  // Detached export canvases have no reliable client size. Explicit output
+  // dimensions keep every encoded frame aligned with the VideoEncoder config.
+  const outputWidth = Math.max(1, Math.round(Number(options.outputWidth) || cssWidth * pixelRatio));
+  const outputHeight = Math.max(1, Math.round(Number(options.outputHeight) || cssHeight * pixelRatio));
   if (canvas.width !== outputWidth) canvas.width = outputWidth;
   if (canvas.height !== outputHeight) canvas.height = outputHeight;
 
