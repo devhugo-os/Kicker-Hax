@@ -79,14 +79,8 @@ export const CHESTS = {
 };
 
 export const SKIN_VALUES = { common: 120, rare: 320, epic: 700, legendary: 1200, mythic: 6700, custom: 1800 };
-export const SKIN_DISCARD_VALUES = {
-  common: 20,
-  rare: 35,
-  epic: 55,
-  legendary: 75,
-  mythic: 90,
-  custom: 90
-};
+export const SKIN_DISCARD_RATE = 0.25;
+export const SKIN_DISCARD_MAX_VALUE = 90;
 export const NO_SKIN = { id: 'none', name: 'Sem skin', rarity: 'none', image: '', value: 0 };
 export const NO_PRIZE = { id: 'no_prize', name: 'Sem prêmio', rarity: 'none', image: svgSkin('Vazio', ['#222938', '#7b879b', '#070a10'], '—', 'eclipse'), noPrize: true };
 
@@ -95,11 +89,11 @@ export function getSkinValue(skin) {
   return SKIN_VALUES[skin?.rarity || (skin?.custom ? 'custom' : 'common')] || 120;
 }
 
-/** Recycling rewards grow with rarity but never exceed 90 KX Coins. */
+/** Recycling returns 25% of the recorded collection price, capped at 90 KX. */
 export function getSkinDiscardValue(skin) {
   if (!skin || skin.id === 'rookie' || skin.id === 'none') return 0;
-  const rarity = skin.rarity || (skin.custom ? 'custom' : 'common');
-  return Math.min(90, SKIN_DISCARD_VALUES[rarity] || SKIN_DISCARD_VALUES.common);
+  const collectionValue = Math.max(0, Number(skin.value) || getSkinValue(skin));
+  return Math.min(SKIN_DISCARD_MAX_VALUE, Math.max(1, Math.floor(collectionValue * SKIN_DISCARD_RATE)));
 }
 
 export function rollChest(chestId, random = Math.random) {

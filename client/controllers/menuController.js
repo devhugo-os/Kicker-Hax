@@ -785,7 +785,12 @@ export const menuController = {
         const giftedBy = document.createElement('small');
         if (giftOrigin?.senderUsername) {
           giftedBy.className = 'public-skin-gift-origin';
-          giftedBy.innerHTML = `<span aria-hidden="true">🎁</span> Doada por <strong>${escapeHtml(giftOrigin.senderUsername)}</strong>`;
+          const icon = document.createElement('span');
+          icon.setAttribute('aria-hidden', 'true');
+          icon.textContent = '🎁';
+          const sender = document.createElement('strong');
+          sender.textContent = String(giftOrigin.senderUsername);
+          giftedBy.append(icon, document.createTextNode(' Doada por '), sender);
         }
         item.append(image, name, value);
         if (giftedBy.textContent) item.appendChild(giftedBy);

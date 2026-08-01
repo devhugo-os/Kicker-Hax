@@ -8,6 +8,7 @@ if (!nativeVersion) throw new Error('Versao ausente em cordova-app/config.xml.')
 const displayVersion = nativeVersion.split('.').length > 2
   ? nativeVersion.replace(/\.0$/, '')
   : nativeVersion;
+const emittedBuildAssets = new Set();
 
 export default defineConfig({
   root: 'client',
@@ -18,6 +19,15 @@ export default defineConfig({
   plugins: [
     {
       name: 'emit-nojekyll-for-pages',
+      generateBundle(_options, bundle) {
+        // Dynamic imports are referenced by another chunk instead of the HTML.
+        // Keep every asset emitted by the current build so the cleanup cannot
+        // delete lazy features such as the MP4 exporter before Pages commits it.
+        emittedBuildAssets.clear();
+        Object.keys(bundle)
+          .filter(fileName => fileName.startsWith('assets/'))
+          .forEach(fileName => emittedBuildAssets.add(basename(fileName)));
+      },
       closeBundle() {
         writeFileSync(resolve('docs/.nojekyll'), '');
         writeFileSync(resolve('docs/deploy-version.txt'), `Kicker Hax ${displayVersion}\nbuild: ${new Date().toISOString()}\n`);
@@ -31,6 +41,7 @@ export default defineConfig({
         const activeAssets = new Set(
           [...indexHtml.matchAll(/\.\/assets\/([^"']+)/g)].map(match => basename(match[1]))
         );
+        emittedBuildAssets.forEach(asset => activeAssets.add(asset));
         readdirSync(resolve('docs/assets')).forEach(asset => {
           if (!activeAssets.has(asset)) unlinkSync(resolve('docs/assets', asset));
         });
