@@ -140,6 +140,17 @@ export class P2PSocketService {
     this.clearJoinResponseRetry(conn.peer);
   }
 
+  /** Counts only humans with an open authoritative control channel. */
+  getLiveRoomPlayerCount({ lobbyOnly = false } = {}) {
+    if (!this.serverRoom) return 0;
+    return this.serverRoom.players.filter(player => {
+      if (player.cpu || player.disconnected) return false;
+      if (lobbyOnly && player.status !== 'lobby') return false;
+      if (player.id === this.serverRoom.hostId) return this.isHost && !!this.peer && !this.peer.destroyed;
+      return this.controlConnections.get(player.id)?.open === true;
+    }).length;
+  }
+
   consumeRoomChatRate(uid) {
     if (!uid) return { allowed: true, retryAfterMs: 0 };
     const result = consumeChatRateLimit(this.chatRateBuckets.get(uid));
@@ -244,7 +255,7 @@ export class P2PSocketService {
     });
     this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
     update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
-      playersCount: this.serverRoom.getConnectedPlayerCount(),
+      playersCount: this.getLiveRoomPlayerCount(),
       updatedAt: Date.now()
     }).catch(() => {});
     return true;
@@ -686,7 +697,12 @@ export class P2PSocketService {
 
       conn.on('error', (err) => {
         console.error('[P2PSocket] Erro no canal de dados do peer:', err);
-        if (this.controlConnections.get(conn.peer) === conn) this.removeHostControlConnection(conn);
+        if (this.controlConnections.get(conn.peer) === conn) {
+          this.removeHostControlConnection(conn);
+          // PeerJS may emit error without a later close event. Process the
+          // departure here as well so matchmaking never counts a dead guest.
+          this.handleHostPlayerDisconnect(conn);
+        }
       });
     });
 
@@ -1415,7 +1431,7 @@ export class P2PSocketService {
       const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
       const joinedAt = Date.now();
       update(roomRef, {
-        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        playersCount: this.getLiveRoomPlayerCount(),
         hostHeartbeatAt: joinedAt,
         updatedAt: joinedAt
       }).catch(error => console.warn('[P2PSocket] Falha ao atualizar presença da sala:', error));
@@ -1522,7 +1538,7 @@ export class P2PSocketService {
       this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `Votação aprovada. A partida continua sem ${disconnectedName}.` });
       this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
-        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        playersCount: this.getLiveRoomPlayerCount(),
         updatedAt: Date.now()
       }).catch(() => {});
     }
@@ -1627,10 +1643,10 @@ export class P2PSocketService {
       } else if (conn?.open) {
         conn.send({ event: 'returnedToLobby', data: returnedPayload });
       }
-      const lobbyCount = this.serverRoom.players.filter(item => item.status === 'lobby').length;
+      const lobbyCount = this.getLiveRoomPlayerCount({ lobbyOnly: true });
       const indexedPlayerCount = this.serverRoom.status === 'lobby'
         ? lobbyCount
-        : this.serverRoom.players.filter(item => !item.disconnected && !item.cpu).length;
+        : this.getLiveRoomPlayerCount();
       const now = Date.now();
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
         status: this.serverRoom.status,
@@ -1761,7 +1777,7 @@ export class P2PSocketService {
     this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
     this.sendRoomChatMessage({ username: 'Sistema', badge: '📢', text: `${reserved.username} perdeu a conexão. Aguardando retorno por 1 minuto e 30 segundos.` });
     update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
-      playersCount: this.serverRoom.getConnectedPlayerCount(),
+      playersCount: this.getLiveRoomPlayerCount(),
       updatedAt: Date.now()
     }).catch(() => {});
     if (overReturnLimit) {
@@ -1788,7 +1804,7 @@ export class P2PSocketService {
       
       const roomRef = ref(rtdb, `multiplayerRooms/${this.roomCode}`);
       update(roomRef, {
-        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        playersCount: this.getLiveRoomPlayerCount(),
         updatedAt: Date.now()
       });
 
@@ -1855,7 +1871,7 @@ export class P2PSocketService {
     this.serverRoom.removePlayer(botId);
     this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
     update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
-      playersCount: this.serverRoom.getConnectedPlayerCount(),
+      playersCount: this.getLiveRoomPlayerCount(),
       updatedAt: Date.now()
     });
   }
@@ -1920,7 +1936,7 @@ export class P2PSocketService {
           }
           update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
             status: 'lobby',
-            playersCount: this.serverRoom.getConnectedPlayerCount(),
+            playersCount: this.getLiveRoomPlayerCount(),
             updatedAt: Date.now()
           }).catch(() => {});
           remove(ref(rtdb, `matchChats/${this.roomCode}`)).catch(() => {});
@@ -1930,7 +1946,7 @@ export class P2PSocketService {
       this.serverRoom.removePlayer(targetSocketId);
       this.broadcast('lobbyUpdate', this.serverRoom.getLobbyInfo());
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
-        playersCount: this.serverRoom.getConnectedPlayerCount(),
+        playersCount: this.getLiveRoomPlayerCount(),
         updatedAt: Date.now()
       });
 
@@ -2330,10 +2346,8 @@ export class P2PSocketService {
     this.roomHeartbeatTicker = createRealtimeTicker(() => {
       if (!this.isHost || !this.roomCode) return;
       const roomStatus = this.serverRoom?.status || 'lobby';
-      const connectedHumans = this.serverRoom?.players
-        ?.filter(player => !player.cpu && !player.disconnected).length || 0;
-      const liveLobbyPlayers = this.serverRoom?.players
-        ?.filter(player => !player.cpu && !player.disconnected && player.status === 'lobby').length || 0;
+      const connectedHumans = this.getLiveRoomPlayerCount();
+      const liveLobbyPlayers = this.getLiveRoomPlayerCount({ lobbyOnly: true });
       update(ref(rtdb, `multiplayerRooms/${this.roomCode}`), {
         playersCount: roomStatus === 'lobby' ? liveLobbyPlayers : connectedHumans,
         status: roomStatus,

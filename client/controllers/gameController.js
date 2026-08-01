@@ -180,12 +180,13 @@ export const gameController = {
 
   async buildMultiplayerProfile() {
     const stats = await firebaseService.getUserStats(this.currentUser.uid).catch(() => ({}));
+    const skinId = menuController.profileData.equippedSkinId || 'rookie';
     return {
       uid: this.currentUser.uid,
       username: menuController.profileData.username,
       badge: menuController.profileData.badge || '\u{1F3F3}\uFE0F',
-      skin: getEquippedSkin(menuController.profileData).image,
-      skinId: menuController.profileData.equippedSkinId || 'rookie',
+      skin: skinId === 'rookie' || skinId === 'none' ? '' : getEquippedSkin(menuController.profileData).image,
+      skinId,
       staffRole: menuController.profileData.staffRole || '',
       overall: calculateOverallRating(stats || {})
     };
@@ -2526,7 +2527,7 @@ export const gameController = {
             snap.vy = player.vy;
             snap.has = localBallSim.owner === player.id;
             snap.name = player.id === 'p1' ? username : 'CPU Bot';
-            snap.badge = player.id === 'p1' ? badge : '';
+            snap.badge = player.id === 'p1' ? badge : '⚙️';
             snap.skin = player.id === 'p1' ? equippedSkin : '';
             snap.staffRole = player.id === 'p1' ? (menuController.profileData?.staffRole || '') : '';
             snap.inv = player.invuln || 0;
@@ -5125,12 +5126,13 @@ export const gameController = {
   },
 
   async getReservedMatchCredentials(saved) {
+    const skinId = menuController.profileData.equippedSkinId || 'rookie';
     const profile = {
       uid: this.currentUser.uid,
       username: menuController.profileData.username,
       badge: menuController.profileData.badge || '🏳️',
-      skin: getEquippedSkin(menuController.profileData).image,
-      skinId: menuController.profileData.equippedSkinId || 'rookie',
+      skin: skinId === 'rookie' || skinId === 'none' ? '' : getEquippedSkin(menuController.profileData).image,
+      skinId,
       staffRole: menuController.profileData.staffRole || ''
     };
     let password = '';
@@ -5481,11 +5483,16 @@ export const gameController = {
       const localProfile = p.uid && p.uid === this.currentUser?.uid
         ? menuController.profileData
         : null;
+      const remoteSkinId = p.skinId || 'rookie';
       const lobbySkin = localProfile
         ? getEquippedSkin(localProfile)
-        : p.skin && p.skin !== 'custom'
-          ? { id: p.skinId || 'custom', image: p.skin, name: p.username }
-          : getSkinById(p.skinId || 'rookie');
+        : getEquippedSkin({
+          equippedSkinId: remoteSkinId,
+          equippedSkinImage: remoteSkinId === 'rookie' || remoteSkinId === 'none' || p.skin === 'custom'
+            ? null
+            : p.skin,
+          equippedSkinName: p.username
+        });
       menuController.renderSkin(row.querySelector('.lobby-player-avatar'), lobbySkin, p.badge);
       appendStaffTag(playerName, p.staffRole);
       if (p.uid && playerName) {

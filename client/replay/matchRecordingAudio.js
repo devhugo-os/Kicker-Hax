@@ -1,19 +1,14 @@
+import {
+  CROWD_SOUND_DESIGN,
+  getGameSoundVoices,
+  MATCH_THEME_DESIGN
+} from '../audio/gameSoundDesign.js';
+
 const AUDIO_SAMPLE_RATE = 48_000;
 const AUDIO_CHANNELS = 2;
 const AUDIO_CHUNK_FRAMES = 1024;
-
-const SOUND_VOICES = Object.freeze({
-  kick: [[520, 0.07, 0.17, 'square'], [260, 0.08, 0.08, 'square']],
-  pickup: [[330, 0.05, 0.07, 'triangle'], [440, 0.07, 0.06, 'triangle', 0.035]],
-  requestPass: [[740, 0.06, 0.07, 'triangle'], [980, 0.08, 0.06, 'sine', 0.045]],
-  tackle: [[140, 0.10, 0.20, 'sawtooth']],
-  dribble: [[800, 0.06, 0.10, 'triangle'], [600, 0.07, 0.07, 'triangle']],
-  power: [[180, 0.28, 0.20, 'sawtooth'], [360, 0.12, 0.16, 'sawtooth'], [720, 0.10, 0.12, 'square', 0.08]],
-  post: [[900, 0.06, 0.12, 'square'], [300, 0.10, 0.09, 'sine']],
-  whistle: [[1800, 0.20, 0.10, 'sine'], [1500, 0.20, 0.10, 'sine']],
-  goal: [[480, 0.22, 0.13, 'triangle'], [960, 0.18, 0.11, 'sine', 0.12]],
-  cheer: [[210, 1.65, 0.08, 'noise'], [340, 1.20, 0.05, 'noise']]
-});
+const EXPORT_MASTER_GAIN = 0.72;
+const EXPORT_MUSIC_VOLUME = 0.55;
 
 function waveAt(type, phase, noiseSeed) {
   if (type === 'square') return Math.sin(phase) >= 0 ? 1 : -1;
@@ -26,46 +21,109 @@ function waveAt(type, phase, noiseSeed) {
   return Math.sin(phase);
 }
 
-function buildSoundEvents(recording) {
+/** Builds action events from the same voices consumed by runtime WebAudio. */
+export function buildRecordingSoundEvents(recording) {
   const events = [];
+  const cheers = [];
   (recording?.markers || []).forEach(marker => {
     if (marker.type !== 'sound') return;
-    const voices = SOUND_VOICES[String(marker.sound || '')];
-    if (!voices) return;
-    voices.forEach(([frequency, duration, gain, wave, delay = 0]) => {
-      events.push({
-        start: Math.max(0, Number(marker.t || 0) / 1000 + delay),
-        end: Math.max(0, Number(marker.t || 0) / 1000 + delay + duration),
-        frequency,
-        gain,
-        wave
-      });
+    const sound = String(marker.sound || '');
+    if (sound === 'cheer') {
+      cheers.push(Math.max(0, Number(marker.t || 0) / 1000));
+      return;
+    }
+    getGameSoundVoices(sound).forEach(voice => {
+      const delay = Number(voice.delay || 0);
+      const start = Math.max(0, Number(marker.t || 0) / 1000 + delay);
+      events.push({ start, end: start + Number(voice.duration || 0), voice });
     });
   });
-  return events;
+  return { events, cheers };
 }
 
-function synthesizeChunk(startFrame, frameCount, events) {
+function voiceEnvelope(voice, local) {
+  const duration = Math.max(0.001, Number(voice.duration || 0));
+  if (voice.type === 'noise') return Math.max(0, 1 - local / duration);
+  const gain = Math.max(0.0001, Number(voice.gain || 0.0001));
+  if (voice.type === 'sweep') {
+    const attack = Math.min(0.025, duration / 2);
+    if (local < attack) {
+      return (0.0001 / gain) * Math.pow(gain / 0.0001, local / Math.max(0.001, attack));
+    }
+    return Math.exp(
+      Math.log(0.0001 / gain) * Math.min(1, (local - attack) / Math.max(0.001, duration - attack))
+    );
+  }
+  return Math.exp(Math.log(0.0001 / gain) * Math.min(1, local / duration));
+}
+
+function voiceFrequency(voice, local) {
+  const start = Math.max(1, Number(voice.frequency || 1));
+  if (voice.type !== 'sweep') return start;
+  const end = Math.max(1, Number(voice.endFrequency || start));
+  const progress = Math.min(1, local / Math.max(0.001, Number(voice.duration || 0)));
+  return start * Math.pow(end / start, progress);
+}
+
+function themeSample(time) {
+  const step = Math.max(0, Math.floor(time / MATCH_THEME_DESIGN.stepSeconds));
+  const local = time - step * MATCH_THEME_DESIGN.stepSeconds;
+  if (local >= MATCH_THEME_DESIGN.noteDuration) return 0;
+  const decayDuration = Math.max(0.001, MATCH_THEME_DESIGN.noteDuration - 0.02);
+  const bassEnvelope = Math.exp(
+    Math.log(0.0001 / MATCH_THEME_DESIGN.bassGain) * Math.min(1, local / decayDuration)
+  );
+  const leadEnvelope = Math.exp(
+    Math.log(0.0001 / MATCH_THEME_DESIGN.leadGain) * Math.min(1, local / decayDuration)
+  );
+  const bass = waveAt(
+    'square',
+    local * Math.PI * 2 * MATCH_THEME_DESIGN.bass[step % MATCH_THEME_DESIGN.bass.length],
+    step
+  ) * MATCH_THEME_DESIGN.bassGain * bassEnvelope;
+  const lead = waveAt(
+    'triangle',
+    local * Math.PI * 2 * MATCH_THEME_DESIGN.lead[step % MATCH_THEME_DESIGN.lead.length],
+    step
+  ) * MATCH_THEME_DESIGN.leadGain * leadEnvelope;
+  return (bass + lead) * MATCH_THEME_DESIGN.masterGain * EXPORT_MUSIC_VOLUME;
+}
+
+function synthesizeChunk(startFrame, frameCount, timeline, ambience) {
   const data = new Float32Array(frameCount * AUDIO_CHANNELS);
   const chunkStart = startFrame / AUDIO_SAMPLE_RATE;
   const chunkEnd = (startFrame + frameCount) / AUDIO_SAMPLE_RATE;
-  // A match can contain hundreds of markers. Restrict mixing to events that
-  // overlap this 21 ms block instead of scanning the full match per sample.
-  const activeEvents = events.filter(event => event.end > chunkStart && event.start < chunkEnd);
+  // Restrict action mixing to voices that overlap this 21 ms audio block.
+  const activeEvents = timeline.events.filter(event => event.end > chunkStart && event.start < chunkEnd);
+
   for (let frame = 0; frame < frameCount; frame += 1) {
     const absoluteFrame = startFrame + frame;
     const time = absoluteFrame / AUDIO_SAMPLE_RATE;
-    const crowd = Math.sin(time * Math.PI * 2 * 73) * 0.005
-      + Math.sin(time * Math.PI * 2 * 109) * 0.003;
-    let sample = crowd;
+    while (ambience.cheerIndex < timeline.cheers.length
+      && timeline.cheers[ambience.cheerIndex] <= time) {
+      ambience.lastCheerAt = timeline.cheers[ambience.cheerIndex];
+      ambience.cheerIndex += 1;
+    }
+
+    const rawCrowd = waveAt('noise', 0, absoluteFrame) * 0.35;
+    const lowpassAlpha = Math.min(1, Math.PI * 2 * CROWD_SOUND_DESIGN.lowpassHz / AUDIO_SAMPLE_RATE);
+    ambience.crowdLowpass += lowpassAlpha * (rawCrowd - ambience.crowdLowpass);
+    const cheerAge = time - ambience.lastCheerAt;
+    const crowdGain = cheerAge >= 0 && cheerAge < CROWD_SOUND_DESIGN.cheerHoldSeconds
+      ? CROWD_SOUND_DESIGN.cheerGain
+      : CROWD_SOUND_DESIGN.baseGain;
+    let sample = ambience.crowdLowpass * crowdGain + themeSample(time);
+
     for (const event of activeEvents) {
       if (time < event.start || time >= event.end) continue;
       const local = time - event.start;
-      const duration = Math.max(0.001, event.end - event.start);
-      const envelope = Math.sin(Math.PI * Math.min(1, local / duration));
-      sample += waveAt(event.wave, local * Math.PI * 2 * event.frequency, absoluteFrame) * event.gain * envelope;
+      const voice = event.voice;
+      const phase = local * Math.PI * 2 * voiceFrequency(voice, local);
+      const amplitude = Number(voice.gain || 0) * voiceEnvelope(voice, local);
+      sample += waveAt(voice.wave || voice.type, phase, absoluteFrame) * amplitude;
     }
-    sample = Math.max(-0.92, Math.min(0.92, sample));
+
+    sample = Math.max(-0.92, Math.min(0.92, sample * EXPORT_MASTER_GAIN));
     data[frame] = sample;
     data[frameCount + frame] = sample;
   }
@@ -84,10 +142,11 @@ export async function getRecordingAudioConfig() {
   return support?.supported ? support.config : null;
 }
 
-/** Encodes the compact demo soundscape directly into the MP4 audio track. */
+/** Encodes the live game sound design directly into the MP4 audio track. */
 export async function encodeRecordingAudio({ recording, muxer, config, onProgress = () => {} }) {
   const totalFrames = Math.max(1, Math.ceil(Number(recording.durationMs || 0) / 1000 * AUDIO_SAMPLE_RATE));
-  const events = buildSoundEvents(recording);
+  const timeline = buildRecordingSoundEvents(recording);
+  const ambience = { crowdLowpass: 0, cheerIndex: 0, lastCheerAt: -Infinity };
   let encoderError = null;
   const encoder = new AudioEncoder({
     output: (chunk, metadata) => muxer.addAudioChunk(chunk, metadata),
@@ -105,7 +164,7 @@ export async function encodeRecordingAudio({ recording, muxer, config, onProgres
         numberOfFrames,
         numberOfChannels: AUDIO_CHANNELS,
         timestamp: Math.round(startFrame / AUDIO_SAMPLE_RATE * 1_000_000),
-        data: synthesizeChunk(startFrame, numberOfFrames, events)
+        data: synthesizeChunk(startFrame, numberOfFrames, timeline, ambience)
       });
       encoder.encode(audioData);
       audioData.close();

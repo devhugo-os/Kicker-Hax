@@ -127,17 +127,24 @@ export function getSkinById(id) {
 
 export function getEquippedSkin(profile) {
   if (profile?.equippedSkinId === NO_SKIN.id) return NO_SKIN;
+  const equippedSkinId = profile?.equippedSkinId || 'rookie';
+  // A stale custom-image field must never replace the Rookie badge after the
+  // user equips the default identity again.
+  if (equippedSkinId === 'rookie') {
+    const rookie = getSkinById('rookie');
+    return { ...rookie, image: '' };
+  }
   if (profile?.equippedSkinImage) return {
-    id: profile.equippedSkinId || 'custom',
+    id: equippedSkinId || 'custom',
     image: profile.equippedSkinImage,
     name: profile.equippedSkinName || 'Skin personalizada',
     rarity: profile.equippedSkinRarity || 'custom',
     custom: true
   };
-  const skin = getSkinById(profile?.equippedSkinId || 'rookie');
+  const skin = getSkinById(equippedSkinId);
   // The profile badge is the visual identity of the default Rookie skin.
   // Purchased/custom skins replace it completely while keeping the team ring.
-  return skin.id === 'rookie' ? { ...skin, image: '' } : skin;
+  return skin;
 }
 
 export function usesProfileBadge(profile) {

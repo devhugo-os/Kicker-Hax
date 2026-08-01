@@ -12,11 +12,12 @@ export function sanitizeMultiplayerProfile(profile) {
   if (!profile) return null;
   const skinId = String(profile.skinId || profile.equippedSkinId || '');
   const customSkin = !skinId || skinId.startsWith('community_') || skinId === 'custom';
+  const usesBadge = skinId === 'rookie' || skinId === 'none' || (!skinId && !profile.skin);
   return {
     ...profile,
     // Built-in skins are reconstructed from skinId by every client. Only a
     // community image needs the Firebase hydration marker.
-    skin: hasEmbeddedSkin(profile) ? (customSkin ? 'custom' : '') : profile.skin,
+    skin: usesBadge ? '' : (hasEmbeddedSkin(profile) ? (customSkin ? 'custom' : '') : profile.skin),
     badge: String(profile.badge || '').slice(0, MAX_INLINE_BADGE_LENGTH)
   };
 }

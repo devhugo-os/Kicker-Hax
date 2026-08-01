@@ -1,4 +1,9 @@
 // Kicker Hax - Sound Effects Synthesizer using Web Audio API
+import {
+  CROWD_SOUND_DESIGN,
+  getGameSoundVoices,
+  MATCH_THEME_DESIGN
+} from '../audio/gameSoundDesign.js';
 
 let AC = null;
 let outGain = null;
@@ -38,6 +43,17 @@ export const soundFx = {
       try {
         menuTheme.master.gain.cancelScheduledValues(ac.currentTime);
         menuTheme.master.gain.setTargetAtTime(0.09 * musicVolume, ac.currentTime, 0.05);
+      } catch (e) {}
+    }
+    if (matchTheme?.master) {
+      const ac = audioCtx();
+      try {
+        matchTheme.master.gain.cancelScheduledValues(ac.currentTime);
+        matchTheme.master.gain.setTargetAtTime(
+          MATCH_THEME_DESIGN.masterGain * musicVolume,
+          ac.currentTime,
+          0.05
+        );
       } catch (e) {}
     }
   },
@@ -100,7 +116,7 @@ export const soundFx = {
 
       const hp = ac.createBiquadFilter();
       hp.type = 'lowpass';
-      hp.frequency.value = 800;
+      hp.frequency.value = CROWD_SOUND_DESIGN.lowpassHz;
 
       const g = ac.createGain();
       g.gain.value = vol;
@@ -119,7 +135,7 @@ export const soundFx = {
   startCrowd() {
     try {
       if (crowdNode) return;
-      const n = this.envNoise(0.06);
+      const n = this.envNoise(CROWD_SOUND_DESIGN.baseGain);
       if (!n) return;
       crowdGain = n.g;
       n.src.start();
@@ -181,29 +197,32 @@ export const soundFx = {
       if (!buses || matchTheme) return;
       const { ac, outGain } = buses;
       const master = ac.createGain();
-      master.gain.value = 0.055 * musicVolume;
+      master.gain.value = MATCH_THEME_DESIGN.masterGain * musicVolume;
       master.connect(outGain);
-      const bass = [98, 98, 123, 147, 123, 110, 98, 147];
-      const lead = [392, 494, 587, 494, 659, 587, 494, 440];
+      const bass = MATCH_THEME_DESIGN.bass;
+      const lead = MATCH_THEME_DESIGN.lead;
       let step = 0;
       const playBeat = () => {
         const now = ac.currentTime;
-        [[bass[step % bass.length], 'square', 0.18], [lead[step % lead.length], 'triangle', 0.08]].forEach(([freq, type, gain]) => {
+        [
+          [bass[step % bass.length], 'square', MATCH_THEME_DESIGN.bassGain],
+          [lead[step % lead.length], 'triangle', MATCH_THEME_DESIGN.leadGain]
+        ].forEach(([freq, type, gain]) => {
           const oscillator = ac.createOscillator();
           const envelope = ac.createGain();
           oscillator.type = type;
           oscillator.frequency.value = freq;
           envelope.gain.setValueAtTime(gain, now);
-          envelope.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+          envelope.gain.exponentialRampToValueAtTime(0.0001, now + MATCH_THEME_DESIGN.noteDuration - 0.02);
           oscillator.connect(envelope);
           envelope.connect(master);
           oscillator.start(now);
-          oscillator.stop(now + 0.24);
+          oscillator.stop(now + MATCH_THEME_DESIGN.noteDuration);
         });
         step++;
       };
       playBeat();
-      matchTheme = { master, timers: [setInterval(playBeat, 280)] };
+      matchTheme = { master, timers: [setInterval(playBeat, MATCH_THEME_DESIGN.stepSeconds * 1000)] };
     } catch (e) {}
   },
 
@@ -283,7 +302,7 @@ export const soundFx = {
     } catch (e) {}
   },
 
-  playPowerRumble() {
+  createSweep(startFrequency, endFrequency, dur, type = 'sine', vol = 0.2, recordOnly = false) {
     try {
       const buses = this.ensureBuses();
       if (!buses) return;
@@ -291,18 +310,17 @@ export const soundFx = {
       const now = ac.currentTime;
       const oscillator = ac.createOscillator();
       const gain = ac.createGain();
-      oscillator.type = 'sine';
-      oscillator.frequency.setValueAtTime(82, now);
-      oscillator.frequency.exponentialRampToValueAtTime(34, now + 0.42);
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(startFrequency, now);
+      oscillator.frequency.exponentialRampToValueAtTime(endFrequency, now + dur);
       gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.3, now + 0.025);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.42);
+      gain.gain.exponentialRampToValueAtTime(vol, now + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
       oscillator.connect(gain);
-      gain.connect(outGain);
+      if (!recordOnly) gain.connect(outGain);
       if (recDest) gain.connect(recGain);
       oscillator.start(now);
-      oscillator.stop(now + 0.44);
-      this.percuss(0.16, 0.18);
+      oscillator.stop(now + dur + 0.02);
     } catch (e) {}
   },
 
@@ -314,8 +332,8 @@ export const soundFx = {
       const g = crowdGain.gain;
       const now = ac.currentTime;
       g.cancelScheduledValues(now);
-      g.setTargetAtTime(0.25, now, 0.03);
-      g.setTargetAtTime(0.08, now + 0.6, 0.30);
+      g.setTargetAtTime(CROWD_SOUND_DESIGN.cheerGain, now, 0.03);
+      g.setTargetAtTime(CROWD_SOUND_DESIGN.baseGain, now + CROWD_SOUND_DESIGN.cheerHoldSeconds, 0.30);
     } catch (e) {}
   },
 
@@ -326,109 +344,40 @@ export const soundFx = {
       ac.resume().then(() => this.play(kind)).catch(() => {});
       return;
     }
-    if (matchTheme?.master) matchTheme.master.gain.value = 0.055 * musicVolume;
-    switch (kind) {
-      case 'button':
-        this.createTone(660, 0.035, 'triangle', 0.08);
-        setTimeout(() => this.createTone(880, 0.04, 'sine', 0.06), 35);
-        break;
-      case 'kick':
-        this.createTone(520, 0.05, 'square', 0.18);
-        this.createTone(260, 0.06, 'square', 0.09);
-        break;
-      case 'pickup':
-        this.createTone(330, 0.045, 'triangle', 0.08);
-        setTimeout(() => this.createTone(440, 0.05, 'triangle', 0.07), 35);
-        break;
-      case 'requestPass':
-        this.createTone(740, 0.05, 'triangle', 0.07);
-        setTimeout(() => this.createTone(980, 0.06, 'sine', 0.06), 45);
-        break;
-      case 'roulette':
-        this.createTone(920, 0.025, 'square', 0.045);
-        this.percuss(0.035, 0.012);
-        break;
-      case 'reward':
-        this.createTone(523.25, 0.12, 'triangle', 0.12);
-        setTimeout(() => this.createTone(659.25, 0.13, 'triangle', 0.13), 105);
-        setTimeout(() => this.createTone(783.99, 0.18, 'triangle', 0.15), 220);
-        setTimeout(() => this.createTone(1046.5, 0.24, 'sine', 0.12), 340);
-        break;
-      case 'tackle':
-        this.percuss(0.22, 0.03);
-        this.createTone(140, 0.06, 'sawtooth', 0.22);
-        break;
-      case 'dribble':
-        this.createTone(800, 0.05, 'triangle', 0.12);
-        this.createTone(600, 0.05, 'triangle', 0.08);
-        break;
-      case 'power':
-        this.createTone(360, 0.08, 'sawtooth', 0.18);
-        setTimeout(() => this.createTone(720, 0.06, 'square', 0.16), 80);
-        setTimeout(() => this.percuss(0.25, 0.04), 120);
-        this.playPowerRumble();
-        break;
-      case 'post':
-        this.createTone(900, 0.04, 'square', 0.12);
-        this.createTone(300, 0.06, 'sine', 0.10);
-        break;
-      case 'whistle':
-        this.createTone(1800, 0.18, 'sine', 0.12);
-        this.createTone(1500, 0.18, 'sine', 0.12);
-        break;
-      case 'goal':
-        this.createTone(480, 0.18, 'triangle', 0.14);
-        setTimeout(() => this.createTone(960, 0.12, 'sine', 0.12), 120);
-        break;
-      case 'cheer':
-        this.playCheer();
-        break;
+    if (matchTheme?.master) matchTheme.master.gain.value = MATCH_THEME_DESIGN.masterGain * musicVolume;
+    if (kind === 'cheer') {
+      this.playCheer();
+      return;
     }
+    this.playVoices(kind, false);
+  },
+
+  playVoices(kind, recordOnly = false) {
+    getGameSoundVoices(kind).forEach(voice => {
+      const run = () => {
+        if (voice.type === 'noise') {
+          this.percuss(voice.gain, voice.duration, recordOnly);
+        } else if (voice.type === 'sweep') {
+          this.createSweep(
+            voice.frequency,
+            voice.endFrequency,
+            voice.duration,
+            voice.wave,
+            voice.gain,
+            recordOnly
+          );
+        } else {
+          this.createTone(voice.frequency, voice.duration, voice.wave, voice.gain, recordOnly);
+        }
+      };
+      if (voice.delay) setTimeout(run, voice.delay * 1000);
+      else run();
+    });
   },
 
   /** Emits the compact match effects only into MediaRecorder's audio bus. */
   playForRecording(kind) {
-    switch (kind) {
-      case 'kick':
-        this.createTone(520, 0.05, 'square', 0.18, true);
-        this.createTone(260, 0.06, 'square', 0.09, true);
-        break;
-      case 'pickup':
-        this.createTone(330, 0.045, 'triangle', 0.08, true);
-        setTimeout(() => this.createTone(440, 0.05, 'triangle', 0.07, true), 35);
-        break;
-      case 'requestPass':
-        this.createTone(740, 0.05, 'triangle', 0.07, true);
-        setTimeout(() => this.createTone(980, 0.06, 'sine', 0.06, true), 45);
-        break;
-      case 'tackle':
-        this.percuss(0.22, 0.03, true);
-        this.createTone(140, 0.06, 'sawtooth', 0.22, true);
-        break;
-      case 'dribble':
-        this.createTone(800, 0.05, 'triangle', 0.12, true);
-        this.createTone(600, 0.05, 'triangle', 0.08, true);
-        break;
-      case 'power':
-        this.createTone(360, 0.08, 'sawtooth', 0.18, true);
-        setTimeout(() => this.createTone(720, 0.06, 'square', 0.16, true), 80);
-        setTimeout(() => this.percuss(0.25, 0.04, true), 120);
-        break;
-      case 'post':
-        this.createTone(900, 0.04, 'square', 0.12, true);
-        this.createTone(300, 0.06, 'sine', 0.10, true);
-        break;
-      case 'whistle':
-        this.createTone(1800, 0.18, 'sine', 0.12, true);
-        this.createTone(1500, 0.18, 'sine', 0.12, true);
-        break;
-      case 'goal':
-        this.createTone(480, 0.18, 'triangle', 0.14, true);
-        setTimeout(() => this.createTone(960, 0.12, 'sine', 0.12, true), 120);
-        break;
-      default:
-        break;
-    }
+    this.playVoices(kind, true);
   },
 
   startRoulette(durationMs = 5000) {
