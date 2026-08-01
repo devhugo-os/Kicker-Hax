@@ -1924,7 +1924,23 @@ html.app-runtime #menu-btn-download-app {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.public-skin-gift-origin strong { color: #fff; overflow: hidden; text-overflow: ellipsis; }
+.skin-gift-sender {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.skin-gift-sender:hover,
+.skin-gift-sender:focus-visible { color: #7dd3fc; }
 @media (max-width: 760px), (max-height: 520px) {
   .inventory-skin-info .skin-gift-origin { display: block; font-size: 7px; }
 }

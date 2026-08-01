@@ -415,7 +415,7 @@ export const marketController = {
       const wasGifted = !!skin.giftOrigin?.senderUid;
       const discardReward = getSkinDiscardValue(skin);
       const giftLabel = skin.giftOrigin?.senderUsername
-        ? `<p class="skin-gift-origin">Doada por <b>${escapeHtml(skin.giftOrigin.senderUsername)}</b></p>`
+        ? `<p class="skin-gift-origin">Doada por <button class="skin-gift-sender" data-gift-sender type="button">${escapeHtml(skin.giftOrigin.senderUsername)}</button></p>`
         : '';
       const transferActions = !canTransfer
         ? ''
@@ -427,6 +427,10 @@ export const marketController = {
         menuController.selectProfileSkinDraft(skin);
         this.renderInventory();
         showToast(`${skin.name} selecionada. Volte ao perfil e salve as alterações.`, 'info');
+      });
+      card.querySelector('[data-gift-sender]')?.addEventListener('click', event => {
+        event.stopPropagation();
+        if (skin.giftOrigin?.senderUid) menuController.openPublicProfile(skin.giftOrigin.senderUid);
       });
       card.querySelector('[data-action="donate"]')?.addEventListener('click', async () => {
         const username = await promptDialog({

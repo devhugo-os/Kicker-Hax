@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import { readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { inlinePagesEntry } from './scripts/inline-pages-entry.mjs';
 
 const cordovaConfig = readFileSync(resolve('cordova-app/config.xml'), 'utf8');
 const nativeVersion = cordovaConfig.match(/<widget\b[^>]*\bversion="([^"]+)"/)?.[1];
@@ -31,6 +32,10 @@ export default defineConfig({
       closeBundle() {
         writeFileSync(resolve('docs/.nojekyll'), '');
         writeFileSync(resolve('docs/deploy-version.txt'), `Kicker Hax ${displayVersion}\nbuild: ${new Date().toISOString()}\n`);
+
+        // Keep the entry in the document so Pages propagation cannot leave a
+        // new HTML shell pointing at a newly hashed file that is not live yet.
+        inlinePagesEntry(resolve('docs/index.html'));
 
         // The download folder is preserved, while obsolete hashed bundles are
         // removed after each build so Pages never accumulates stale scripts.

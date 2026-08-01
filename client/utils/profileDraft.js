@@ -13,5 +13,8 @@ export function createProfileDraft(profile = {}) {
 export function profilesDiffer(baseProfile, draft) {
   const base = createProfileDraft(baseProfile);
   const candidate = createProfileDraft(draft);
-  return Object.keys(base).some(key => base[key] !== candidate[key]);
+  // Skin image/name/rarity are catalog metadata, not independent profile
+  // choices. Returning to the persisted skin ID must restore a clean draft.
+  return ['username', 'badge', 'bio', 'equippedSkinId']
+    .some(key => base[key] !== candidate[key]);
 }

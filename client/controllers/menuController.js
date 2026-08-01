@@ -788,8 +788,17 @@ export const menuController = {
           const icon = document.createElement('span');
           icon.setAttribute('aria-hidden', 'true');
           icon.textContent = '🎁';
-          const sender = document.createElement('strong');
+          const sender = document.createElement('button');
+          sender.type = 'button';
+          sender.className = 'skin-gift-sender';
           sender.textContent = String(giftOrigin.senderUsername);
+          sender.title = `Ver perfil de ${giftOrigin.senderUsername}`;
+          sender.addEventListener('click', event => {
+            event.stopPropagation();
+            if (!giftOrigin.senderUid) return;
+            modal.classList.add('hidden');
+            this.openPublicProfile(giftOrigin.senderUid);
+          });
           giftedBy.append(icon, document.createTextNode(' Doada por '), sender);
         }
         item.append(image, name, value);
