@@ -9,6 +9,7 @@ import { soundFx } from '../utils/soundFx.js';
 import { findNextRecordingHighlight, findPreviousRecordingHighlight, hasRecordingHighlights } from './recordingHighlights.js';
 import { isNativeAppFrame } from '../utils/nativeBridge.js';
 import { showToast } from '../utils/toast.js';
+import { exportMatchRecordingMp4 } from './matchRecordingExporter.js';
 
 const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 const HIGHLIGHT_PREROLL_MS = 2500;
@@ -202,9 +203,8 @@ export class MatchRecordingPlayer {
     button.disabled = true;
     button.textContent = 'Preparando 0%';
     try {
-      // MP4 support is intentionally lazy: normal gameplay and recording
-      // playback do not download or parse the encoder/muxer bundle.
-      const { exportMatchRecordingMp4 } = await import('./matchRecordingExporter.js');
+      // Keep the exporter in the published bundle so GitHub Pages cannot serve
+      // a stale shell whose dynamically named encoder chunk no longer exists.
       const bytes = await exportMatchRecordingMp4(this.recording, this.match, progress => {
         button.textContent = `Preparando ${progress}%`;
       });
