@@ -118,24 +118,56 @@ export class SoloBotController {
     this.shotLockFrames = 50;
     this.tackleRollLock = 0;
     this.aimOffset = 0;
+    this.steerX = 0;
+    this.steerY = 0;
     this.lastInput = { ...EMPTY_INPUT };
   }
 
-  updateStuckState(bot) {
+  updateStuckState(bot, opponent, height) {
     const movement = this.lastX === null ? 1 : Math.hypot(bot.x - this.lastX, bot.y - this.lastY);
     const tryingToMove = Math.hypot(this.lastInput.x, this.lastInput.y) > 0.45;
+    this.lastX = bot.x;
+    this.lastY = bot.y;
+
+    // One escape attempt must keep a single direction. Re-evaluating the
+    // collision every few frames used to invert escapeSide while the bot was
+    // still pushing through the same block, making it stare left and right.
+    if (this.escapeFrames > 0) {
+      this.stuckFrames = 0;
+      return;
+    }
     this.stuckFrames = tryingToMove && movement < 0.11
       ? this.stuckFrames + 1
       : Math.max(0, this.stuckFrames - 3);
-    this.lastX = bot.x;
-    this.lastY = bot.y;
     if (this.stuckFrames >= 20) {
       this.stuckFrames = 0;
-      this.escapeFrames = 58;
-      this.escapeSide *= -1;
+      this.escapeFrames = 72;
+      const opponentDeltaY = Number(opponent?.y || height / 2) - bot.y;
+      const upperRoom = bot.y - (C.BORDER + 95);
+      const lowerRoom = height - C.BORDER - 95 - bot.y;
+      if (Math.abs(opponentDeltaY) > 18) {
+        this.escapeSide = opponentDeltaY > 0 ? -1 : 1;
+      } else if (Math.abs(lowerRoom - upperRoom) > 20) {
+        this.escapeSide = lowerRoom > upperRoom ? 1 : -1;
+      }
       this.attackLane = this.escapeSide;
-      this.laneLockFrames = 90;
+      this.laneLockFrames = 120;
     }
+  }
+
+  stabilizeDirection(direction, urgency = 0.34) {
+    if (!this.steerX && !this.steerY) {
+      this.steerX = direction.x;
+      this.steerY = direction.y;
+      return direction;
+    }
+    const blended = normalize(
+      this.steerX * (1 - urgency) + direction.x * urgency,
+      this.steerY * (1 - urgency) + direction.y * urgency
+    );
+    this.steerX = blended.x;
+    this.steerY = blended.y;
+    return blended;
   }
 
   chooseAttackLane(bot, opponent, height) {
@@ -155,7 +187,7 @@ export class SoloBotController {
     this.tackleRollLock = Math.max(0, this.tackleRollLock - 1);
     this.laneLockFrames = Math.max(0, this.laneLockFrames - 1);
     this.escapeFrames = Math.max(0, this.escapeFrames - 1);
-    this.updateStuckState(bot);
+    this.updateStuckState(bot, opponent, height);
 
     const profile = this.profile;
     const goalX = width - C.BORDER + C.POST_T;
@@ -233,6 +265,10 @@ export class SoloBotController {
       const away = normalize(bot.x - opponent.x, bot.y - opponent.y);
       direction = normalize(direction.x + away.x * 0.35, direction.y + away.y * 0.35);
     }
+    direction = this.stabilizeDirection(
+      direction,
+      this.escapeFrames > 0 || opponentOwnsBall ? 0.46 : ownsBall ? 0.28 : 0.36
+    );
 
     const distanceToGoal = Math.abs(goalX - bot.x);
     const insideMouth = bot.y > goalTop + 5 && bot.y < goalBottom - 5;
@@ -247,6 +283,8 @@ export class SoloBotController {
       this.shotHoldFrames -= 1;
       if (this.shotHoldFrames === 0) this.shotReleasePending = true;
       direction = normalize(goalX - bot.x, height / 2 + this.aimOffset - bot.y);
+      this.steerX = direction.x;
+      this.steerY = direction.y;
       dribble = false;
     } else if (ownsBall
       && this.frame > 55
@@ -257,6 +295,8 @@ export class SoloBotController {
       this.shotHoldFrames = profile.shotChargeFrames;
       shoot = true;
       direction = normalize(goalX - bot.x, height / 2 + this.aimOffset - bot.y);
+      this.steerX = direction.x;
+      this.steerY = direction.y;
       dribble = false;
     }
 

@@ -1130,7 +1130,7 @@
     </div>
 
     <!-- VERSION BADGE & CHANGELOG MODAL -->
-    <div id="game-version-badge" class="version-badge hidden">v85.0</div>
+    <div id="game-version-badge" class="version-badge hidden">v86.0</div>
 
     <div id="game-rules-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="game-rules-title">
       <div class="modal-card card-blur game-rules-card">
@@ -1149,7 +1149,7 @@
           <section><h3>Movimentação e habilidades</h3><p>Sprint aumenta a velocidade enquanto consome stamina. Drible exige posse, avança o jogador e concede uma proteção curta contra desarmes. O desarme executa um avanço: ele precisa concluir o contato com o portador da bola para funcionar. No celular, a assistência de desarme direciona esse avanço para a bola; computadores e tablets não recebem essa ajuda.</p></section>
           <section><h3>Chat, pausa e estatísticas</h3><p>Em partidas no computador, pressione Enter para entrar ou sair da digitação do chat, Tab para alternar o relatório completo ao vivo e R para pedir passe. No celular, use os botões de chat, estatísticas e pedido de passe do HUD; dentro da caixa de estatísticas, toque em <strong>Relatório completo</strong>. Pausa, chat, pedido de passe e estatísticas podem ser reposicionados no editor mobile. Somente partidas competitivas alimentam o ranking permanente.</p></section>
           <section><h3>Treino Livre</h3><p>Tempo e gols são ilimitados. Serve para praticar movimentação, chute, drible e desarme. Não concede XP, KX Coins, estatísticas, ranking ou histórico.</p></section>
-          <section><h3>Jogar Sozinho e dificuldades</h3><p>Partida local contra CPU com dificuldade configurável. No Fácil, o bot reage mais devagar, corre menos e finaliza com menor precisão. No Médio, antecipa a bola, protege o próprio gol, procura corredores e usa drible e desarme. No Difícil, lê a trajetória por mais tempo, pressiona com maior alcance, administra sprint e finaliza com carga e mira mais precisas. Todos detectam bloqueios e mudam a rota para sair de paredes. Replay é obrigatório após gols. Partidas com bot não concedem XP, KX Coins, estatísticas, ranking ou histórico online.</p></section>
+          <section><h3>Jogar Sozinho e dificuldades</h3><p>Partida local contra CPU com dificuldade configurável. No Fácil, o bot reage mais devagar, corre menos e finaliza com menor precisão. No Médio, antecipa a bola, protege o próprio gol, procura corredores e usa drible e desarme. No Difícil, lê a trajetória por mais tempo, pressiona com maior alcance, administra sprint e finaliza com carga e mira mais precisas. Todos detectam bloqueios, mantêm uma rota de fuga estável e mudam de corredor para sair de paredes ou adversários. Replay é obrigatório após gols e, ao terminar, o reinício acontece automaticamente. Partidas com bot não concedem XP, KX Coins, estatísticas, ranking ou histórico online.</p></section>
           <section><h3>Multiplayer Casual</h3><p>O host organiza os times e pode usar o painel administrativo. Todos precisam estar prontos antes do início. Concede XP e entra no histórico casual, mas não altera estatísticas competitivas, ranking ou KX Coins.</p></section>
           <section><h3>Multiplayer Competitivo</h3><p>Sala obrigatoriamente pública, duração fixa de 5 minutos e sem limite de gols. Todos precisam marcar pronto antes do sorteio automático e os times começam equilibrados. O painel administrativo não interfere na partida.</p></section>
           <section><h3>Uma sessão competitiva por aparelho</h3><p>Contas diferentes podem navegar e jogar partidas casuais no mesmo computador ou celular. Ao entrar ou criar uma sala competitiva, apenas uma sessão daquele aparelho pode permanecer ativa. Se outra aba, navegador ou conta já estiver no competitivo, uma caixa permite manter a sessão anterior ou transferir o acesso para a tela atual.</p></section>
@@ -1177,6 +1177,10 @@
         <button id="changelog-btn-close-top" class="modal-close-btn" aria-label="Fechar">x</button>
         <h2 class="text-glow">Atualiza&ccedil;&otilde;es</h2>
         <div class="compact-changelog-list">
+          <section>
+            <h4>v86.0 - REPLAY DE VOLTA AO JOGO</h4>
+            <p>O replay local agora entrega corretamente o controle para o reinício quando termina sozinho, impedindo que uma partida contra a CPU fique congelada após o gol. A inteligência do bot preserva a direção durante tentativas de fuga, escolhe espaço livre ao ser bloqueada e suaviza mudanças de rota para não ficar parada olhando alternadamente para os lados.</p>
+          </section>
           <section>
             <h4>v85.0 - IA SOLO E VÍDEOS COM SOM</h4>
             <p>O modo Jogar Sozinho recebeu uma nova inteligência por dificuldade, com previsão da bola, interceptação defensiva, corredores de ataque, fuga persistente de paredes, drible sob pressão e finalizações carregadas corretamente. A exportação MP4 ganhou áudio AAC sincronizado, ambiente de estádio, sons das ações e nomes organizados por modo, data, placar e partida. Voltar para a skin já equipada deixa de pedir salvamento, e perfis de doadores abrem acima do inventário sem fechar a coleção. O Manual detalha as dificuldades e a exportação.</p>

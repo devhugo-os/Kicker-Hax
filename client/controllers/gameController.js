@@ -4269,6 +4269,10 @@ export const gameController = {
     }
     const position = this.getReplayPositionState(now, true);
     if (position.ended) {
+      // The local simulation owns the transition from replay to countdown.
+      // Ending it here used to reset replayElapsedMs one paint too early,
+      // leaving MatchSim permanently in "replay" with no clock to advance.
+      if (this.replayUseWallClock === false) return;
       this.endReplayPlayback();
       return;
     }
